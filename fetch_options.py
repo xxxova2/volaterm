@@ -76,5 +76,8 @@ try:
 
     print(json.dumps(result))
 except Exception as e:
-    print(json.dumps({"error": str(e)}))
+    import traceback
+    error_json = json.dumps({"error": str(e), "traceback": traceback.format_exc()})
+    print(error_json)
+    print(error_json, file=sys.stderr)
     sys.exit(1)

@@ -1,13 +1,17 @@
 FROM node:22-slim
 
-# Install Python 3 and pip for yfinance data fetching
+# Install Python 3, pip, and build tools for yfinance data fetching
 RUN apt-get update && apt-get install -y \
     python3 \
     python3-pip \
+    build-essential \
     && rm -rf /var/lib/apt/lists/*
 
 # Install yfinance Python package
-RUN pip3 install yfinance --break-system-packages
+RUN pip3 install yfinance --break-system-packages 2>&1
+
+# Verify yfinance works
+RUN python3 -c "import yfinance; print('yfinance OK:', yfinance.__version__)"
 
 # Create app directory
 WORKDIR /app

@@ -69,7 +69,10 @@ fastify.get('/api/options/:symbol', async (request, reply) => {
       execFile('python3', args, { timeout: isProbe ? 12000 : 25000 }, (err, stdout, stderr) => {
         if (err) {
           console.error('Python script error:', err);
-          return reject(new Error(stderr || err.message));
+          console.error('Python stderr:', stderr);
+          console.error('Python stdout:', stdout?.slice(0, 500));
+          const detail = stderr || stdout?.slice(0, 500) || err.message;
+          return reject(new Error(detail));
         }
         try {
           const data = JSON.parse(stdout);
