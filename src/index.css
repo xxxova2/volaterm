@@ -1,0 +1,149 @@
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-up: var(--up);
+  --color-down: var(--down);
+  --color-amber: var(--amber);
+  --color-cyan: var(--cyan);
+  --color-grid: var(--grid);
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+}
+
+:root {
+  --radius: 0.375rem;
+  --background: oklch(0.14 0.01 240);
+  --foreground: oklch(0.92 0.02 90);
+  --card: oklch(0.17 0.012 240);
+  --card-foreground: oklch(0.92 0.02 90);
+  --popover: oklch(0.18 0.012 240);
+  --popover-foreground: oklch(0.94 0.02 90);
+  --primary: oklch(0.82 0.17 75);
+  --primary-foreground: oklch(0.15 0.01 240);
+  --secondary: oklch(0.22 0.015 240);
+  --secondary-foreground: oklch(0.92 0.02 90);
+  --muted: oklch(0.21 0.012 240);
+  --muted-foreground: oklch(0.62 0.02 240);
+  --accent: oklch(0.78 0.14 200);
+  --accent-foreground: oklch(0.14 0.01 240);
+  --destructive: oklch(0.62 0.22 25);
+  --destructive-foreground: oklch(0.98 0 0);
+  --border: oklch(0.27 0.012 240);
+  --input: oklch(0.24 0.012 240);
+  --ring: oklch(0.82 0.17 75);
+  --up: oklch(0.78 0.2 145);
+  --down: oklch(0.65 0.24 25);
+  --amber: oklch(0.82 0.17 75);
+  --cyan: oklch(0.78 0.14 200);
+  --grid: oklch(0.28 0.012 240);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+  html, body, #root {
+    height: 100%;
+  }
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    font-feature-settings: "ss01", "cv11";
+    -webkit-font-smoothing: antialiased;
+  }
+  .font-mono, code, pre, .tabular-nums {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@utility term-panel {
+  background-color: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+@utility glow-amber {
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, var(--amber) 40%, transparent),
+    0 0 18px color-mix(in oklab, var(--amber) 25%, transparent);
+}
+
+@utility scanline {
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0 2px,
+    color-mix(in oklab, var(--foreground) 2%, transparent) 2px 3px
+  );
+}
+
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+.vt-scrubber::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  background: var(--primary);
+  border: 2px solid var(--card);
+  cursor: pointer;
+  box-shadow: 0 0 0 1px var(--primary);
+}
+.vt-scrubber::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  background: var(--primary);
+  border: 2px solid var(--card);
+  cursor: pointer;
+}
+.vt-scrubber {
+  accent-color: var(--primary);
+}
+
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 6px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--muted-foreground);
+}
