@@ -185,17 +185,22 @@ function SurfaceAxes({ info }: { info: ReturnType<typeof useSurfaceGeometry> }) 
         </span>
       </Html>
 
-      {/* Z axis: DTE ticks along the left edge */}
-      {info.dtes.map((dte, i) => (
-        <Html
-          key={`z${dte}`}
-          position={[-WIDTH / 2 - 0.1, 0, (i / (info.nZ - 1) - 0.5) * DEPTH]}
-          center
-          distanceFactor={6}
-        >
-          <span className={labelCls} style={{ color: 'var(--muted-foreground)' }}>{dte}d</span>
-        </Html>
-      ))}
+      {/* Z axis: DTE ticks along the left edge — show subset for clarity */}
+      {info.dtes.map((dte, i) => {
+        const len = info.dtes.length;
+        // Show max ~6 labels to avoid clutter
+        if (len > 8 && i % Math.ceil((len - 1) / 6) !== 0 && i !== len - 1) return null;
+        return (
+          <Html
+            key={`z${dte}`}
+            position={[-WIDTH / 2 - 0.15, 0, (i / (len - 1) - 0.5) * DEPTH]}
+            center
+            distanceFactor={6}
+          >
+            <span className={labelCls} style={{ color: 'var(--muted-foreground)' }}>{dte}d</span>
+          </Html>
+        );
+      })}
       <Html position={[-WIDTH / 2 - 0.4, 0, -DEPTH / 2 - 0.2]} center distanceFactor={6}>
         <span className={`${labelCls} uppercase tracking-wider`} style={{ color: 'var(--muted-foreground)' }}>
           DTE
