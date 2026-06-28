@@ -34,6 +34,7 @@ interface TerminalStore {
   setSpeed: (speed: number) => void;
   refresh: () => void;
   setSource: (source: 'demo' | 'live') => void;
+  storeFrames: (snap: VolSnapshot) => void;
 }
 
 export const useTerminalStore = create<TerminalStore>((set, get) => ({
@@ -44,7 +45,7 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
   frameIndex: 0,
   isPlaying: false,
   speed: 1,
-  source: 'demo',
+  source: 'live',
   liveAvailable: false,
   loading: true,
   lastUpdate: Date.now(),
@@ -74,13 +75,31 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
       lastUpdate: Date.now(),
     });
 
+    // Immediately fetch live data if we're in live mode
     const currentSource = get().source;
+    if (currentSource === 'live') {
+      fetchYahooSnapshot(symbol).then(snap => {
+        if (snap) {
+          const surface = buildSurfaceGrid(snap);
+          set({ snapshot: snap, surface, loading: false, lastUpdate: Date.now(), liveAvailable: true });
+          get().storeFrames(snap);
+        }
+      }).catch(() => {});
+    }
+
     const id = setInterval(() => {
       const st = get();
       st.refresh();
     }, currentSource === 'demo' ? REFRESH_CONFIG.DEMO_INTERVAL_MS : REFRESH_CONFIG.LIVE_INTERVAL_MS);
     set({ refreshInterval: id });
   },
+
+  storeFrames: (snap: VolSnapshot) => {
+    const frames = generateHistory(snap.symbol, 64);
+    set({ historicalFrames: frames });
+  },
+
+
 
   setActiveTab: (tab) => set({ activeTab: tab }),
   setDisplayMode: (mode) => set({ displayMode: mode }),

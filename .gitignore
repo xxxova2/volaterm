@@ -8,3 +8,5 @@ venv/
 .tanstack/
 .bun/
 *.log
+.vercel
+.env*
