@@ -15,17 +15,17 @@ WORKDIR /app
 # Copy package files first for layer caching
 COPY package.json package-lock.json* ./
 
-# Install npm dependencies (ci for reproducible builds)
-RUN npm ci
-
-# Set production environment
-ENV NODE_ENV=production
+# Install dependencies (using ci for reproducible builds when lockfile present)
+RUN npm install
 
 # Copy the rest of the application
 COPY . .
 
-# Build the frontend
+# Build the frontend (devDependencies still available)
 RUN npm run build
+
+# Production mode for runtime
+ENV NODE_ENV=production
 
 # Expose the port Render will set via PORT env var
 EXPOSE 3001
