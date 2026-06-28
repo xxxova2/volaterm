@@ -4,7 +4,6 @@ FROM node:22-slim
 RUN apt-get update && apt-get install -y \
     python3 \
     python3-pip \
-    python3-venv \
     && rm -rf /var/lib/apt/lists/*
 
 # Install yfinance Python package
@@ -14,10 +13,13 @@ RUN pip3 install yfinance --break-system-packages
 WORKDIR /app
 
 # Copy package files first for layer caching
-COPY package.json package-lock.json ./
+COPY package.json package-lock.json* ./
 
-# Install npm dependencies
-RUN npm install
+# Install npm dependencies (ci for reproducible builds)
+RUN npm ci
+
+# Set production environment
+ENV NODE_ENV=production
 
 # Copy the rest of the application
 COPY . .
