@@ -1,6 +1,7 @@
 import type { VolSnapshot, ExpirySlice, OptionQuote, SurfaceGrid } from './types';
 import { computeGreeks } from './greeks';
 import { DATA_CONFIG } from '../../config/constants';
+import { interpolateSurface } from './interpolate';
 
 const PRESETS = DATA_CONFIG.SYMBOL_PRESETS;
 
@@ -163,7 +164,11 @@ export function buildSurfaceGrid(snapshot: VolSnapshot): SurfaceGrid {
     delta.push(deltaRow);
   }
 
-  return { expiries, strikes, iv, bid, ask, delta };
+  // Route IVs through fitted SVI surface (no-arb constrained, interpolated, no zero-wells)
+  const dtes = snapshot.expiries.map(e => e.dte);
+  const { iv: fittedIV } = interpolateSurface(strikes, snapshot.spot, iv, dtes);
+
+  return { expiries, strikes, iv: fittedIV, bid, ask, delta };
 }
 
 export function generateHistory(

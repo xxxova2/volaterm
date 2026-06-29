@@ -71,7 +71,7 @@ function useSurfaceGeometry() {
       const row: number[] = [];
       for (let x = 0; x < nX; x++) {
         const v = surface.iv[z]?.[start + x];
-        row.push(v != null && isFinite(v) ? Math.min(v, IV_CAP) : 0);
+        row.push(v != null && isFinite(v) ? Math.min(v, IV_CAP) : IV_CAP * 0.5);
       }
       rawIV.push(row);
     }

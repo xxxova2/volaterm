@@ -73,6 +73,12 @@ export interface SVIParams {
   sigma: number;
 }
 
+export interface SVIFit {
+  params: SVIParams;
+  rmse: number;
+  samples: number;
+}
+
 export interface VolSnapshot {
   symbol: string;
   spot: number;
