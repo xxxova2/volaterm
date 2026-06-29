@@ -49,12 +49,12 @@ export const DATA_CONFIG = {
   
   /** Strike generation settings */
   strikes: {
-    STEP_RATIO: 0.02, // 2% of spot price
-    HALF_STRIKES: 25, // Number of strikes above/below ATM
+    STEP_RATIO: 0.01, // 1% of spot price
+    HALF_STRIKES: 50, // Number of strikes above/below ATM (wider, finer wings)
   },
-  
-  /** Expiry generation DTE values */
-  EXPIRY_DTES: [7, 14, 21, 30, 45, 60, 90, 120, 180, 270, 365],
+
+  /** Expiry generation DTE values (weekly term structure through ~60d, then monthly) */
+  EXPIRY_DTES: [1, 2, 3, 4, 5, 7, 14, 21, 30, 45, 60, 90, 120, 180, 270, 365],
 } as const;
 
 export const API_CONFIG = {
