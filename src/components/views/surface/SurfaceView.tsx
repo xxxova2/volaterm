@@ -1,15 +1,17 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Html } from '@react-three/drei';
 import * as THREE from 'three';
 import { useTerminalStore } from '../../../store/terminalStore';
 import { ivRamp01 } from '../../../lib/options/color';
 import { VISUAL_CONFIG } from '../../../config/constants';
+import { SurfaceTools, type SliceMode } from './SurfaceTools';
+import { SurfaceInspect, type InspectPoint } from './SurfaceInspect';
 
 const { MONEYNESS_MIN, MONEYNESS_MAX, WIDTH, DEPTH, VISUAL_HEIGHT, IV_CAP, UPSCALE, X_TICKS } = VISUAL_CONFIG.surface;
 
 function upsampleGrid(
-  iv: (number | null)[][],
+  iv: number[][],
   nZ: number,
   nX: number,
   factor: number,
@@ -44,7 +46,24 @@ function upsampleGrid(
   return { values, nZ2, nX2 };
 }
 
-function useSurfaceGeometry() {
+interface GeometryInfo {
+  geo: THREE.BufferGeometry;
+  nZ: number;
+  minIV: number;
+  maxIV: number;
+  atmPx: number;
+  dtes: number[];
+  pxForRatio: (ratio: number) => number;
+  spot: number;
+  start: number;
+  end: number;
+  nX: number;
+  nX2: number;
+  nZ2: number;
+  mapPointToCell: (px: number, pz: number) => { expiryIdx: number; strikeIdx: number } | null;
+}
+
+function useSurfaceGeometry(): GeometryInfo | null {
   const surface = useTerminalStore(s => s.surface);
   const snapshot = useTerminalStore(s => s.snapshot);
   const spot = useTerminalStore(s => s.snapshot?.spot ?? 100);
@@ -134,6 +153,16 @@ function useSurfaceGeometry() {
       if (d < best) { best = d; atmPx = (logM(s) - logMMin) / logMSpan * WIDTH - WIDTH / 2; }
     }
 
+    const mapPointToCell = (px: number, pz: number): { expiryIdx: number; strikeIdx: number } | null => {
+      const x2 = Math.round(((px + WIDTH / 2) / WIDTH) * (nX2 - 1));
+      const z2 = Math.round(((pz / DEPTH) + 0.5) * (nZ2 - 1));
+      if (x2 < 0 || x2 >= nX2 || z2 < 0 || z2 >= nZ2) return null;
+      const expiryIdx = Math.round(z2 / UPSCALE);
+      const strikeIdx = start + Math.round(x2 / UPSCALE);
+      if (expiryIdx < 0 || expiryIdx >= nZ || strikeIdx < 0 || strikeIdx >= surface.strikes.length) return null;
+      return { expiryIdx, strikeIdx };
+    };
+
     return {
       geo,
       nZ: nZ2,
@@ -142,13 +171,30 @@ function useSurfaceGeometry() {
       atmPx,
       dtes: snapshot.expiries.map(e => e.dte),
       pxForRatio: (ratio: number) => (Math.log(ratio) - logMMin) / logMSpan * WIDTH - WIDTH / 2,
+      spot,
+      start,
+      end,
+      nX,
+      nX2,
+      nZ2,
+      mapPointToCell,
     };
   }, [surface, snapshot, spot]);
 }
 
-function SurfaceMesh({ geo, wireframe }: { geo: THREE.BufferGeometry; wireframe: boolean }) {
+function SurfaceMesh({
+  geo,
+  wireframe,
+  onPointerMove,
+  onClick,
+}: {
+  geo: THREE.BufferGeometry;
+  wireframe: boolean;
+  onPointerMove?: (e: THREE.Event) => void;
+  onClick?: (e: THREE.Event) => void;
+}) {
   return (
-    <mesh geometry={geo}>
+    <mesh geometry={geo} onPointerMove={onPointerMove} onClick={onClick}>
       <meshPhongMaterial vertexColors side={THREE.DoubleSide} transparent opacity={0.92} wireframe={wireframe} shininess={40} />
     </mesh>
   );
@@ -163,15 +209,13 @@ function SurfaceAtmLine({ atmPx }: { atmPx: number }) {
   );
 }
 
-function SurfaceAxes({ info }: { info: ReturnType<typeof useSurfaceGeometry> }) {
-  if (!info) return null;
+function SurfaceAxes({ info }: { info: GeometryInfo }) {
   const labelCls = 'text-[9px] font-mono whitespace-nowrap';
 
   return (
     <>
       <gridHelper args={[4, 8, '#2a2a33', '#1f1f26']} position={[0, 0, 0]} />
 
-      {/* X axis: strike/spot ratio ticks along the front edge */}
       {X_TICKS.map((ratio: number) => (
         <Html key={`x${ratio}`} position={[info.pxForRatio(ratio), 0, DEPTH / 2 + 0.05]} center distanceFactor={6}>
           <span className={labelCls} style={{ color: 'var(--muted-foreground)' }}>
@@ -185,10 +229,8 @@ function SurfaceAxes({ info }: { info: ReturnType<typeof useSurfaceGeometry> }) 
         </span>
       </Html>
 
-      {/* Z axis: DTE ticks along the left edge — show subset for clarity */}
       {info.dtes.map((dte, i) => {
         const len = info.dtes.length;
-        // Show max ~6 labels to avoid clutter
         if (len > 8 && i % Math.ceil((len - 1) / 6) !== 0 && i !== len - 1) return null;
         return (
           <Html
@@ -207,7 +249,6 @@ function SurfaceAxes({ info }: { info: ReturnType<typeof useSurfaceGeometry> }) 
         </span>
       </Html>
 
-      {/* Y axis: IV % scale at the left-front corner */}
       {[0, 0.5, 1].map(t => {
         const iv = info.minIV + t * (info.maxIV - info.minIV);
         return (
@@ -221,7 +262,6 @@ function SurfaceAxes({ info }: { info: ReturnType<typeof useSurfaceGeometry> }) 
 }
 
 function SurfaceLegend({ minIV, maxIV }: { minIV: number; maxIV: number }) {
-  // Build the gradient from the same ramp the mesh uses, so legend matches geometry.
   const stops = [0, 0.2, 0.4, 0.6, 0.8, 1].map(t => {
     const [r, g, b] = ivRamp01(t);
     return `rgb(${(r * 255) | 0},${(g * 255) | 0},${(b * 255) | 0}) ${(t * 100).toFixed(0)}%`;
@@ -241,8 +281,47 @@ function SurfaceLegend({ minIV, maxIV }: { minIV: number; maxIV: number }) {
 
 export function SurfaceView() {
   const [wireframe, setWireframe] = useState(false);
+  const [sliceMode, setSliceMode] = useState<SliceMode>('none');
+  const [hover, setHover] = useState<InspectPoint | null>(null);
+  const [selected, setSelected] = useState<InspectPoint | null>(null);
+
   const info = useSurfaceGeometry();
   const spot = useTerminalStore(s => s.snapshot?.spot ?? 0);
+  const surface = useTerminalStore(s => s.surface);
+  const snapshot = useTerminalStore(s => s.snapshot);
+  const sviReadout = useTerminalStore(s => s.sviReadout);
+  const arbResult = useTerminalStore(s => s.arbResult);
+  const selectedExpiry = useTerminalStore(s => s.selectedExpiry);
+
+  const buildPoint = useCallback((px: number, pz: number): InspectPoint | null => {
+    if (!info || !surface || !snapshot) return null;
+    const cell = info.mapPointToCell(px, pz);
+    if (!cell) return null;
+    const expiry = surface.expiries[cell.expiryIdx];
+    const strike = surface.strikes[cell.strikeIdx];
+    const iv = surface.iv[cell.expiryIdx]?.[cell.strikeIdx];
+    if (!expiry || strike == null || iv == null || !isFinite(iv)) return null;
+    const slice = snapshot.expiries[cell.expiryIdx];
+    const dte = slice?.dte ?? 0;
+    const quote = slice?.calls.find(q => q.strike === strike) ?? slice?.puts.find(q => q.strike === strike);
+    return { strike, expiry, dte, iv, delta: quote?.delta ?? null };
+  }, [info, surface, snapshot]);
+
+  const handlePointerMove = useCallback((e: THREE.Event) => {
+    const evt = e as unknown as { point: THREE.Vector3; stopPropagation: () => void };
+    evt.stopPropagation();
+    setHover(buildPoint(evt.point.x, evt.point.z));
+  }, [buildPoint]);
+
+  const handleClick = useCallback((e: THREE.Event) => {
+    const evt = e as unknown as { point: THREE.Vector3; stopPropagation: () => void };
+    evt.stopPropagation();
+    const p = buildPoint(evt.point.x, evt.point.z);
+    if (p) {
+      setSelected(p);
+      useTerminalStore.getState().setSelectedExpiry(p.expiry);
+    }
+  }, [buildPoint]);
 
   return (
     <div className="relative h-full w-full">
@@ -263,7 +342,12 @@ export function SurfaceView() {
         />
         {info && (
           <>
-            <SurfaceMesh geo={info.geo} wireframe={wireframe} />
+            <SurfaceMesh
+              geo={info.geo}
+              wireframe={wireframe}
+              onPointerMove={handlePointerMove}
+              onClick={handleClick}
+            />
             <SurfaceAtmLine atmPx={info.atmPx} />
             <SurfaceAxes info={info} />
           </>
@@ -286,6 +370,18 @@ export function SurfaceView() {
           </div>
         )}
       </div>
+
+      <SurfaceTools
+        surface={surface}
+        sviReadout={sviReadout}
+        arbResult={arbResult}
+        sliceMode={sliceMode}
+        onSliceMode={setSliceMode}
+        selectedExpiry={selectedExpiry}
+        selectedStrike={selected?.strike ?? null}
+      />
+
+      <SurfaceInspect hover={hover} selected={selected} />
     </div>
   );
 }

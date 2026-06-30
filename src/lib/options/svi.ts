@@ -111,7 +111,7 @@ function solve5x5(A: number[][], rhs: number[]): number[] {
       }
     }
   }
-  const x: number[] = new Array(5).fill(0);
+  const x: number[] = [0, 0, 0, 0, 0];
   for (let i = 0; i < 5; i++) {
     const piv = M[i]![i]!;
     x[i] = Math.abs(piv) < 1e-18 ? 0 : (M[i]![5]! ?? 0) / piv;

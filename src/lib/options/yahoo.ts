@@ -95,7 +95,7 @@ function filterArbFreeQuotes(
   spot: number,
   T: number,
   r: number,
-  q: number,
+  _q: number,
 ): RawWithMid[] {
   const valid: RawWithMid[] = [];
   for (const raw of rawList) {

@@ -32,8 +32,6 @@ describe('diagnoseArbitrage', () => {
 
     // Force the second expiry to have a lower total implied variance than the first.
     const c = Math.floor(grid.strikes.length / 2);
-    const firstDte = 7;
-    const secondDte = 14;
     grid.iv[0]![c] = 0.30;
     grid.iv[1]![c] = 0.18; // 0.18^2*14/365 < 0.30^2*7/365 -> calendar arb
 
