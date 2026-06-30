@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import type { VolSnapshot, SurfaceGrid, ActiveTab, DisplayMode } from '../lib/options/types';
 import { buildSnapshot, buildSurfaceGrid, generateHistory, presetFor } from '../lib/options/synthetic';
 import { fetchYahooSnapshot } from '../lib/options/yahoo';
+import { diagnoseArbitrage, type NoArbResult } from '../lib/options/noarb';
+import { sviReadout, type SVIReadout } from '../lib/options/surfaceTools';
 import { REFRESH_CONFIG } from '../config/constants';
 import { toast } from 'sonner';
 
@@ -10,6 +12,8 @@ interface TerminalStore {
   symbol: string;
   snapshot: VolSnapshot | null;
   surface: SurfaceGrid | null;
+  sviReadout: SVIReadout | null;
+  arbResult: NoArbResult | null;
   historicalFrames: { snapshot: VolSnapshot; surface: SurfaceGrid; timestamp: number }[];
   frameIndex: number;
   isPlaying: boolean;
@@ -41,6 +45,8 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
   symbol: 'SPY',
   snapshot: null,
   surface: null,
+  sviReadout: null,
+  arbResult: null,
   historicalFrames: [],
   frameIndex: 0,
   isPlaying: false,
@@ -60,16 +66,20 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
     if (refreshInterval) clearInterval(refreshInterval);
     if (playbackInterval) clearInterval(playbackInterval);
 
-    set({ symbol, loading: true, snapshot: null, surface: null, historicalFrames: [], frameIndex: 0, isPlaying: false });
+    set({ symbol, loading: true, snapshot: null, surface: null, sviReadout: null, arbResult: null, historicalFrames: [], frameIndex: 0, isPlaying: false });
 
     const preset = presetFor(symbol);
     const snapshot = buildSnapshot(symbol, Date.now(), preset?.spot ?? 100, 0, 0);
     const frames = generateHistory(symbol, 64);
     const surface = frames[0]?.surface ?? buildSurfaceGrid(snapshot);
+    const readout = sviReadout(surface, snapshot.spot);
+    const arb = diagnoseArbitrage(surface, snapshot.spot);
 
     set({
       snapshot,
       surface,
+      sviReadout: readout,
+      arbResult: arb,
       historicalFrames: frames,
       loading: false,
       lastUpdate: Date.now(),
@@ -81,7 +91,9 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
       fetchYahooSnapshot(symbol).then(snap => {
         if (snap) {
           const surface = buildSurfaceGrid(snap);
-          set({ snapshot: snap, surface, loading: false, lastUpdate: Date.now(), liveAvailable: true });
+          const readout = sviReadout(surface, snap.spot);
+          const arb = diagnoseArbitrage(surface, snap.spot);
+          set({ snapshot: snap, surface, sviReadout: readout, arbResult: arb, loading: false, lastUpdate: Date.now(), liveAvailable: true });
           get().storeFrames(snap);
         }
       }).catch(() => {});
@@ -109,7 +121,9 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
     const frames = get().historicalFrames;
     if (idx < 0 || idx >= frames.length) return;
     const frame = frames[idx]!;
-    set({ frameIndex: idx, snapshot: frame.snapshot, surface: frame.surface, lastUpdate: frame.timestamp });
+    const readout = sviReadout(frame.surface, frame.snapshot.spot);
+    const arb = diagnoseArbitrage(frame.surface, frame.snapshot.spot);
+    set({ frameIndex: idx, snapshot: frame.snapshot, surface: frame.surface, sviReadout: readout, arbResult: arb, lastUpdate: frame.timestamp });
   },
 
   setPlaying: (playing: boolean) => {
@@ -150,7 +164,9 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
       fetchYahooSnapshot(state.symbol).then(snap => {
         if (snap) {
           const surface = buildSurfaceGrid(snap);
-          set({ snapshot: snap, surface, lastUpdate: Date.now() });
+          const readout = sviReadout(surface, snap.spot);
+          const arb = diagnoseArbitrage(surface, snap.spot);
+          set({ snapshot: snap, surface, sviReadout: readout, arbResult: arb, lastUpdate: Date.now() });
         } else {
           toast.error('Failed to fetch live data', {
             description: 'Unable to retrieve options data from Yahoo Finance',
@@ -166,14 +182,18 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
         const spot = state.snapshot?.spot || 548;
         const snap = buildSnapshot(state.symbol, Date.now(), spot, 0, (Math.random() - 0.5) * 0.02);
         const surface = buildSurfaceGrid(snap);
-        set({ snapshot: snap, surface, lastUpdate: Date.now() });
+        const readout = sviReadout(surface, snap.spot);
+        const arb = diagnoseArbitrage(surface, snap.spot);
+        set({ snapshot: snap, surface, sviReadout: readout, arbResult: arb, lastUpdate: Date.now() });
       });
     } else {
       try {
         const spot = state.snapshot?.spot || 548;
         const snap = buildSnapshot(state.symbol, Date.now(), spot, 0, (Math.random() - 0.5) * 0.02);
         const surface = buildSurfaceGrid(snap);
-        set({ snapshot: snap, surface, lastUpdate: Date.now() });
+        const readout = sviReadout(surface, snap.spot);
+        const arb = diagnoseArbitrage(surface, snap.spot);
+        set({ snapshot: snap, surface, sviReadout: readout, arbResult: arb, lastUpdate: Date.now() });
       } catch (err) {
         console.error('Failed to generate synthetic data:', err);
         toast.error('Data Generation Error', {
@@ -191,7 +211,9 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
       fetchYahooSnapshot(get().symbol).then(snap => {
         if (snap) {
           const surface = buildSurfaceGrid(snap);
-          set({ snapshot: snap, surface, loading: false, lastUpdate: Date.now(), liveAvailable: true });
+          const readout = sviReadout(surface, snap.spot);
+          const arb = diagnoseArbitrage(surface, snap.spot);
+          set({ snapshot: snap, surface, sviReadout: readout, arbResult: arb, loading: false, lastUpdate: Date.now(), liveAvailable: true });
         }
       }).catch(() => {});
     }
