@@ -8,5 +8,11 @@ venv/
 .tanstack/
 .bun/
 *.log
+.kimchi/
+.commandcode/
+tsconfig.app.tsbuildinfo
+*.md~
+screenshot.mjs
+cfg.json
 .vercel
 .env*

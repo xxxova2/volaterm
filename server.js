@@ -6,6 +6,9 @@ import { execFile } from 'child_process';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
+const FMP_API_KEY = process.env.FMP_API_KEY || 'REMOVED_FMP_KEY';
+const FMP_BASE = 'https://financialmodelingprep.com/stable';
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = parseInt(process.env.PORT || '3001', 10);
 
@@ -125,6 +128,31 @@ fastify.get('/api/history/spy', async () => {
   return { symbol: 'SPY', data };
 });
 
+// ── FMP API Proxy ──────────────────────────────────────────────
+// Forwards /api/fmp/stable/* to financialmodelingprep.com/stable/*
+// keeping the API key server-side.
+
+fastify.get('/api/fmp/stable/*', async (request, reply) => {
+  const url = request.url.replace('/api/fmp/stable/', '');
+  const separator = url.includes('?') ? '&' : '?';
+  const target = `${FMP_BASE}/${url}${separator}apikey=${FMP_API_KEY}`;
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15000);
+    const res = await fetch(target, { signal: controller.signal });
+    clearTimeout(timer);
+    if (!res.ok) {
+      reply.code(res.status);
+      return { error: 'FMP API error', status: res.status };
+    }
+    return await res.json();
+  } catch (err) {
+    reply.code(502);
+    return { error: 'FMP proxy error', detail: err.message };
+  }
+});
+
+// ── Static Files ──────────────────────────────────────────────
 // Serve static files in production
 try {
   await fastify.register(fastifyStatic, {

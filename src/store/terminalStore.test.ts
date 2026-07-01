@@ -23,6 +23,10 @@ describe('terminalStore', () => {
       selectedExpiry: null,
       playbackInterval: null,
       refreshInterval: null,
+      fmpQuote: null,
+      fmpTreasuryRates: null,
+      liveRFR: null,
+      fmpSpot: null,
     });
   });
 
@@ -47,6 +51,21 @@ describe('terminalStore', () => {
     expect(state.arbResult!.calendar.violations).toBe(0);
     expect(state.arbResult!.butterfly.violations).toBe(0);
     expect(state.arbResult!.clean).toBe(true);
+  });
+
+  it('rejects invalid symbols and preserves previous state', () => {
+    useTerminalStore.getState().setSource('demo');
+    useTerminalStore.getState().setSymbol('SPY');
+    const validState = useTerminalStore.getState();
+    const validSnapshot = validState.snapshot;
+
+    // Try to set an invalid symbol
+    useTerminalStore.getState().setSymbol('123INVALID');
+    const afterInvalid = useTerminalStore.getState();
+
+    // State should be unchanged (same snapshot object)
+    expect(afterInvalid.symbol).toBe('SPY');
+    expect(afterInvalid.snapshot).toBe(validSnapshot);
   });
 
   it('updates sviReadout and arbResult on refresh in demo mode', () => {

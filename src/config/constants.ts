@@ -92,6 +92,13 @@ export const REFRESH_CONFIG = {
   SPEEDS: [0.5, 1, 2, 4],
 } as const;
 
+export const FMP_CONFIG = {
+  /** Financial Modeling Prep API settings */
+  BASE_URL: 'https://financialmodelingprep.com/stable',
+  PROXY_PATH: '/api/fmp/stable',
+  REFRESH_INTERVAL_MS: 30000,
+} as const;
+
 export const VALIDATION_CONFIG = {
   /** Symbol validation */
   symbol: {

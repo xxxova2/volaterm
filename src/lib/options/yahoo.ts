@@ -79,7 +79,7 @@ function buildOptionQuote(
   return {
     strike: raw.strike, expiry, type: raw.type,
     bid: raw.bid, ask: raw.ask, last: raw.last,
-    mid: raw.mid ?? iv,
+    mid: pickMid(raw) ?? iv,
     iv, delta: g.delta, gamma: g.gamma, theta: g.theta, vega: g.vega,
     vanna: g.vanna, charm: g.charm, volga: g.volga, speed: g.speed,
     rho: g.rho, veta: g.veta, color: g.color, zomma: g.zomma, ultima: g.ultima,
@@ -130,7 +130,7 @@ function computeIVs(
 }
 
 function smoothWings(
-  type: 'call' | 'put',
+  _type: 'call' | 'put',
   quotes: (RawWithMid & { iv: number })[],
   spot: number,
   T: number,
@@ -203,7 +203,7 @@ export function buildYahooSnapshot(
     if (calls.length > 0 || puts.length > 0) {
       const allIVs = [...calls, ...puts].map(q => q.iv);
       const atmIV = allIVs.length > 0
-        ? allIVs.reduce((a, b) => a + b, 0) / allIVs.length
+        ? allIVs.reduce((sum: number, iv: number | null) => sum + (iv ?? 0), 0) / allIVs.length
         : 0.2;
       slices.push({ expiry, dte, calls, puts, atmIV });
     }
@@ -224,14 +224,14 @@ export function buildYahooSnapshot(
 export async function fetchYahooSnapshot(
   symbol: string,
   maxExpiries = 12,
+  r = 0.0525,
+  q = 0.013,
 ): Promise<VolSnapshot | null> {
   try {
     const res = await fetch(`/api/options/${symbol}?max=${maxExpiries * 20}`);
     if (!res.ok) return null;
 
     const data: YahooResponse = await res.json();
-    const r = 0.0525;
-    const q = 0.013;
     return buildYahooSnapshot(data, r, q, maxExpiries);
   } catch {
     return null;
