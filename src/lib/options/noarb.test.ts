@@ -6,6 +6,7 @@ import type { SurfaceGrid } from './types';
 function cloneGrid(grid: SurfaceGrid): SurfaceGrid {
   return {
     expiries: [...grid.expiries],
+    dtes: [...grid.dtes],
     strikes: [...grid.strikes],
     iv: grid.iv.map(row => [...row]),
     bid: grid.bid.map(row => [...row]),
@@ -60,6 +61,7 @@ describe('diagnoseArbitrage', () => {
   it('returns zero violations for empty or tiny grids', () => {
     const grid: SurfaceGrid = {
       expiries: ['2026-07-30'],
+      dtes: [30],
       strikes: [100],
       iv: [[0.20]],
       bid: [[null]],

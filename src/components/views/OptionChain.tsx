@@ -4,6 +4,7 @@ import { useTerminalStore } from '../../store/terminalStore';
 import { fmtPrice, fmtPct, fmtInt } from '../../lib/format';
 import { cn } from '../../lib/utils';
 import { VISUAL_CONFIG } from '../../config/constants';
+import { DiagnosticsStrip } from './DiagnosticsStrip';
 
 interface RowData {
   strike: number;
@@ -84,6 +85,8 @@ function RowComponent({ index, style, data }: { index: number; style: React.CSSP
 export function OptionChain() {
   const snapshot = useTerminalStore(s => s.snapshot);
   const selectedExpiry = useTerminalStore(s => s.selectedExpiry);
+  const sviReadout = useTerminalStore(s => s.sviReadout);
+  const arbResult = useTerminalStore(s => s.arbResult);
   const spot = snapshot?.spot ?? 0;
 
   const rows: RowData[] = useMemo(() => {
@@ -125,6 +128,7 @@ export function OptionChain() {
   return (
     <div className="h-full flex flex-col">
       <HeaderRow />
+      <DiagnosticsStrip sviReadout={sviReadout} arbResult={arbResult} data-testid="chain-diagnostics" />
       <div className="flex-1">
         <List
           rowComponent={RowComponent}

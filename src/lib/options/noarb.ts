@@ -27,14 +27,17 @@ function detectCalendarArb(grid: SurfaceGrid): { flags: boolean[][]; violations:
   let violations = 0;
   if (rows < 2 || cols === 0) return { flags, violations };
 
-  const dtes = grid.expiries.map((_, i) => {
-    // SurfaceGrid does not store dte; derive from expiry string as days since today.
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const exp = new Date(grid.expiries[i]!);
-    exp.setHours(0, 0, 0, 0);
-    return Math.max(1, Math.round((exp.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)));
-  });
+  // Use the DTE values carried by the grid. If absent (e.g. legacy/manual grids),
+  // fall back to deriving from expiry strings as days since today, clamped to >= 1.
+  const dtes: number[] = grid.dtes && grid.dtes.length === rows
+    ? grid.dtes
+    : grid.expiries.map((_, i) => {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const exp = new Date(grid.expiries[i]!);
+        exp.setHours(0, 0, 0, 0);
+        return Math.max(1, Math.round((exp.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)));
+      });
   const years = dtes.map(d => d / 365);
   const totalVar = grid.iv.map((row, i) => row.map(iv => (iv == null ? null : iv * iv * years[i]!)));
 

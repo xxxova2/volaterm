@@ -4,8 +4,15 @@ import { cn } from '../../lib/utils';
 import type { DisplayMode } from '../../lib/options/types';
 
 export function SidePanel() {
-  const { snapshot, selectedExpiry, setSelectedExpiry, displayMode, setDisplayMode } = useTerminalStore();
+  const { snapshot, selectedExpiry, setSelectedExpiry, displayMode, setDisplayMode, source, liveAvailable } = useTerminalStore();
   const spot = snapshot?.spot ?? 0;
+
+  // Demo/Live badge: only show "Live" when the store is in live mode AND
+  // a live snapshot has actually been received. Otherwise this is demo data
+  // (synthetic or fallback). This avoids mis-labeling a live-mode attempt
+  // that hasn't yet connected as "Live".
+  const sourceLabel = source === 'live' && liveAvailable ? 'Live' : 'Demo';
+  const sourceDotClass = sourceLabel === 'Live' ? 'bg-emerald-400' : 'bg-amber';
 
   if (!snapshot) {
     return (
@@ -90,9 +97,9 @@ export function SidePanel() {
 
       <div className="p-2 text-[10px] text-muted-foreground">
         <div className="uppercase tracking-wider mb-1">Source</div>
-        <div className="flex items-center gap-1">
-          <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber" />
-          Synthetic
+        <div className="flex items-center gap-1" data-testid="source-badge">
+          <span className={cn('inline-block w-1.5 h-1.5 rounded-full', sourceDotClass)} />
+          {sourceLabel}
         </div>
       </div>
     </aside>
