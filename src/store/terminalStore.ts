@@ -4,9 +4,21 @@ import { buildSnapshot, buildSurfaceGrid, generateHistory, presetFor } from '../
 import { fetchYahooSnapshot } from '../lib/options/yahoo';
 import { diagnoseArbitrage, type NoArbResult } from '../lib/options/noarb';
 import { sviReadout, type SVIReadout } from '../lib/options/surfaceTools';
-import { REFRESH_CONFIG } from '../config/constants';
+import { REFRESH_CONFIG, VALIDATION_CONFIG, DATA_CONFIG, FMP_CONFIG } from '../config/constants';
+import { fetchFmpQuote, fetchFmpTreasuryRates } from '../lib/data/fmpClient';
+import type { FmpQuote, FmpTreasuryRate } from '../lib/data/types';
 import { toast } from 'sonner';
 
+
+function processSurface(surface: SurfaceGrid, spot: number) {
+  const readout = sviReadout(surface, spot);
+  const arb = diagnoseArbitrage(surface, spot);
+  return { surface, sviReadout: readout, arbResult: arb };
+}
+
+function processSnapshot(snap: VolSnapshot) {
+  return processSurface(buildSurfaceGrid(snap), snap.spot);
+}
 
 interface TerminalStore {
   symbol: string;
@@ -25,6 +37,12 @@ interface TerminalStore {
   activeTab: ActiveTab;
   displayMode: DisplayMode;
   selectedExpiry: string | null;
+  /** FMP enrichment data */
+  fmpQuote: FmpQuote | null;
+  fmpTreasuryRates: FmpTreasuryRate[] | null;
+  liveRFR: number | null;
+  fmpSpot: number | null;
+
   playbackInterval: ReturnType<typeof setInterval> | null;
   refreshInterval: ReturnType<typeof setInterval> | null;
 
@@ -58,22 +76,38 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
   activeTab: 'surface',
   displayMode: 'strike',
   selectedExpiry: null,
+  /** FMP enrichment data */
+  fmpQuote: null,
+  fmpTreasuryRates: null,
+  liveRFR: null,
+  fmpSpot: null,
+
   playbackInterval: null,
   refreshInterval: null,
 
+  // Fetch FMP enrichment on startup
   setSymbol: (symbol: string) => {
+    const trimmed = symbol.trim().toUpperCase();
+    const { MIN_LENGTH, MAX_LENGTH, PATTERN } = VALIDATION_CONFIG.symbol;
+    if (!trimmed || trimmed.length < MIN_LENGTH || trimmed.length > MAX_LENGTH || !PATTERN.test(trimmed)) {
+      toast.error('Invalid symbol', {
+        description: 'Enter 1-5 uppercase letters (e.g. SPY, AAPL)',
+      });
+      return;
+    }
+
     const { refreshInterval, playbackInterval } = get();
     if (refreshInterval) clearInterval(refreshInterval);
     if (playbackInterval) clearInterval(playbackInterval);
 
-    set({ symbol, loading: true, snapshot: null, surface: null, sviReadout: null, arbResult: null, historicalFrames: [], frameIndex: 0, isPlaying: false });
+    set({ symbol: trimmed, loading: true, snapshot: null, surface: null, sviReadout: null, arbResult: null, historicalFrames: [], frameIndex: 0, isPlaying: false });
 
-    const preset = presetFor(symbol);
-    const snapshot = buildSnapshot(symbol, Date.now(), preset?.spot ?? 100, 0, 0);
-    const frames = generateHistory(symbol, 64);
+    const preset = presetFor(trimmed);
+    const defSpot = preset?.spot ?? DATA_CONFIG.SYMBOL_PRESETS.SPY.spot;
+    const snapshot = buildSnapshot(trimmed, Date.now(), defSpot, 0, 0);
+    const frames = generateHistory(trimmed, 64);
     const surface = frames[0]?.surface ?? buildSurfaceGrid(snapshot);
-    const readout = sviReadout(surface, snapshot.spot);
-    const arb = diagnoseArbitrage(surface, snapshot.spot);
+    const { sviReadout: readout, arbResult: arb } = processSurface(surface, snapshot.spot);
 
     set({
       snapshot,
@@ -88,15 +122,38 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
     // Immediately fetch live data if we're in live mode
     const currentSource = get().source;
     if (currentSource === 'live') {
-      fetchYahooSnapshot(symbol).then(snap => {
+      const rfr = get().liveRFR ?? undefined;
+      fetchYahooSnapshot(trimmed, 12, rfr).then(snap => {
         if (snap) {
-          const surface = buildSurfaceGrid(snap);
-          const readout = sviReadout(surface, snap.spot);
-          const arb = diagnoseArbitrage(surface, snap.spot);
+          const { surface, sviReadout: readout, arbResult: arb } = processSnapshot(snap);
           set({ snapshot: snap, surface, sviReadout: readout, arbResult: arb, loading: false, lastUpdate: Date.now(), liveAvailable: true });
           get().storeFrames(snap);
         }
-      }).catch(() => {});
+      }).catch((err) => {
+        console.error('Failed to fetch live snapshot:', err);
+        toast.error('Live fetch failed', {
+          description: 'Could not retrieve options data',
+        });
+      });
+
+      // Fetch FMP enrichment (quote + treasury) in parallel
+      fetchFmpQuote(trimmed).then(quotes => {
+        if (quotes && quotes.length > 0) {
+          set({ fmpQuote: quotes[0]!, fmpSpot: quotes[0]!.price });
+        }
+      });
+    }
+
+    // Fetch treasury rates (one-time, symbol-independent)
+    if (!get().fmpTreasuryRates) {
+      fetchFmpTreasuryRates().then(rates => {
+        if (rates && rates.length > 0) {
+          const latest = rates[0]!;
+          // Use 1y Treasury as risk-free rate (converted from % to decimal)
+          const rfr = latest.year1 / 100;
+          set({ fmpTreasuryRates: rates, liveRFR: rfr });
+        }
+      });
     }
 
     const id = setInterval(() => {
@@ -121,8 +178,7 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
     const frames = get().historicalFrames;
     if (idx < 0 || idx >= frames.length) return;
     const frame = frames[idx]!;
-    const readout = sviReadout(frame.surface, frame.snapshot.spot);
-    const arb = diagnoseArbitrage(frame.surface, frame.snapshot.spot);
+    const { sviReadout: readout, arbResult: arb } = processSurface(frame.surface, frame.snapshot.spot);
     set({ frameIndex: idx, snapshot: frame.snapshot, surface: frame.surface, sviReadout: readout, arbResult: arb, lastUpdate: frame.timestamp });
   },
 
@@ -160,12 +216,24 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
 
   refresh: () => {
     const state = get();
+    // Refresh FMP quote and treasury on every cycle
+    fetchFmpQuote(state.symbol).then(quotes => {
+      if (quotes && quotes.length > 0) {
+        set({ fmpQuote: quotes[0]!, fmpSpot: quotes[0]!.price });
+      }
+    });
+    fetchFmpTreasuryRates().then(rates => {
+      if (rates && rates.length > 0) {
+        const latest = rates[0]!;
+        set({ fmpTreasuryRates: rates, liveRFR: latest.year1 / 100 });
+      }
+    });
+
+    const rfr = get().liveRFR ?? undefined;
     if (state.source === 'live') {
-      fetchYahooSnapshot(state.symbol).then(snap => {
+      fetchYahooSnapshot(state.symbol, 12, rfr).then(snap => {
         if (snap) {
-          const surface = buildSurfaceGrid(snap);
-          const readout = sviReadout(surface, snap.spot);
-          const arb = diagnoseArbitrage(surface, snap.spot);
+          const { surface, sviReadout: readout, arbResult: arb } = processSnapshot(snap);
           set({ snapshot: snap, surface, sviReadout: readout, arbResult: arb, lastUpdate: Date.now() });
         } else {
           toast.error('Failed to fetch live data', {
@@ -179,20 +247,18 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
         });
         // Fallback to demo mode on error
         set({ source: 'demo' });
-        const spot = state.snapshot?.spot || 548;
+        const defSpot = presetFor(state.symbol)?.spot ?? DATA_CONFIG.SYMBOL_PRESETS.SPY.spot;
+        const spot = state.snapshot?.spot || defSpot;
         const snap = buildSnapshot(state.symbol, Date.now(), spot, 0, (Math.random() - 0.5) * 0.02);
-        const surface = buildSurfaceGrid(snap);
-        const readout = sviReadout(surface, snap.spot);
-        const arb = diagnoseArbitrage(surface, snap.spot);
+        const { surface, sviReadout: readout, arbResult: arb } = processSnapshot(snap);
         set({ snapshot: snap, surface, sviReadout: readout, arbResult: arb, lastUpdate: Date.now() });
       });
     } else {
       try {
-        const spot = state.snapshot?.spot || 548;
+        const defSpot = presetFor(state.symbol)?.spot ?? DATA_CONFIG.SYMBOL_PRESETS.SPY.spot;
+        const spot = state.snapshot?.spot || defSpot;
         const snap = buildSnapshot(state.symbol, Date.now(), spot, 0, (Math.random() - 0.5) * 0.02);
-        const surface = buildSurfaceGrid(snap);
-        const readout = sviReadout(surface, snap.spot);
-        const arb = diagnoseArbitrage(surface, snap.spot);
+        const { surface, sviReadout: readout, arbResult: arb } = processSnapshot(snap);
         set({ snapshot: snap, surface, sviReadout: readout, arbResult: arb, lastUpdate: Date.now() });
       } catch (err) {
         console.error('Failed to generate synthetic data:', err);
@@ -210,12 +276,12 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
     if (source === 'live') {
       fetchYahooSnapshot(get().symbol).then(snap => {
         if (snap) {
-          const surface = buildSurfaceGrid(snap);
-          const readout = sviReadout(surface, snap.spot);
-          const arb = diagnoseArbitrage(surface, snap.spot);
+          const { surface, sviReadout: readout, arbResult: arb } = processSnapshot(snap);
           set({ snapshot: snap, surface, sviReadout: readout, arbResult: arb, loading: false, lastUpdate: Date.now(), liveAvailable: true });
         }
-      }).catch(() => {});
+      }).catch((err) => {
+        console.error('Failed to fetch live snapshot on source switch:', err);
+      });
     }
     const id = setInterval(() => {
       get().refresh();
