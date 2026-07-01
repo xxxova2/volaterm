@@ -3,8 +3,8 @@ import { BarChart, Bar, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxi
 import { useTerminalStore } from '../../store/terminalStore';
 import { Panel } from '../terminal/Panel';
 import { spotSensitivity, ivSensitivity } from '../../lib/options/analytics';
+import { GREEK_KEYS } from './greeksTypes';
 
-const GREEK_KEYS = ['delta', 'gamma', 'vega', 'theta'] as const;
 const SCENARIO_COLORS = ['#f0883e', '#6b6b76', '#3fb950'];
 
 export function GreeksSensitivityView() {
@@ -12,25 +12,23 @@ export function GreeksSensitivityView() {
 
   const spotChartData = useMemo(() => {
     if (!snapshot) return [];
-    const s = spotSensitivity(snapshot);
+    const s = spotSensitivity(snapshot) as unknown as Record<string, number[]>;
     return GREEK_KEYS.map(key => ({
       greek: key.charAt(0).toUpperCase() + key.slice(1),
-      '-5%': s.delta[0], base: s.delta[1], '+5%': s.delta[2],
-      ...(key === 'gamma' ? { '-5%': s.gamma[0], base: s.gamma[1], '+5%': s.gamma[2] } : {}),
-      ...(key === 'vega' ? { '-5%': s.vega[0], base: s.vega[1], '+5%': s.vega[2] } : {}),
-      ...(key === 'theta' ? { '-5%': s.theta[0], base: s.theta[1], '+5%': s.theta[2] } : {}),
+      down: s[key]?.[0] ?? 0,
+      base: s[key]?.[1] ?? 0,
+      up: s[key]?.[2] ?? 0,
     }));
   }, [snapshot]);
 
   const ivChartData = useMemo(() => {
     if (!snapshot) return [];
-    const s = ivSensitivity(snapshot);
+    const s = ivSensitivity(snapshot) as unknown as Record<string, number[]>;
     return GREEK_KEYS.map(key => ({
       greek: key.charAt(0).toUpperCase() + key.slice(1),
-      '-20%': s.delta[0], base: s.delta[1], '+20%': s.delta[2],
-      ...(key === 'gamma' ? { '-20%': s.gamma[0], base: s.gamma[1], '+20%': s.gamma[2] } : {}),
-      ...(key === 'vega' ? { '-20%': s.vega[0], base: s.vega[1], '+20%': s.vega[2] } : {}),
-      ...(key === 'theta' ? { '-20%': s.theta[0], base: s.theta[1], '+20%': s.theta[2] } : {}),
+      down: s[key]?.[0] ?? 0,
+      base: s[key]?.[1] ?? 0,
+      up: s[key]?.[2] ?? 0,
     }));
   }, [snapshot]);
 
@@ -63,7 +61,7 @@ export function GreeksSensitivityView() {
                   );
                 }}
               />
-              {['-5%', 'base', '+5%'].map((k, i) => (
+              {(['down', 'base', 'up'] as const).map((k, i) => (
                 <Bar key={k} dataKey={k} fill={SCENARIO_COLORS[i]!} radius={[2, 2, 0, 0]} />
               ))}
             </BarChart>
@@ -94,7 +92,7 @@ export function GreeksSensitivityView() {
                   );
                 }}
               />
-              {['-20%', 'base', '+20%'].map((k, i) => (
+              {(['down', 'base', 'up'] as const).map((k, i) => (
                 <Bar key={k} dataKey={k} fill={SCENARIO_COLORS[i]!} radius={[2, 2, 0, 0]} />
               ))}
             </BarChart>

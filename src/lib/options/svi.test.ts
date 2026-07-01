@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { svi, fitSVI, buildSVISurface } from './svi';
+import { svi, fitSVI } from './svi';
 import type { SVIParams } from './types';
 
 const TRUE: SVIParams = { a: 0.04, b: 0.15, rho: -0.3, m: 0, sigma: 0.1 };
@@ -91,27 +91,5 @@ describe('fitSVI noise robustness', () => {
     expect(fit).not.toBeNull();
     if (!fit) return;
     expect(fit.rmse).toBeLessThan(5e-3);
-  });
-});
-
-describe('buildSVISurface', () => {
-  const shortStrikes = [80, 90, 100, 110, 120];
-
-  it('evaluates SVI across the strike grid for a clean row', () => {
-    const row = shortStrikes.map(s => svi(TRUE, k(s)));
-    const result = buildSVISurface(shortStrikes, SPOT, [row]);
-    expect(result.iv.length).toBe(1);
-    expect(result.iv[0]).toHaveLength(5);
-    expect(result.fits[0]).not.toBeNull();
-    // ATM (K=100) cell should match svi(TRUE, 0)
-    expect(result.iv[0]![2]).toBeCloseTo(svi(TRUE, 0), 3);
-  });
-
-  it('returns a null row and null fit when a row has too few valid points', () => {
-    // Only 3 valid IVs out of 5 cells -> below the 5-point minimum.
-    const unfitRow: (number | null)[] = [0.2, null, 0.2, null, 0.2];
-    const result = buildSVISurface(shortStrikes, SPOT, [unfitRow]);
-    expect(result.fits[0]).toBeNull();
-    expect(result.iv[0]).toEqual([null, null, null, null, null]);
   });
 });

@@ -9,6 +9,8 @@ export function DashboardView() {
   const snapshot = useTerminalStore(s => s.snapshot);
   const historicalFrames = useTerminalStore(s => s.historicalFrames);
   const frameIndex = useTerminalStore(s => s.frameIndex);
+  const sviReadout = useTerminalStore(s => s.sviReadout);
+  const arbResult = useTerminalStore(s => s.arbResult);
 
   const firstFrame = historicalFrames[0];
   const change = snapshot ? snapshot.spot - (firstFrame?.snapshot.spot ?? snapshot.spot) : 0;
@@ -23,6 +25,41 @@ export function DashboardView() {
   const frontExpiry = snapshot?.expiries[0];
   const backExpiry = snapshot?.expiries[snapshot.expiries.length - 1];
   const termSlope = frontExpiry && backExpiry ? backExpiry.atmIV - frontExpiry.atmIV : 0;
+
+  const ivHighLow = useMemo(() => {
+    if (historicalFrames.length > 0) {
+      const atmIVs: number[] = [];
+      for (const f of historicalFrames) {
+        if (!f.snapshot.expiries.length) continue;
+        let minDteExpiry = f.snapshot.expiries[0]!;
+        for (const e of f.snapshot.expiries) {
+          if (e.dte < minDteExpiry.dte) minDteExpiry = e;
+        }
+        if (Number.isFinite(minDteExpiry.atmIV)) {
+          atmIVs.push(minDteExpiry.atmIV);
+        }
+      }
+      if (atmIVs.length > 0) {
+        return { ivHigh: Math.max(...atmIVs), ivLow: Math.min(...atmIVs) };
+      }
+    }
+    if (snapshot && snapshot.expiries.length > 0) {
+      let minDteExpiry = snapshot.expiries[0]!;
+      for (const e of snapshot.expiries) {
+        if (e.dte < minDteExpiry.dte) minDteExpiry = e;
+      }
+      if (Number.isFinite(minDteExpiry.atmIV)) {
+        return { ivHigh: minDteExpiry.atmIV, ivLow: minDteExpiry.atmIV };
+      }
+    }
+    return { ivHigh: 0, ivLow: 0 };
+  }, [historicalFrames, snapshot]);
+
+  const arbClean = (arbResult?.calendar.violations ?? 0) === 0 && (arbResult?.butterfly.violations ?? 0) === 0;
+  const calendarCount = arbResult?.calendar.violations ?? 0;
+  const butterflyCount = arbResult?.butterfly.violations ?? 0;
+  const sviRmse = sviReadout?.rmse ?? 0;
+  const sviSamples = sviReadout?.samples ?? 0;
 
   const pcSkew = useMemo(() => {
     if (!snapshot) return 0;
@@ -83,8 +120,8 @@ export function DashboardView() {
           <div className="grid grid-cols-2 gap-3 p-3">
             <MiniStat label="ATM IV 30d" value={fmtPct(volRegime)} color="text-primary" />
             <MiniStat label="IV Rank" value={`${(ivData.percentile * 100).toFixed(0)}%`} />
-            <MiniStat label="IV High" value={fmtPct(0)} color="text-up" />
-            <MiniStat label="IV Low" value={fmtPct(0)} color="text-down" />
+            <MiniStat label="IV High" value={fmtPct(ivHighLow.ivHigh)} color="text-up" />
+            <MiniStat label="IV Low" value={fmtPct(ivHighLow.ivLow)} color="text-down" />
             <MiniStat label="Term Slope" value={fmtSignedPct(termSlope, 1)} color={termSlope >= 0 ? 'text-up' : 'text-down'} />
             <MiniStat label="Put/Call Skew" value={`${(pcSkew * 100).toFixed(2)}%`} color={pcSkew >= 0 ? 'text-down' : 'text-up'} />
           </div>
@@ -127,6 +164,47 @@ export function DashboardView() {
             ) : (
               <div className="text-muted-foreground font-mono text-sm">No data</div>
             )}
+          </div>
+        </Panel>
+
+        <Panel title="SVI & Arbitrage">
+          <div className="space-y-3 p-3" data-testid="diagnostics-card">
+            <div className="flex items-center justify-between">
+              <span className="text-[9px] font-mono uppercase tracking-wider text-muted-foreground">SVI RMSE</span>
+              <span className="font-mono text-sm font-semibold tabular-nums text-primary" data-testid="svi-rmse">
+                {fmtPct(sviRmse)}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-[9px] font-mono uppercase tracking-wider text-muted-foreground">SVI Samples</span>
+              <span className="font-mono text-sm font-semibold tabular-nums text-foreground">
+                {String(sviSamples)}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-[9px] font-mono uppercase tracking-wider text-muted-foreground">Status</span>
+              <span
+                className={`rounded px-2 py-0.5 text-[10px] font-mono uppercase tracking-wider ${
+                  arbClean ? 'bg-up/15 text-up' : 'bg-down/15 text-down'
+                }`}
+                data-testid="arb-badge"
+                data-arb-clean={arbClean ? 'true' : 'false'}
+              >
+                {arbClean ? 'No Arb' : 'Arb Found'}
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-3 pt-1">
+              <MiniStat
+                label="Calendar"
+                value={String(calendarCount)}
+                color={calendarCount === 0 ? 'text-up' : 'text-down'}
+              />
+              <MiniStat
+                label="Butterfly"
+                value={String(butterflyCount)}
+                color={butterflyCount === 0 ? 'text-up' : 'text-down'}
+              />
+            </div>
           </div>
         </Panel>
 

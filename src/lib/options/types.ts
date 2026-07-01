@@ -36,6 +36,8 @@ export interface OptionChain {
 
 export interface SurfaceGrid {
   expiries: string[];
+  /** Days to expiration per row (parallel to `expiries`). Required for calendar arbitrage checks. */
+  dtes: number[];
   strikes: number[];
   iv: (number | null)[][];
   bid: (number | null)[][];
@@ -103,7 +105,7 @@ export interface HistoricalFrame {
 }
 
 export type DisplayMode = 'strike' | 'moneyness' | 'delta';
-export type ActiveTab = 'surface' | 'smile' | 'term' | 'greeks' | 'gex' | 'chain' | 'dashboard' | 'spy';
+export type ActiveTab = 'surface' | 'smile' | 'term' | 'greeks' | 'gex' | 'chain' | 'dashboard' | 'arbitrage';
 
 export interface GreeksProfile {
   strikes: number[];

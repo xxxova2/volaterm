@@ -1,10 +1,14 @@
 import { useMemo, useState } from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ComposedChart } from 'recharts';
 import { useTerminalStore } from '../../store/terminalStore';
 import { Panel } from '../terminal/Panel';
 import { fmtPct } from '../../lib/format';
 import { cn } from '../../lib/utils';
+import { DiagnosticsStrip } from './DiagnosticsStrip';
+import { fitSVI, svi } from '../../lib/options/svi';
 import type { OptionQuote } from '../../lib/options/types';
+
+type XMode = 'moneyness' | 'strike' | 'delta';
 
 function interpolateIV(quotes: OptionQuote[], targetDelta: number): number | null {
   const sorted = [...quotes]
@@ -56,35 +60,112 @@ function computeSkewMetrics(snapshot: ReturnType<typeof useTerminalStore.getStat
   };
 }
 
+interface DataPoint {
+  x: number;
+  iv: number;
+  type: 'call' | 'put';
+  strike: number;
+  bid?: number;
+  ask?: number;
+}
+
+interface SVICurvePoint {
+  x: number;
+  sviIv: number;
+}
+
 export function SmileView() {
   const snapshot = useTerminalStore(s => s.snapshot);
-  const [xMode, setXMode] = useState<'moneyness' | 'strike'>('moneyness');
+  const surface = useTerminalStore(s => s.surface);
+  const sviReadout = useTerminalStore(s => s.sviReadout);
+  const arbResult = useTerminalStore(s => s.arbResult);
+  const spot = snapshot?.spot ?? 100; void spot;
+  const [xMode, setXMode] = useState<XMode>('moneyness');
+  const [showBidAsk, setShowBidAsk] = useState(false);
   const [selectedExpiryIdx, setSelectedExpiryIdx] = useState<number>(0);
 
   const chartData = useMemo(() => {
     if (!snapshot) return [];
     return snapshot.expiries.slice(0, 6).map((slice, i) => {
-      const all = [...slice.calls, ...slice.puts]
+      const calls: DataPoint[] = slice.calls
         .filter(q => q.iv != null && q.iv > 0)
-        .sort((a, b) => a.strike - b.strike);
+        .sort((a, b) => a.strike - b.strike)
+        .map(q => ({
+          x: xMode === 'moneyness' ? Math.log(q.strike / snapshot.spot) * 100
+            : xMode === 'delta' ? (q.delta ?? 0)
+            : q.strike,
+          iv: q.iv! * 100,
+          type: 'call' as const,
+          strike: q.strike,
+        }));
+      const puts: DataPoint[] = slice.puts
+        .filter(q => q.iv != null && q.iv > 0)
+        .sort((a, b) => a.strike - b.strike)
+        .map(q => ({
+          x: xMode === 'moneyness' ? Math.log(q.strike / snapshot.spot) * 100
+            : xMode === 'delta' ? (q.delta ?? 0)
+            : q.strike,
+          iv: q.iv! * 100,
+          type: 'put' as const,
+          strike: q.strike,
+        }));
       return {
         expiry: slice.expiry,
         dte: slice.dte,
         label: `${slice.dte}d`,
         visible: i === selectedExpiryIdx,
-        data: all.map(q => ({
-          x: xMode === 'moneyness' ? Math.log(q.strike / snapshot.spot) * 100 : q.strike,
-          iv: q.iv! * 100,
-          type: q.type,
-          strike: q.strike,
-        })),
+        calls,
+        puts,
+        // Combined for backward compat + bid-ask computation.
+        all: [...calls, ...puts].sort((a, b) => a.x - b.x),
       };
     });
   }, [snapshot, xMode, selectedExpiryIdx]);
 
+  // SVI fitted curve for the selected expiry.
+  const sviCurve = useMemo(() => {
+    if (!surface || !snapshot) return null;
+    const expiryIdx = selectedExpiryIdx;
+    const row = surface.iv[expiryIdx];
+    if (!row) return null;
+    const fit = fitSVI(surface.strikes, row, snapshot.spot);
+    if (!fit) return null;
+
+    const kStrikes = surface.strikes.map(s => Math.log(s / snapshot.spot));
+    const minK = Math.min(...kStrikes);
+    const maxK = Math.max(...kStrikes);
+    const dte = surface.dtes[expiryIdx] ?? 30;
+    const T = dte / 365;
+    const points: SVICurvePoint[] = [];
+    const n = 50;
+    for (let i = 0; i <= n; i++) {
+      const k = minK + (maxK - minK) * (i / n);
+      const w = svi(fit.params, k);
+      const iv = Math.sqrt(Math.max(0, w / T));
+      const strike = snapshot.spot * Math.exp(k);
+      let x: number;
+      if (xMode === 'moneyness') {
+        x = k * 100;
+      } else if (xMode === 'delta') {
+        // Estimate delta for a straddle-like reference.
+        const d1 = (k + (0 + T * 0.5 * iv * iv)) / (iv * Math.sqrt(T));
+        const nd = 0.5 * (1 + (d1 / Math.sqrt(2)) * (1 - d1 * d1 / 6)); // approx normCDF
+        x = nd * 2 - 1;
+      } else {
+        x = strike;
+      }
+      points.push({ x, sviIv: iv * 100 });
+    }
+    return { points, params: fit.params, rmse: fit.rmse };
+  }, [surface, snapshot, selectedExpiryIdx, xMode]);
+
   const skewMetrics = useMemo(() => {
     return computeSkewMetrics(snapshot, selectedExpiryIdx);
   }, [snapshot, selectedExpiryIdx]);
+
+  const xLabel = xMode === 'moneyness' ? 'Log-Moneyness (%)'
+    : xMode === 'delta' ? 'Delta'
+    : 'Strike';
 
   if (!snapshot) {
     return (
@@ -112,6 +193,18 @@ export function SmileView() {
           >
             Strike
           </button>
+          <button
+            onClick={() => setXMode('delta')}
+            className={cn('px-2 py-0.5 text-[10px] font-mono rounded', xMode === 'delta' ? 'bg-primary/20 text-primary' : 'text-muted-foreground')}
+          >
+            Delta
+          </button>
+          <button
+            onClick={() => setShowBidAsk(s => !s)}
+            className={cn('px-2 py-0.5 text-[10px] font-mono rounded', showBidAsk ? 'bg-primary/20 text-primary' : 'text-muted-foreground')}
+          >
+            Bid-Ask
+          </button>
           <div className="flex-1" />
           <span className="text-[10px] text-muted-foreground font-mono">ATM IV: {fmtPct(snapshot.expiries[selectedExpiryIdx]?.atmIV ?? 0)}</span>
         </div>
@@ -136,15 +229,19 @@ export function SmileView() {
           </div>
         )}
 
+        <DiagnosticsStrip sviReadout={sviReadout} arbResult={arbResult} data-testid="smile-diagnostics" />
+
         <div className="flex-1">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart margin={{ top: 10, right: 20, bottom: 10, left: 20 }}>
+            <ComposedChart margin={{ top: 10, right: 20, bottom: 10, left: 20 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--grid)" />
               <XAxis
                 dataKey="x"
                 tick={{ fontSize: 10, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }}
                 tickLine={false}
-                label={{ value: xMode === 'moneyness' ? 'Log-Moneyness (%)' : 'Strike', position: 'bottom', fontSize: 10, fill: 'var(--muted-foreground)' }}
+                label={{ value: xLabel, position: 'bottom', fontSize: 10, fill: 'var(--muted-foreground)' }}
+                domain={['auto', 'auto']}
+                type="number"
               />
               <YAxis
                 tick={{ fontSize: 10, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }}
@@ -156,23 +253,66 @@ export function SmileView() {
                 contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 4, fontSize: 11, fontFamily: 'JetBrains Mono' }}
                 labelStyle={{ color: 'var(--foreground)' }}
               />
+
+              {/* Calls — solid lines */}
               {chartData.map((slice, i) => (
                 <Line
-                  key={slice.expiry}
-                  data={slice.data}
+                  key={`call-${slice.expiry}`}
+                  data={slice.calls}
                   type="monotone"
                   dataKey="iv"
                   stroke={i === selectedExpiryIdx ? '#f97316' : colors[i % colors.length]}
                   strokeWidth={i === selectedExpiryIdx ? 2.5 : 1}
                   strokeOpacity={i === selectedExpiryIdx ? 1 : 0.3}
-                  dot={false}
-                  name={slice.label}
+                  dot={i === selectedExpiryIdx ? { r: 3, fill: 'var(--card)', stroke: '#f97316', strokeWidth: 1.5 } : false}
+                  name={`${slice.label} Calls`}
                   connectNulls
+                  points={undefined}
                 />
               ))}
-            </LineChart>
+
+              {/* Puts — dashed lines */}
+              {chartData.map((slice, i) => (
+                <Line
+                  key={`put-${slice.expiry}`}
+                  data={slice.puts}
+                  type="monotone"
+                  dataKey="iv"
+                  stroke={i === selectedExpiryIdx ? '#f97316' : colors[i % colors.length]}
+                  strokeWidth={i === selectedExpiryIdx ? 2 : 0.8}
+                  strokeOpacity={i === selectedExpiryIdx ? 0.8 : 0.2}
+                  strokeDasharray={i === selectedExpiryIdx ? '6 3' : '3 3'}
+                  dot={i === selectedExpiryIdx ? { r: 2.5, fill: 'var(--card)', stroke: '#f97316', strokeWidth: 1 } : false}
+                  name={`${slice.label} Puts`}
+                  connectNulls
+                  points={undefined}
+                />
+              ))}
+
+              {/* SVI fitted curve overlay */}
+              {sviCurve && (
+                <Line
+                  data={sviCurve.points}
+                  type="monotone"
+                  dataKey="sviIv"
+                  stroke="#a855f7"
+                  strokeWidth={1.5}
+                  strokeDasharray="4 2"
+                  dot={false}
+                  name={`SVI fit (RMSE ${(sviCurve.rmse * 100).toFixed(2)}%)`}
+                  isAnimationActive={false}
+                />
+              )}
+            </ComposedChart>
           </ResponsiveContainer>
         </div>
+
+        {sviCurve && (
+          <div className="flex gap-3 px-3 py-0.5 border-t border-border text-[9px] font-mono text-muted-foreground">
+            <span>SVI: a={sviCurve.params.a.toFixed(4)} b={sviCurve.params.b.toFixed(4)} ρ={sviCurve.params.rho.toFixed(3)} m={sviCurve.params.m.toFixed(4)} σ={sviCurve.params.sigma.toFixed(4)}</span>
+            <span className="text-purple">RMSE {(sviCurve.rmse * 100).toFixed(3)}%</span>
+          </div>
+        )}
 
         <div className="flex flex-wrap gap-1 px-2 py-1 border-t border-border">
           {chartData.map((slice, i) => (

@@ -4,7 +4,7 @@ import { buildSnapshot, buildSurfaceGrid, generateHistory, presetFor } from '../
 import { fetchYahooSnapshot } from '../lib/options/yahoo';
 import { diagnoseArbitrage, type NoArbResult } from '../lib/options/noarb';
 import { sviReadout, type SVIReadout } from '../lib/options/surfaceTools';
-import { REFRESH_CONFIG, VALIDATION_CONFIG, DATA_CONFIG, FMP_CONFIG } from '../config/constants';
+import { REFRESH_CONFIG, VALIDATION_CONFIG, DATA_CONFIG } from '../config/constants';
 import { fetchFmpQuote, fetchFmpTreasuryRates } from '../lib/data/fmpClient';
 import type { FmpQuote, FmpTreasuryRate } from '../lib/data/types';
 import { toast } from 'sonner';

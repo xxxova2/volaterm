@@ -5,6 +5,7 @@ import {
 import { useTerminalStore } from '../../store/terminalStore';
 import { Panel } from '../terminal/Panel';
 import { fmtPct } from '../../lib/format';
+import { DiagnosticsStrip } from './DiagnosticsStrip';
 
 function Stat({ label, value, color, sub }: { label: string; value: string; color?: string; sub?: string }) {
   return (
@@ -18,6 +19,8 @@ function Stat({ label, value, color, sub }: { label: string; value: string; colo
 
 export function TermView() {
   const snapshot = useTerminalStore(s => s.snapshot);
+  const sviReadout = useTerminalStore(s => s.sviReadout);
+  const arbResult = useTerminalStore(s => s.arbResult);
 
   const chartData = useMemo(() => {
     if (!snapshot) return [];
@@ -52,6 +55,7 @@ export function TermView() {
           <Stat label="Back ATM IV" value={fmtPct(backIV)} sub={`${snapshot.expiries[snapshot.expiries.length - 1]!.dte}d`} />
           <Stat label="Structure" value="Normal" sub={`${snapshot.expiries.length} expiries`} />
         </div>
+        <DiagnosticsStrip sviReadout={sviReadout} arbResult={arbResult} data-testid="term-diagnostics" />
         <div className="flex-1">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={chartData} margin={{ top: 10, right: 20, bottom: 10, left: 20 }}>

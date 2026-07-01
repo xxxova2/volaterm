@@ -16,7 +16,7 @@ import { GreeksView } from '../views/GreeksView';
 import { GexView } from '../views/GexView';
 import { OptionChain } from '../views/OptionChain';
 import { DashboardView } from '../views/DashboardView';
-import { SpyDistribution } from '../views/SpyDistribution';
+import { ArbitrageView } from '../views/ArbitrageView';
 import { sanitizeSymbol } from '../../lib/validation';
 
 export function TerminalLayout() {
@@ -44,7 +44,7 @@ export function TerminalLayout() {
   }, [setSymbol]);
 
   const nextTab = useCallback(() => {
-    const tabs = ['surface', 'smile', 'term', 'greeks', 'gex', 'chain', 'dashboard', 'spy'];
+    const tabs = ['surface', 'smile', 'term', 'greeks', 'gex', 'chain', 'dashboard', 'arbitrage'];
     const idx = tabs.indexOf(activeTab);
     setActiveTab(tabs[(idx + 1) % tabs.length] as typeof activeTab);
   }, [activeTab, setActiveTab]);
@@ -66,7 +66,7 @@ export function TerminalLayout() {
     tab5: () => setActiveTab('gex'),
     tab6: () => setActiveTab('chain'),
     tab7: () => setActiveTab('dashboard'),
-    tab8: () => setActiveTab('spy'),
+    tab8: () => setActiveTab('arbitrage'),
     arrowleft: () => {
       const s = useTerminalStore.getState();
       if (!s.isPlaying) s.setFrameIndex(Math.max(0, s.frameIndex - 1));
@@ -105,8 +105,8 @@ export function TerminalLayout() {
         );
       case 'dashboard':
         return <DashboardView />;
-      case 'spy':
-        return <SpyDistribution />;
+      case 'arbitrage':
+        return <ArbitrageView />;
       default:
         return <SurfaceView />;
     }

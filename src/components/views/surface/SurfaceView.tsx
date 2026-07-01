@@ -5,10 +5,47 @@ import * as THREE from 'three';
 import { useTerminalStore } from '../../../store/terminalStore';
 import { ivRamp01 } from '../../../lib/options/color';
 import { VISUAL_CONFIG } from '../../../config/constants';
+import { buildStrikeWorldXs, type XTick } from '../surfaceStrikeMapping';
 import { SurfaceTools, type SliceMode } from './SurfaceTools';
 import { SurfaceInspect, type InspectPoint } from './SurfaceInspect';
 
-const { MONEYNESS_MIN, MONEYNESS_MAX, WIDTH, DEPTH, VISUAL_HEIGHT, IV_CAP, UPSCALE, X_TICKS } = VISUAL_CONFIG.surface;
+const { MONEYNESS_MIN, MONEYNESS_MAX, WIDTH, DEPTH, VISUAL_HEIGHT, UPSCALE } = VISUAL_CONFIG.surface;
+
+export interface IVTick { value: number; t: number }
+
+const NICE_NUMS = [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10]
+
+function niceNum(range: number, roundUp: boolean): number {
+  const exp = Math.floor(Math.log10(range))
+  const frac = range / Math.pow(10, exp)
+  let nice: number
+  if (roundUp) {
+    nice = NICE_NUMS.find(n => n >= frac) ?? 10
+  } else {
+    nice = [...NICE_NUMS].reverse().find(n => n <= frac) ?? 1
+  }
+  return nice * Math.pow(10, exp)
+}
+
+export function computeIVTicks(minIV: number, maxIV: number): IVTick[] {
+  const range = maxIV - minIV
+  if (range === 0) return [{ value: minIV, t: 0.5 }]
+
+  const step = niceNum(range / 4, true)
+  if (step === 0) return [{ value: minIV, t: 0.5 }]
+
+  const niceMin = Math.floor(minIV / step) * step
+  const niceMax = Math.ceil(maxIV / step) * step
+  const dataRange = maxIV - minIV || 1
+
+  const ticks: IVTick[] = []
+  for (let v = niceMin; v <= niceMax + step * 0.001; v += step) {
+    const rounded = Math.round(v / step) * step
+    const t = (rounded - minIV) / dataRange
+    ticks.push({ value: rounded, t })
+  }
+  return ticks
+}
 
 function upsampleGrid(
   iv: number[][],
@@ -53,20 +90,36 @@ interface GeometryInfo {
   maxIV: number;
   atmPx: number;
   dtes: number[];
-  pxForRatio: (ratio: number) => number;
   spot: number;
   start: number;
   end: number;
   nX: number;
   nX2: number;
   nZ2: number;
+  xTicks: XTick[];
+  xAxisLabel: string;
   mapPointToCell: (px: number, pz: number) => { expiryIdx: number; strikeIdx: number } | null;
+}
+
+function interpolateXs(strikeXs: number[], factor: number): number[] {
+  const nX = strikeXs.length;
+  const nX2 = (nX - 1) * factor + 1;
+  const out = Array.from<number>({ length: nX2 });
+  for (let x2 = 0; x2 < nX2; x2++) {
+    const xf = x2 / factor;
+    const x0 = Math.floor(xf);
+    const x1 = Math.min(x0 + 1, nX - 1);
+    const tx = xf - x0;
+    out[x2] = strikeXs[x0]! * (1 - tx) + strikeXs[x1]! * tx;
+  }
+  return out;
 }
 
 function useSurfaceGeometry(): GeometryInfo | null {
   const surface = useTerminalStore(s => s.surface);
   const snapshot = useTerminalStore(s => s.snapshot);
   const spot = useTerminalStore(s => s.snapshot?.spot ?? 100);
+  const displayMode = useTerminalStore(s => s.displayMode);
 
   return useMemo(() => {
     if (!surface || !snapshot || surface.strikes.length < 2 || surface.expiries.length < 2) {
@@ -80,22 +133,28 @@ function useSurfaceGeometry(): GeometryInfo | null {
     const nX = end - start + 1;
     const nZ = surface.expiries.length;
 
-    const logM = (strike: number) => Math.log(strike / spot);
-    const logMMin = logM(surface.strikes[start]!);
-    const logMMax = logM(surface.strikes[end]!);
-    const logMSpan = logMMax - logMMin || 1;
+    const { xs: strikeXs, ticks: xTicks, axisLabel: xAxisLabel } = buildStrikeWorldXs(
+      displayMode,
+      surface,
+      snapshot,
+      start,
+      end,
+      spot,
+    );
+    const xs2 = interpolateXs(strikeXs, UPSCALE);
+    const nX2 = xs2.length;
 
     const rawIV: number[][] = [];
     for (let z = 0; z < nZ; z++) {
       const row: number[] = [];
       for (let x = 0; x < nX; x++) {
         const v = surface.iv[z]?.[start + x];
-        row.push(v != null && isFinite(v) ? Math.min(v, IV_CAP) : IV_CAP * 0.5);
+        row.push(v != null && isFinite(v) ? v : 0);
       }
       rawIV.push(row);
     }
 
-    const { values: ivGrid, nZ2, nX2 } = upsampleGrid(rawIV, nZ, nX, UPSCALE);
+    const { values: ivGrid, nZ2 } = upsampleGrid(rawIV, nZ, nX, UPSCALE);
 
     let minIV = Infinity, maxIV = -Infinity;
     for (let z = 0; z < nZ2; z++) {
@@ -115,9 +174,7 @@ function useSurfaceGeometry(): GeometryInfo | null {
       for (let x = 0; x < nX2; x++) {
         const idx = z * nX2 + x;
 
-        const logMVal = logMMin + (logMMax - logMMin) * (x / (nX2 - 1));
-        const strike = spot * Math.exp(logMVal);
-        const px = (logM(strike) - logMMin) / logMSpan * WIDTH - WIDTH / 2;
+        const px = xs2[x]!;
         const pz = (z / (nZ2 - 1) - 0.5) * DEPTH;
         const cv = ivGrid[z]![x]!;
         const py = (cv - minIV) / range * VISUAL_HEIGHT;
@@ -145,20 +202,27 @@ function useSurfaceGeometry(): GeometryInfo | null {
     geo.setIndex(indices);
     geo.computeVertexNormals();
 
-    let atmPx = 0;
+    // ATM strike's mapped X coord (using the closest strike to spot).
+    let atmStrikeIdx = start;
     let best = Infinity;
     for (let i = start; i <= end; i++) {
-      const s = surface.strikes[i]!;
-      const d = Math.abs(s - spot);
-      if (d < best) { best = d; atmPx = (logM(s) - logMMin) / logMSpan * WIDTH - WIDTH / 2; }
+      const d = Math.abs(surface.strikes[i]! - spot);
+      if (d < best) { best = d; atmStrikeIdx = i; }
     }
+    const atmPx = strikeXs[atmStrikeIdx - start]!;
 
     const mapPointToCell = (px: number, pz: number): { expiryIdx: number; strikeIdx: number } | null => {
-      const x2 = Math.round(((px + WIDTH / 2) / WIDTH) * (nX2 - 1));
+      // Invert X by finding closest per-strike world coordinate.
+      let bestIdx = 0;
+      let bestDist = Infinity;
+      for (let i = 0; i < strikeXs.length; i++) {
+        const d = Math.abs(strikeXs[i]! - px);
+        if (d < bestDist) { bestDist = d; bestIdx = i; }
+      }
       const z2 = Math.round(((pz / DEPTH) + 0.5) * (nZ2 - 1));
-      if (x2 < 0 || x2 >= nX2 || z2 < 0 || z2 >= nZ2) return null;
+      if (z2 < 0 || z2 >= nZ2) return null;
       const expiryIdx = Math.round(z2 / UPSCALE);
-      const strikeIdx = start + Math.round(x2 / UPSCALE);
+      const strikeIdx = start + bestIdx;
       if (expiryIdx < 0 || expiryIdx >= nZ || strikeIdx < 0 || strikeIdx >= surface.strikes.length) return null;
       return { expiryIdx, strikeIdx };
     };
@@ -170,16 +234,17 @@ function useSurfaceGeometry(): GeometryInfo | null {
       maxIV,
       atmPx,
       dtes: snapshot.expiries.map(e => e.dte),
-      pxForRatio: (ratio: number) => (Math.log(ratio) - logMMin) / logMSpan * WIDTH - WIDTH / 2,
       spot,
       start,
       end,
       nX,
       nX2,
       nZ2,
+      xTicks,
+      xAxisLabel,
       mapPointToCell,
     };
-  }, [surface, snapshot, spot]);
+  }, [surface, snapshot, spot, displayMode]);
 }
 
 function SurfaceMesh({
@@ -212,20 +277,24 @@ function SurfaceAtmLine({ atmPx }: { atmPx: number }) {
 function SurfaceAxes({ info }: { info: GeometryInfo }) {
   const labelCls = 'text-[9px] font-mono whitespace-nowrap';
 
+  const yTicks = useMemo(() => computeIVTicks(info.minIV, info.maxIV), [info.minIV, info.maxIV]);
+
   return (
     <>
       <gridHelper args={[4, 8, '#2a2a33', '#1f1f26']} position={[0, 0, 0]} />
 
-      {X_TICKS.map((ratio: number) => (
-        <Html key={`x${ratio}`} position={[info.pxForRatio(ratio), 0, DEPTH / 2 + 0.05]} center distanceFactor={6}>
-          <span className={labelCls} style={{ color: 'var(--muted-foreground)' }}>
-            {Math.round(ratio * 100)}%
-          </span>
+      {info.xTicks.map((tick, i) => (
+        <Html key={`x${i}-${tick.label}`} position={[tick.px, 0, DEPTH / 2 + 0.05]} center distanceFactor={6}>
+          <span className={labelCls} style={{ color: 'var(--muted-foreground)' }} data-testid={`x-tick-${i}`}>{tick.label}</span>
         </Html>
       ))}
       <Html position={[0, 0, DEPTH / 2 + 0.35]} center distanceFactor={6}>
-        <span className={`${labelCls} uppercase tracking-wider`} style={{ color: 'var(--muted-foreground)' }}>
-          Strike / Spot
+        <span
+          className={`${labelCls} uppercase tracking-wider`}
+          style={{ color: 'var(--muted-foreground)' }}
+          data-testid="x-axis-label"
+        >
+          {info.xAxisLabel}
         </span>
       </Html>
 
@@ -249,14 +318,20 @@ function SurfaceAxes({ info }: { info: GeometryInfo }) {
         </span>
       </Html>
 
-      {[0, 0.5, 1].map(t => {
-        const iv = info.minIV + t * (info.maxIV - info.minIV);
-        return (
-          <Html key={`y${t}`} position={[-WIDTH / 2 - 0.1, t * VISUAL_HEIGHT, DEPTH / 2 + 0.1]} center distanceFactor={6}>
-            <span className={labelCls} style={{ color: 'var(--cyan)' }}>{(iv * 100).toFixed(1)}%</span>
-          </Html>
-        );
-      })}
+      {yTicks.map((tick, i) => (
+        <Html key={`y${i}`} position={[-WIDTH / 2 - 0.1, tick.t * VISUAL_HEIGHT, DEPTH / 2 + 0.1]} center distanceFactor={6}>
+          <span className={labelCls} style={{ color: 'var(--cyan)' }} data-testid={`y-tick-${i}`}>{(tick.value * 100).toFixed(0)}%</span>
+        </Html>
+      ))}
+      <Html position={[-WIDTH / 2 - 0.4, VISUAL_HEIGHT / 2, DEPTH / 2 + 0.05]} center distanceFactor={6}>
+        <span
+          className={`${labelCls} uppercase tracking-wider`}
+          style={{ color: 'var(--cyan)' }}
+          data-testid="y-axis-label"
+        >
+          IV {(info.minIV * 100).toFixed(1)}–{(info.maxIV * 100).toFixed(1)}%
+        </span>
+      </Html>
     </>
   );
 }

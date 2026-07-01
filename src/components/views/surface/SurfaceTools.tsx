@@ -1,6 +1,9 @@
 import { useMemo } from 'react';
-import type { SurfaceGrid, SVIReadout, NoArbResult } from '../../../lib/options/types';
-import { smileSlice, termSlice, exportSurfaceToCSV, exportSurfaceToJSON } from '../../../lib/options/surfaceTools';
+import type { SurfaceGrid } from '../../../lib/options/types';
+import type { NoArbResult } from '../../../lib/options/noarb';
+import { smileSlice, termSlice, exportSurfaceToCSV, exportSurfaceToJSON, type SVIReadout, type SmileSlice, type TermSlice } from '../../../lib/options/surfaceTools';
+import { useTerminalStore } from '../../../store/terminalStore';
+import { cn } from '../../../lib/utils';
 
 export type SliceMode = 'none' | 'smile' | 'term';
 
@@ -47,9 +50,24 @@ export function SurfaceTools({
   selectedStrike: number | null;
 }) {
   const exports = useSurfaceExport(surface);
+  const { source, liveAvailable } = useTerminalStore();
+
+  // Mirror SidePanel: only show "Live" when the store is in live mode AND a
+  // live snapshot has actually been received. Otherwise treat as Demo data
+  // (synthetic or fallback).
+  const sourceLabel = source === 'live' && liveAvailable ? 'Live' : 'Demo';
+  const sourceDotClass = sourceLabel === 'Live' ? 'bg-emerald-400' : 'bg-amber';
 
   return (
     <div className="absolute top-3 right-3 flex flex-col gap-2 w-56 text-[10px] font-mono">
+      <div className="bg-card border border-border rounded p-2 flex flex-col gap-1">
+        <div className="text-muted-foreground uppercase tracking-wider">Source</div>
+        <div className="flex items-center gap-1" data-testid="source-badge">
+          <span className={cn('inline-block w-1.5 h-1.5 rounded-full', sourceDotClass)} />
+          {sourceLabel}
+        </div>
+      </div>
+
       <div className="bg-card border border-border rounded p-2 flex flex-col gap-2">
         <div className="text-muted-foreground uppercase tracking-wider">SVI Readout</div>
         {sviReadout ? (
@@ -174,7 +192,7 @@ function SliceOverlay({
 
   if (!data || data.ivs.length < 2) return <div className="text-muted-foreground text-[9px]">No slice data</div>;
 
-  const xs = mode === 'smile' ? data.strikes : data.dtes;
+  const xs: number[] = mode === 'smile' ? (data as SmileSlice).strikes : (data as TermSlice).dtes;
   const label = mode === 'smile' ? 'Strike' : 'DTE';
   const min = Math.min(...xs);
   const max = Math.max(...xs);
@@ -183,7 +201,7 @@ function SliceOverlay({
   const ivMax = Math.max(...data.ivs);
   const ivRange = ivMax - ivMin || 1;
 
-  const points = xs.map((x, i) => {
+  const points = xs.map((x: number, i: number) => {
     const px = ((x - min) / range) * 100;
     const py = 50 - ((data.ivs[i]! - ivMin) / ivRange) * 40;
     return `${px},${py}`;

@@ -124,10 +124,11 @@ export function buildSnapshot(
 
 export function buildSurfaceGrid(snapshot: VolSnapshot): SurfaceGrid {
   if (snapshot.expiries.length === 0) {
-    return { expiries: [], strikes: [], iv: [], bid: [], ask: [], delta: [] };
+    return { expiries: [], dtes: [], strikes: [], iv: [], bid: [], ask: [], delta: [] };
   }
 
   const expiries = snapshot.expiries.map(e => e.expiry);
+  const dtes = snapshot.expiries.map(e => e.dte);
   const strikes = [...new Set(snapshot.expiries.flatMap(e => [...e.calls, ...e.puts].map(q => q.strike)))].sort((a, b) => a - b);
 
   const iv: (number | null)[][] = [];
@@ -165,10 +166,9 @@ export function buildSurfaceGrid(snapshot: VolSnapshot): SurfaceGrid {
   }
 
   // Route IVs through fitted SVI surface (no-arb constrained, interpolated, no zero-wells)
-  const dtes = snapshot.expiries.map(e => e.dte);
   const { iv: fittedIV } = interpolateSurface(strikes, snapshot.spot, iv, dtes);
 
-  return { expiries, strikes, iv: fittedIV, bid, ask, delta };
+  return { expiries, dtes, strikes, iv: fittedIV, bid, ask, delta };
 }
 
 export function generateHistory(
