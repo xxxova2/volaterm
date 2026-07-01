@@ -1,10 +1,11 @@
 import { useTerminalStore } from '../../store/terminalStore';
-import { fmtTime } from '../../lib/format';
+import { fmtTime, fmtPrice, fmtPct } from '../../lib/format';
 
 export function StatusBar() {
-  const { source, symbol, snapshot, lastUpdate } = useTerminalStore();
+  const { source, symbol, snapshot, lastUpdate, liveRFR, fmpQuote } = useTerminalStore();
   const expiryCount = snapshot?.expiries.length ?? 0;
   const quoteCount = snapshot?.expiries.reduce((s, e) => s + e.calls.length + e.puts.length, 0) ?? 0;
+  const fmpPrice = fmpQuote?.price;
 
   return (
     <footer className="flex h-6 items-center justify-between border-t border-border bg-card px-3 text-[10px] font-mono text-muted-foreground">
@@ -14,6 +15,12 @@ export function StatusBar() {
           {source === 'live' ? 'LIVE' : 'DEMO'}
         </span>
         <span>{symbol} · {expiryCount} expiries · {quoteCount} contracts</span>
+        {fmpPrice != null && (
+          <span>FMP: {fmtPrice(fmpPrice)}</span>
+        )}
+        {liveRFR != null && (
+          <span>RFR: {fmtPct(liveRFR)}</span>
+        )}
       </div>
       <div className="flex items-center gap-3">
         <span>Updated: {fmtTime(lastUpdate)}</span>

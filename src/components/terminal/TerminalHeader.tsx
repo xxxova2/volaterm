@@ -5,7 +5,7 @@ import { presetFor } from '../../lib/options/synthetic';
 import { SymbolDialog } from './SymbolDialog';
 
 export function TerminalHeader() {
-  const { symbol, snapshot, source, setSource, setSymbol, loading } = useTerminalStore();
+  const { symbol, snapshot, source, setSource, setSymbol, loading, fmpQuote, liveRFR } = useTerminalStore();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [clock, setClock] = useState(Date.now());
 
@@ -14,7 +14,7 @@ export function TerminalHeader() {
     return () => clearInterval(id);
   }, []);
 
-  const spot = snapshot?.spot ?? presetFor(symbol)?.spot ?? 548;
+  const spot = fmpQuote?.price ?? snapshot?.spot ?? presetFor(symbol)?.spot ?? 548;
   const atmIV = snapshot?.expiries[0]?.atmIV;
   const termSlope = snapshot && snapshot.expiries.length > 2
     ? ((snapshot.expiries[1]?.atmIV ?? 0) - (snapshot.expiries[0]?.atmIV ?? 0)) * 100
@@ -37,11 +37,19 @@ export function TerminalHeader() {
             <span className="text-amber">{symbol}</span>
             <span className="text-muted-foreground">▼</span>
           </button>
+          {fmpQuote?.name && (
+            <span className="text-muted-foreground max-w-48 truncate">{fmpQuote.name}</span>
+          )}
           <span className="text-foreground tabular-nums">{fmtPrice(spot)}</span>
           {loading && <span className="text-muted-foreground animate-pulse">⟳</span>}
           {atmIV != null && (
             <span className="text-muted-foreground">
               IV30: <span className="text-cyan">{fmtPrice(atmIV * 100, 1)}%</span>
+            </span>
+          )}
+          {liveRFR != null && (
+            <span className="text-muted-foreground">
+              RFR: <span className="text-violet">{fmtPrice(liveRFR * 100, 2)}%</span>
             </span>
           )}
           {termSlope != null && (
