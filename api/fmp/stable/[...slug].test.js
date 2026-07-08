@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import handler from './[...slug].js';
 
 const mockProxy = vi.hoisted(() => vi.fn(async (endpoint) => ({ status: 200, body: { ok: true, endpoint } })));
@@ -23,6 +23,8 @@ function res() {
 }
 
 describe('api/fmp/stable handler', () => {
+  beforeEach(() => mockProxy.mockClear());
+
   it('allows a permitted endpoint and forwards slug+query to proxyFmp', async () => {
     const r = res();
     await handler({ url: '/api/fmp/stable/quote?symbol=SPY' }, r);
