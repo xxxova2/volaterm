@@ -30,9 +30,9 @@ describe('terminalStore', () => {
     });
   });
 
-  it('computes sviReadout and arbResult after setSymbol', () => {
-    useTerminalStore.getState().setSource('demo');
-    useTerminalStore.getState().setSymbol('SPY');
+  it('computes sviReadout and arbResult after setSymbol', async () => {
+    await useTerminalStore.getState().setSource('demo');
+    await useTerminalStore.getState().setSymbol('SPY');
 
     const state = useTerminalStore.getState();
     expect(state.snapshot).not.toBeNull();
@@ -53,14 +53,14 @@ describe('terminalStore', () => {
     expect(state.arbResult!.clean).toBe(true);
   });
 
-  it('rejects invalid symbols and preserves previous state', () => {
-    useTerminalStore.getState().setSource('demo');
-    useTerminalStore.getState().setSymbol('SPY');
+  it('rejects invalid symbols and preserves previous state', async () => {
+    await useTerminalStore.getState().setSource('demo');
+    await useTerminalStore.getState().setSymbol('SPY');
     const validState = useTerminalStore.getState();
     const validSnapshot = validState.snapshot;
 
     // Try to set an invalid symbol
-    useTerminalStore.getState().setSymbol('123INVALID');
+    await useTerminalStore.getState().setSymbol('123INVALID');
     const afterInvalid = useTerminalStore.getState();
 
     // State should be unchanged (same snapshot object)
@@ -68,14 +68,14 @@ describe('terminalStore', () => {
     expect(afterInvalid.snapshot).toBe(validSnapshot);
   });
 
-  it('updates sviReadout and arbResult on refresh in demo mode', () => {
-    useTerminalStore.getState().setSource('demo');
-    useTerminalStore.getState().setSymbol('SPY');
+  it('updates sviReadout and arbResult on refresh in demo mode', async () => {
+    await useTerminalStore.getState().setSource('demo');
+    await useTerminalStore.getState().setSymbol('SPY');
 
     const before = useTerminalStore.getState();
     expect(before.sviReadout).not.toBeNull();
 
-    useTerminalStore.getState().refresh();
+    await useTerminalStore.getState().refresh();
     const after = useTerminalStore.getState();
     expect(after.snapshot).not.toBeNull();
     expect(after.surface).not.toBeNull();

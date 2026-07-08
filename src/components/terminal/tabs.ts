@@ -1,7 +1,7 @@
 import type { LucideIcon } from 'lucide-react';
-import { Activity, BarChart3, TrendingUp, Calculator, Zap, Table, LayoutDashboard, AlertTriangle } from 'lucide-react';
+import { Activity, BarChart3, TrendingUp, Calculator, Zap, Table, LayoutDashboard, AlertTriangle, LineChart } from 'lucide-react';
 
-export type TabId = 'surface' | 'smile' | 'term' | 'greeks' | 'gex' | 'chain' | 'dashboard' | 'arbitrage';
+export type TabId = 'surface' | 'smile' | 'term' | 'greeks' | 'gex' | 'chain' | 'dashboard' | 'arbitrage' | 'market';
 
 export interface TabDef {
   id: TabId;
@@ -19,4 +19,5 @@ export const TABS: TabDef[] = [
   { id: 'chain', label: 'Option Chain', hotkey: '6', icon: Table },
   { id: 'dashboard', label: 'Dashboard', hotkey: '7', icon: LayoutDashboard },
   { id: 'arbitrage', label: 'Arbitrage', hotkey: '8', icon: AlertTriangle },
+  { id: 'market', label: 'Quote', hotkey: '9', icon: LineChart },
 ];

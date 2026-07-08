@@ -105,7 +105,7 @@ export interface HistoricalFrame {
 }
 
 export type DisplayMode = 'strike' | 'moneyness' | 'delta';
-export type ActiveTab = 'surface' | 'smile' | 'term' | 'greeks' | 'gex' | 'chain' | 'dashboard' | 'arbitrage';
+export type ActiveTab = 'surface' | 'smile' | 'term' | 'greeks' | 'gex' | 'chain' | 'dashboard' | 'arbitrage' | 'market';
 
 export interface GreeksProfile {
   strikes: number[];

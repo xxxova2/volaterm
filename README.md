@@ -31,8 +31,10 @@ Launches Vite dev server (frontend) + Fastify API server (backend) concurrently.
 - IV Rank / IV Percentile
 
 **Data Sources**
-- Synthetic demo data (works offline, realistic SVI-skewed surface)
-- Yahoo Finance live data (via Python yfinance + Fastify proxy)
+- **Synthetic demo data** — works fully offline with a realistic SVI-skewed surface. Used automatically whenever no live feed is reachable (no API key, or a live request fails).
+- **Live option chain** via **Yahoo Finance** (`yfinance` Python proxy at `/api/options`). This is the default live chain source on the Node/Docker server and the only working live chain source — FMP's `options/symbol` endpoint requires a *paid* FMP plan.
+- **Live enrichment** via **Financial Modeling Prep** (FMP): spot (`quote`), risk-free rates (`treasury-rates`), company profile, news, earnings calendar. The Free tier covers all of these. Requires `FMP_API_KEY`.
+- **yfinance history/info** (`/api/yf/history`, `/api/yf/info`) for price history and fundamentals on the local/Node server (FMP-primary with yfinance fallback).
 
 ## Tech Stack
 
@@ -58,7 +60,7 @@ src/
 ├── store/            # Zustand stores (terminalStore, toastStore)
 ├── lib/
 │   ├── options/      # Core: types, black-scholes, greeks, ivSolver, synthetic, analytics, svi, color, yahoo
-│   ├── data/         # Data providers (yahooProvider, mockProvider) — coming from uivi
+│   ├── data/        # Data providers (LiveProvider: yfinance chain + FMP/yfinance enrichment, demo provider)
 │   ├── format.ts     # Number formatting
 │   ├── utils.ts      # cn() classname utility
 ```
@@ -86,6 +88,22 @@ Keys 1-8 switch between the 8 tab views. All data panels support:
 ## Environment Variables
 
 See `.env.example` — no API keys required by default.
+
+## Deployment
+
+The app has **two deployment targets that share the same API logic** (see `api/_shared.js`):
+
+| Target | How | What works |
+|--------|-----|------------|
+| **Vercel** | `vercel.json` builds the SPA; `api/` holds serverless functions (`health`, `fmp/stable/*`, `yf/history`, `yf/info`) | Synthetic demo + FMP enrichment (spot/treasury/profile/news/earnings). Set `FMP_API_KEY` in the Vercel project env. The live option chain is **not** available (no Python runtime). |
+| **Docker / Render / Node** | `Dockerfile` → `node server.js` | Everything above **plus** the live Yahoo option chain (via the Python `yfinance` proxy at `/api/options`). |
+
+> Note: The live Yahoo Finance option chain requires a Python runtime (`yfinance`), so `/api/options`
+> only works on the Node/Docker server, not on Vercel's JS-only functions. On Vercel the
+> terminal runs in synthetic/demo mode (fully functional) and uses FMP (and `yf/*`) for enrichment.
+
+The Vercel FMP proxy and the Fastify proxy share the same endpoint allowlist
+(`quote`, `treasury-rates`, `etf/holdings`) defined in `api/_shared.js`.
 
 ## Merged From
 

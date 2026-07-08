@@ -221,19 +221,42 @@ export function buildYahooSnapshot(
   };
 }
 
+// Client-side cache so the live refresh (every few seconds) doesn't re-hit the
+// Python/yfinance proxy each cycle. 60s is plenty for an options chain and
+// keeps load off the local Python runtime + the server rate limiter.
+interface YfChainCache {
+  key: string;
+  value: VolSnapshot | null;
+  expiry: number;
+}
+let yfChainCache: YfChainCache | null = null;
+const YF_CHAIN_TTL = 60_000;
+
 export async function fetchYahooSnapshot(
   symbol: string,
   maxExpiries = 12,
   r = 0.0525,
   q = 0.013,
 ): Promise<VolSnapshot | null> {
+  const key = `${symbol}:${maxExpiries}`;
+  const now = Date.now();
+  if (yfChainCache && yfChainCache.key === key && now < yfChainCache.expiry) {
+    return yfChainCache.value;
+  }
   try {
     const res = await fetch(`/api/options/${symbol}?max=${maxExpiries * 20}`);
     if (!res.ok) return null;
 
     const data: YahooResponse = await res.json();
-    return buildYahooSnapshot(data, r, q, maxExpiries);
+    const snap = buildYahooSnapshot(data, r, q, maxExpiries);
+    yfChainCache = { key, value: snap, expiry: now + YF_CHAIN_TTL };
+    return snap;
   } catch {
     return null;
   }
+}
+
+/** Drop the cached yfinance chain so a forced refresh actually re-fetches. */
+export function invalidateYahooChainCache() {
+  yfChainCache = null;
 }

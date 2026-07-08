@@ -5,20 +5,45 @@ import rateLimit from '@fastify/rate-limit';
 import { execFile } from 'child_process';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { FMP_BASE, FMP_ALLOWED_ENDPOINTS, isFmpEndpointAllowed, buildSpyHistory, proxyFmp } from './api/_shared.js';
 
-const FMP_API_KEY = process.env.FMP_API_KEY || 'REMOVED_FMP_KEY';
-const FMP_BASE = 'https://financialmodelingprep.com/stable';
+// The FMP key must come from the environment — no hardcoded fallback.
+// If absent, the server still runs (synthetic/Yahoo data work) but FMP enrichment is disabled.
+const FMP_API_KEY = process.env.FMP_API_KEY || null;
+if (!FMP_API_KEY) {
+  console.warn('WARN: FMP_API_KEY not set — FMP enrichment endpoints will return 503.');
+}
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = parseInt(process.env.PORT || '3001', 10);
 
+// Restrict CORS to an explicit allowlist (comma-separated CORS_ORIGIN env var).
+// Defaults to localhost dev origins only — never wide open in production.
+const ALLOWED_ORIGINS = (process.env.CORS_ORIGIN || 'http://localhost:5173,http://localhost:3001')
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean);
+
 const fastify = Fastify({ logger: false });
 
-await fastify.register(cors, { origin: true });
+await fastify.register(cors, {
+  origin: (origin, cb) => {
+    // Allow non-browser/REST clients (no Origin header) for server-to-server use.
+    if (!origin) return cb(null, true);
+    if (ALLOWED_ORIGINS.includes(origin)) return cb(null, true);
+    return cb(new Error('Not allowed by CORS'), false);
+  },
+});
 
-// Rate limiting configuration
+// Rate limiting configuration.
+// NOTE: only the FMP proxy has an external cost (the API key quota), and it is
+// already protected by a 60s server-side + client-side cache, so it makes very
+// few outbound calls. The yfinance endpoints are local (Python) and the app
+// legitimately issues several requests per refresh — throttling them at a low
+// cap silently breaks live mode (chain fetch 429s -> synthetic fallback).
+// We therefore keep a generous local limit to absorb refresh bursts.
 await fastify.register(rateLimit, {
-  max: 30,
+  max: 600,
   timeWindow: '1 minute',
   errorResponseBuilder: (request, context) => ({
     code: 429,
@@ -103,30 +128,62 @@ fastify.get('/api/options/:symbol', async (request, reply) => {
   }
 });
 
-fastify.get('/api/history/spy', async () => {
-  // Returns synthetic SPY history for the distribution tool
-  const data = [];
-  let price = 40;
-  let vix = 18;
-  const start = new Date('1993-01-29');
-  const now = new Date();
+// ── yfinance enrichment (history + fundamentals) ──────────────
+// Secondary source that backs the Quote tab when FMP is unavailable or
+// rate-limited. Docker/Node only (needs a Python runtime).
 
-  for (let d = new Date(start); d <= now; d.setDate(d.getDate() + 1)) {
-    if (d.getDay() === 0 || d.getDay() === 6) continue;
-    const ret = (Math.random() - 0.5) * 0.02;
-    price *= (1 + ret);
-    vix = Math.max(8, Math.min(80, vix + (Math.random() - 0.5) * 2));
-    data.push({
-      date: d.toISOString().slice(0, 10),
-      close: Math.round(price * 100) / 100,
-      return: Math.round(ret * 100000) / 100000,
-      logReturn: Math.round(Math.log(1 + ret) * 100000) / 100000,
-      vix: Math.round(vix * 10) / 10,
+function runYf(symbol, mode) {
+  return new Promise((resolve, reject) => {
+    execFile('python3', [join(__dirname, 'fetch_yf.py'), symbol, mode], { timeout: 25000 }, (err, stdout, stderr) => {
+      if (err) {
+        const detail = stderr || stdout?.slice(0, 500) || err.message;
+        return reject(new Error(detail));
+      }
+      try {
+        const data = JSON.parse(stdout);
+        if (data.error) return reject(new Error(data.error));
+        resolve(data);
+      } catch {
+        reject(new Error('Invalid response from yfinance fetcher'));
+      }
     });
-  }
+  });
+}
 
-  return { symbol: 'SPY', data };
+fastify.get('/api/yf/history/:symbol', async (request, reply) => {
+  const symbol = validateSymbol(request.params.symbol) || 'SPY';
+  const now = Date.now();
+  const cached = cacheStore.get(`yf:history:${symbol}`);
+  if (cached && now - cached.timestamp < CACHE_TTL) return cached.data;
+  try {
+    const data = await runYf(symbol, 'history');
+    cacheStore.set(`yf:history:${symbol}`, { data, timestamp: now });
+    return data;
+  } catch (err) {
+    reply.code(502);
+    return { error: 'Failed to fetch yfinance history', detail: err.message };
+  }
 });
+
+fastify.get('/api/yf/info/:symbol', async (request, reply) => {
+  const symbol = validateSymbol(request.params.symbol) || 'SPY';
+  const now = Date.now();
+  const cached = cacheStore.get(`yf:info:${symbol}`);
+  if (cached && now - cached.timestamp < CACHE_TTL) return cached.data;
+  try {
+    const data = await runYf(symbol, 'info');
+    cacheStore.set(`yf:info:${symbol}`, { data, timestamp: now });
+    return data;
+  } catch (err) {
+    reply.code(502);
+    return { error: 'Failed to fetch yfinance info', detail: err.message };
+  }
+});
+
+// The seeded, memoized SPY history now lives in api/_shared.js and is shared
+// with the Vercel serverless deployment.
+
+fastify.get('/api/history/spy', async () => buildSpyHistory());
 
 // ── FMP API Proxy ──────────────────────────────────────────────
 // Forwards /api/fmp/stable/* to financialmodelingprep.com/stable/*
@@ -134,22 +191,17 @@ fastify.get('/api/history/spy', async () => {
 
 fastify.get('/api/fmp/stable/*', async (request, reply) => {
   const url = request.url.replace('/api/fmp/stable/', '');
-  const separator = url.includes('?') ? '&' : '?';
-  const target = `${FMP_BASE}/${url}${separator}apikey=${FMP_API_KEY}`;
-  try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 15000);
-    const res = await fetch(target, { signal: controller.signal });
-    clearTimeout(timer);
-    if (!res.ok) {
-      reply.code(res.status);
-      return { error: 'FMP API error', status: res.status };
-    }
-    return await res.json();
-  } catch (err) {
-    reply.code(502);
-    return { error: 'FMP proxy error', detail: err.message };
+  const endpoint = url.split(/[?#]/)[0];
+
+  // Reject anything not in the allowlist before spending a request with our key.
+  if (!isFmpEndpointAllowed(endpoint)) {
+    reply.code(403);
+    return { error: 'Endpoint not allowed', allowed: [...FMP_ALLOWED_ENDPOINTS] };
   }
+
+  const { status, body } = await proxyFmp(url, FMP_API_KEY, FMP_BASE);
+  reply.code(status);
+  return body;
 });
 
 // ── Static Files ──────────────────────────────────────────────

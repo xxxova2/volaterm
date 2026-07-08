@@ -5,6 +5,7 @@ import { fmtPrice, fmtPct, fmtInt } from '../../lib/format';
 import { cn } from '../../lib/utils';
 import { VISUAL_CONFIG } from '../../config/constants';
 import { DiagnosticsStrip } from './DiagnosticsStrip';
+import { Explain } from '../common/Explain';
 
 interface RowData {
   strike: number;
@@ -30,21 +31,21 @@ function HeaderRow() {
   return (
     <div className="flex text-[10px] font-mono text-muted-foreground border-b border-border bg-card sticky top-0 z-10 h-6 items-center">
       <div className="flex-[4] flex">
-        <span className={`${COL_WIDTHS.sm} text-right px-1`}>IV%</span>
-        <span className={`${COL_WIDTHS.sm} text-right px-1`}>Δ</span>
-        <span className={`${COL_WIDTHS.md} text-right px-1`}>Bid</span>
-        <span className={`${COL_WIDTHS.md} text-right px-1`}>Ask</span>
-        <span className={`${COL_WIDTHS.sm} text-right px-1`}>OI</span>
-        <span className={`${COL_WIDTHS.sm} text-right px-1`}>Vol</span>
+        <Explain term="impliedVol" className={`${COL_WIDTHS.sm} text-right px-1`}>IV%</Explain>
+        <Explain term="delta" className={`${COL_WIDTHS.sm} text-right px-1`}>Δ</Explain>
+        <Explain term="bid" className={`${COL_WIDTHS.md} text-right px-1`}>Bid</Explain>
+        <Explain term="ask" className={`${COL_WIDTHS.md} text-right px-1`}>Ask</Explain>
+        <Explain term="openInterest" className={`${COL_WIDTHS.sm} text-right px-1`}>OI</Explain>
+        <Explain term="volume" className={`${COL_WIDTHS.sm} text-right px-1`}>Vol</Explain>
       </div>
-      <span className="flex-[1] text-center font-semibold text-amber">Strike</span>
+      <span className="flex-[1] text-center font-semibold text-amber"><Explain term="strike">Strike</Explain></span>
       <div className="flex-[4] flex">
-        <span className={`${COL_WIDTHS.sm} text-right px-1`}>Vol</span>
-        <span className={`${COL_WIDTHS.sm} text-right px-1`}>OI</span>
-        <span className={`${COL_WIDTHS.md} text-right px-1`}>Bid</span>
-        <span className={`${COL_WIDTHS.md} text-right px-1`}>Ask</span>
-        <span className={`${COL_WIDTHS.sm} text-right px-1`}>Δ</span>
-        <span className={`${COL_WIDTHS.sm} text-right px-1`}>IV%</span>
+        <Explain term="volume" className={`${COL_WIDTHS.sm} text-right px-1`}>Vol</Explain>
+        <Explain term="openInterest" className={`${COL_WIDTHS.sm} text-right px-1`}>OI</Explain>
+        <Explain term="bid" className={`${COL_WIDTHS.md} text-right px-1`}>Bid</Explain>
+        <Explain term="ask" className={`${COL_WIDTHS.md} text-right px-1`}>Ask</Explain>
+        <Explain term="delta" className={`${COL_WIDTHS.sm} text-right px-1`}>Δ</Explain>
+        <Explain term="impliedVol" className={`${COL_WIDTHS.sm} text-right px-1`}>IV%</Explain>
       </div>
     </div>
   );

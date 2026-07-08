@@ -63,10 +63,9 @@ describe('ArbitrageView', () => {
   it('toggles between calendar and butterfly mode', () => {
     render(<ArbitrageView />);
 
-    const butterflyBtns = screen.getAllByText('Butterfly');
-    const btn = butterflyBtns.find(el => el.tagName === 'BUTTON');
+    const btn = screen.getByRole('button', { name: /Butterfly/ });
     expect(btn).toBeTruthy();
-    fireEvent.click(btn!);
-    expect(btn!.className).toContain('bg-primary');
+    fireEvent.click(btn);
+    expect(btn.className).toContain('bg-primary');
   });
 });

@@ -14,7 +14,7 @@ class ResizeObserverStub {
   ResizeObserverStub as unknown as typeof ResizeObserver;
 
 describe('DashboardView', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     // Reset to a deterministic demo state. setSymbol('SPY') populates snapshot,
     // surface, sviReadout, arbResult, and historicalFrames without live network.
     useTerminalStore.setState({
@@ -37,8 +37,8 @@ describe('DashboardView', () => {
       playbackInterval: null,
       refreshInterval: null,
     });
-    useTerminalStore.getState().setSource('demo');
-    useTerminalStore.getState().setSymbol('SPY');
+    await useTerminalStore.getState().setSource('demo');
+    await useTerminalStore.getState().setSymbol('SPY');
   });
 
   it('renders the diagnostics card with SVI RMSE and arbitrage counts', () => {

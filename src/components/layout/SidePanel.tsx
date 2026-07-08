@@ -4,7 +4,7 @@ import { cn } from '../../lib/utils';
 import type { DisplayMode } from '../../lib/options/types';
 
 export function SidePanel() {
-  const { snapshot, selectedExpiry, setSelectedExpiry, displayMode, setDisplayMode, source, liveAvailable } = useTerminalStore();
+  const { snapshot, selectedExpiry, setSelectedExpiry, displayMode, setDisplayMode, source, liveAvailable, chainMode, setChainMode, explainHovers, toggleExplainHovers } = useTerminalStore();
   const spot = snapshot?.spot ?? 0;
 
   // Demo/Live badge: only show "Live" when the store is in live mode AND
@@ -100,6 +100,58 @@ export function SidePanel() {
         <div className="flex items-center gap-1" data-testid="source-badge">
           <span className={cn('inline-block w-1.5 h-1.5 rounded-full', sourceDotClass)} />
           {sourceLabel}
+        </div>
+        {source === 'live' && (
+          <div className="mt-2">
+            <div className="uppercase tracking-wider mb-1">Chain</div>
+            <div className="flex gap-0.5">
+              <button
+                onClick={() => setChainMode('auto')}
+                className={cn(
+                  'px-2 py-0.5 text-[10px] font-mono rounded',
+                  chainMode === 'auto' ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                Auto
+              </button>
+              <button
+                onClick={() => setChainMode('fmp')}
+                className={cn(
+                  'px-2 py-0.5 text-[10px] font-mono rounded',
+                  chainMode === 'fmp' ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                FMP
+              </button>
+              <button
+                onClick={() => setChainMode('yfinance')}
+                className={cn(
+                  'px-2 py-0.5 text-[10px] font-mono rounded',
+                  chainMode === 'yfinance' ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                yfinance
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="p-2 border-t border-border">
+        <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Help</div>
+        <button
+          onClick={toggleExplainHovers}
+          data-testid="toggle-hints"
+          className={cn(
+            'w-full flex items-center justify-between px-2 py-1 text-[11px] font-mono rounded hover:bg-muted transition-colors',
+            explainHovers ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:text-foreground',
+          )}
+        >
+          <span>Hover hints</span>
+          <span>{explainHovers ? 'ON' : 'OFF'}</span>
+        </button>
+        <div className="text-[9px] text-muted-foreground mt-1 leading-snug">
+          Underlined labels show a plain-English explanation when you hover them.
         </div>
       </div>
     </aside>

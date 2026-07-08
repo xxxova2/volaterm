@@ -6,11 +6,12 @@ import { useTerminalStore } from '../../store/terminalStore';
 import { Panel } from '../terminal/Panel';
 import { fmtCompact, fmtPrice } from '../../lib/format';
 import { gammaExposure } from '../../lib/options/analytics';
+import { Explain } from '../common/Explain';
 
-function Stat({ label, value, color }: { label: string; value: string; color?: string }) {
+function Stat({ label, value, color, term }: { label: string; value: string; color?: string; term?: string }) {
   return (
     <div className="flex flex-col">
-      <span className="text-[10px] text-muted-foreground font-mono">{label}</span>
+      <span className="text-[10px] text-muted-foreground font-mono">{term ? <Explain term={term}>{label}</Explain> : label}</span>
       <span className="text-sm font-semibold font-mono tabular-nums" style={{ color: color ?? 'var(--foreground)' }}>{value}</span>
     </div>
   );
@@ -46,9 +47,9 @@ export function GexView() {
     <Panel title="Gamma Exposure" subtitle="Dealer positioning per $1B move" className="h-full">
       <div className="flex flex-col h-full">
         <div className="flex gap-3 px-3 py-2 border-b border-border">
-          <Stat label="Total GEX" value={fmtCompact(gex.totalGEX)} color={gex.totalGEX > 0 ? 'var(--up)' : 'var(--down)'} />
-          <Stat label="Gamma Flip" value={gex.gammaFlip ? fmtPrice(gex.gammaFlip, 0) : 'N/A'} color="var(--amber)" />
-          <Stat label="Spot" value={fmtPrice(spot)} />
+          <Stat label="Total GEX" term="gex" value={fmtCompact(gex.totalGEX)} color={gex.totalGEX > 0 ? 'var(--up)' : 'var(--down)'} />
+          <Stat label="Gamma Flip" term="gammaFlip" value={gex.gammaFlip ? fmtPrice(gex.gammaFlip, 0) : 'N/A'} color="var(--amber)" />
+          <Stat label="Spot" term="spot" value={fmtPrice(spot)} />
         </div>
         <div className="flex-1">
           <ResponsiveContainer width="100%" height="100%">

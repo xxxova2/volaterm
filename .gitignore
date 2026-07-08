@@ -10,7 +10,7 @@ venv/
 *.log
 .kimchi/
 .commandcode/
-tsconfig.app.tsbuildinfo
+*.tsbuildinfo
 *.md~
 screenshot.mjs
 cfg.json

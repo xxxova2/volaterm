@@ -173,7 +173,7 @@ export function buildSurfaceGrid(snapshot: VolSnapshot): SurfaceGrid {
 
 export function generateHistory(
   symbol: string,
-  frames = DATA_CONFIG.history.DEFAULT_FRAMES,
+  frames: number = DATA_CONFIG.history.DEFAULT_FRAMES,
 ): { snapshot: VolSnapshot; surface: SurfaceGrid; timestamp: number }[] {
   const preset = defaultFor(symbol);
   let spot: number = preset.spot;

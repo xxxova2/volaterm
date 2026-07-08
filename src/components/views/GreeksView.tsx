@@ -10,6 +10,7 @@ import { GreeksSurface3D } from './GreeksSurface3D';
 import { DiagnosticsStrip } from './DiagnosticsStrip';
 import { GREEK_META, type GreekKey, type HeatmapCell } from './greeksTypes';
 import { computeHeatmapAggregates } from './greeksUtils';
+import { Explain } from '../common/Explain';
 
 type SubView = 'heatmap' | 'profile' | 'sensitivity' | 'byexpiry' | 'surface3d';
 type MoneynessRange = 'all' | 'atm10' | 'atm20';
@@ -393,7 +394,7 @@ export function GreeksView() {
                     selectedGreek === g.key ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:text-foreground'
                   )}
                 >
-                  {g.label}
+                  <Explain term={g.key}>{g.label}</Explain>
                 </button>
               ))}
             </div>
@@ -408,7 +409,7 @@ export function GreeksView() {
                     selectedGreek === g.key ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:text-foreground'
                   )}
                 >
-                  {g.label}
+                  <Explain term={g.key}>{g.label}</Explain>
                 </button>
               ))}
             </div>
@@ -445,7 +446,7 @@ export function GreeksView() {
                 <span className="text-foreground tabular-nums">{selectedCell.dte}d</span>
               </span>
               <span className="flex items-center gap-1.5">
-                <span className="text-muted-foreground">{GREEK_META.find(g => g.key === selectedGreek)?.label ?? selectedGreek}</span>
+                <span className="text-muted-foreground"><Explain term={selectedGreek}>{GREEK_META.find(g => g.key === selectedGreek)?.label ?? selectedGreek}</Explain></span>
                 <span className="text-foreground tabular-nums">{selectedCell.value != null ? fmtAggShort(selectedCell.value, selectedGreek) : '—'}</span>
               </span>
               {selectedCell.quote ? (
@@ -457,17 +458,17 @@ export function GreeksView() {
                     </span>
                   </span>
                   <span className="flex items-center gap-1.5">
-                    <span className="text-muted-foreground">mid</span>
+                    <span className="text-muted-foreground"><Explain term="mid">mid</Explain></span>
                     <span className="text-foreground tabular-nums">{fmtPrice(selectedCell.quote.mid)}</span>
                   </span>
                   <span className="flex items-center gap-1.5">
-                    <span className="text-muted-foreground">IV</span>
+                    <span className="text-muted-foreground"><Explain term="impliedVol">IV</Explain></span>
                     <span className="text-foreground tabular-nums">
                       {selectedCell.quote.iv != null ? `${(selectedCell.quote.iv * 100).toFixed(1)}%` : '—'}
                     </span>
                   </span>
                   <span className="flex items-center gap-1.5">
-                    <span className="text-muted-foreground">Δ</span>
+                    <span className="text-muted-foreground"><Explain term="delta">Δ</Explain></span>
                     <span className="text-foreground tabular-nums">
                       {selectedCell.quote.delta != null ? selectedCell.quote.delta.toFixed(3) : '—'}
                     </span>
@@ -478,11 +479,11 @@ export function GreeksView() {
               )}
               {portfolio && (
                 <span className="ml-auto flex items-center gap-3 text-[10px]">
-                  <span>Δ <span className="tabular-nums text-cyan">{fmtSigned(portfolio.delta, 2)}</span></span>
-                  <span>Γ <span className="tabular-nums text-up">{fmtSigned(portfolio.gamma, 4)}</span></span>
-                  <span>Θ <span className="tabular-nums text-down">{fmtSigned(portfolio.theta, 2)}</span></span>
-                  <span>ν <span className="tabular-nums text-amber">{fmtSigned(portfolio.vega, 2)}</span></span>
-                  {move && <span>EM <span className="tabular-nums">{fmtPrice(move.move)}</span></span>}
+                  <span><Explain term="delta">Δ</Explain> <span className="tabular-nums text-cyan">{fmtSigned(portfolio.delta, 2)}</span></span>
+                  <span><Explain term="gamma">Γ</Explain> <span className="tabular-nums text-up">{fmtSigned(portfolio.gamma, 4)}</span></span>
+                  <span><Explain term="theta">Θ</Explain> <span className="tabular-nums text-down">{fmtSigned(portfolio.theta, 2)}</span></span>
+                  <span><Explain term="vega">ν</Explain> <span className="tabular-nums text-amber">{fmtSigned(portfolio.vega, 2)}</span></span>
+                  {move && <span><Explain term="expectedMove">EM</Explain> <span className="tabular-nums">{fmtPrice(move.move)}</span></span>}
                 </span>
               )}
             </div>

@@ -8,6 +8,7 @@ import { VISUAL_CONFIG } from '../../../config/constants';
 import { buildStrikeWorldXs, type XTick } from '../surfaceStrikeMapping';
 import { SurfaceTools, type SliceMode } from './SurfaceTools';
 import { SurfaceInspect, type InspectPoint } from './SurfaceInspect';
+import { Explain } from '../../common/Explain';
 
 const { MONEYNESS_MIN, MONEYNESS_MAX, WIDTH, DEPTH, VISUAL_HEIGHT, UPSCALE } = VISUAL_CONFIG.surface;
 
@@ -344,11 +345,11 @@ function SurfaceLegend({ minIV, maxIV }: { minIV: number; maxIV: number }) {
 
   return (
     <div className="absolute bottom-3 right-3 flex flex-col gap-1 text-[10px] font-mono">
-      <div className="flex justify-between text-muted-foreground">
-        <span>{(minIV * 100).toFixed(1)}%</span>
-        <span className="uppercase tracking-wider">IV</span>
-        <span>{(maxIV * 100).toFixed(1)}%</span>
-      </div>
+        <div className="flex justify-between text-muted-foreground">
+          <span>{(minIV * 100).toFixed(1)}%</span>
+          <span className="uppercase tracking-wider"><Explain term="iv">IV</Explain></span>
+          <span>{(maxIV * 100).toFixed(1)}%</span>
+        </div>
       <div className="w-40 h-2 rounded" style={{ background: `linear-gradient(to right, ${stops})` }} />
     </div>
   );
@@ -440,8 +441,8 @@ export function SurfaceView() {
         </button>
         {info && (
           <div className="px-2 py-1 text-[9px] font-mono bg-card/80 border border-border rounded text-muted-foreground">
-            <div>Spot <span className="text-foreground tabular-nums">{spot.toFixed(2)}</span></div>
-            <div>IV <span className="text-cyan tabular-nums">{(info.minIV * 100).toFixed(1)}–{(info.maxIV * 100).toFixed(1)}%</span></div>
+            <div><Explain term="spot">Spot</Explain> <span className="text-foreground tabular-nums">{spot.toFixed(2)}</span></div>
+            <div><Explain term="iv">IV</Explain> <span className="text-cyan tabular-nums">{(info.minIV * 100).toFixed(1)}–{(info.maxIV * 100).toFixed(1)}%</span></div>
           </div>
         )}
       </div>

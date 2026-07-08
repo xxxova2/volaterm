@@ -4,6 +4,7 @@ import { DiagnosticsStrip } from './DiagnosticsStrip';
 import { fmtPrice } from '../../lib/format';
 import { cn } from '../../lib/utils';
 import type { NoArbResult } from '../../lib/options/noarb';
+import { Explain } from '../common/Explain';
 
 type ArbMode = 'combined' | 'calendar' | 'butterfly';
 
@@ -229,7 +230,7 @@ export function ArbitrageView() {
               mode === m.id ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:text-foreground'
             )}
           >
-            {m.label}
+            <Explain term={m.id === 'combined' ? 'arbitrage' : m.id === 'calendar' ? 'calendarArb' : 'butterflyArb'}>{m.label}</Explain>
           </button>
         ))}
       </div>
@@ -259,11 +260,11 @@ export function ArbitrageView() {
             return (
               <>
                 <span className={cn('flex items-center gap-1.5', cal ? 'text-red-400' : 'text-green-400')}>
-                  <span className="text-muted-foreground">Calendar</span>
+                  <span className="text-muted-foreground"><Explain term="calendarArb">Calendar</Explain></span>
                   {cal ? '✗' : '✓'}
                 </span>
                 <span className={cn('flex items-center gap-1.5', fly ? 'text-red-400' : 'text-green-400')}>
-                  <span className="text-muted-foreground">Butterfly</span>
+                  <span className="text-muted-foreground"><Explain term="butterflyArb">Butterfly</Explain></span>
                   {fly ? '✗' : '✓'}
                 </span>
               </>

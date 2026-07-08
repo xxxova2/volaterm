@@ -4,6 +4,7 @@ import { useTerminalStore } from '../../store/terminalStore';
 import { Panel } from '../terminal/Panel';
 import { fmtPrice, fmtPct, fmtSigned, fmtSignedPct, fmtCompact } from '../../lib/format';
 import { portfolioGreeks, impliedMove, gammaExposure, ivRank, maxPainStrike } from '../../lib/options/analytics';
+import { Explain } from '../common/Explain';
 
 export function DashboardView() {
   const snapshot = useTerminalStore(s => s.snapshot);
@@ -99,7 +100,7 @@ export function DashboardView() {
   return (
     <div className="h-full overflow-y-auto p-1">
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-3">
-        <Panel title="Spot & Change">
+        <Panel title={<Explain term="spot">Spot &amp; Change</Explain>}>
           <div className="p-3">
             <div className="font-mono text-2xl font-bold tabular-nums">{fmtPrice(snapshot.spot)}</div>
             <div className={`mt-1 font-mono text-sm tabular-nums ${change >= 0 ? 'text-up' : 'text-down'}`}>
@@ -116,38 +117,38 @@ export function DashboardView() {
           </div>
         </Panel>
 
-        <Panel title="Volatility Regime">
+        <Panel title={<Explain term="volRegime">Volatility Regime</Explain>}>
           <div className="grid grid-cols-2 gap-3 p-3">
-            <MiniStat label="ATM IV 30d" value={fmtPct(volRegime)} color="text-primary" />
-            <MiniStat label="IV Rank" value={`${(ivData.percentile * 100).toFixed(0)}%`} />
+            <MiniStat label="ATM IV 30d" term="atmIV" value={fmtPct(volRegime)} color="text-primary" />
+            <MiniStat label="IV Rank" term="ivRank" value={`${(ivData.percentile * 100).toFixed(0)}%`} />
             <MiniStat label="IV High" value={fmtPct(ivHighLow.ivHigh)} color="text-up" />
             <MiniStat label="IV Low" value={fmtPct(ivHighLow.ivLow)} color="text-down" />
-            <MiniStat label="Term Slope" value={fmtSignedPct(termSlope, 1)} color={termSlope >= 0 ? 'text-up' : 'text-down'} />
-            <MiniStat label="Put/Call Skew" value={`${(pcSkew * 100).toFixed(2)}%`} color={pcSkew >= 0 ? 'text-down' : 'text-up'} />
+            <MiniStat label="Term Slope" term="termStructure" value={fmtSignedPct(termSlope, 1)} color={termSlope >= 0 ? 'text-up' : 'text-down'} />
+            <MiniStat label="Put/Call Skew" term="skew" value={`${(pcSkew * 100).toFixed(2)}%`} color={pcSkew >= 0 ? 'text-down' : 'text-up'} />
           </div>
         </Panel>
 
-        <Panel title="Key Levels">
+        <Panel title={<Explain term="keyLevels">Key Levels</Explain>}>
           <div className="grid grid-cols-2 gap-3 p-3">
-            <MiniStat label="Max Pain" value={maxPain ? fmtPrice(maxPain, 0) : '—'} color="text-primary" />
-            <MiniStat label="Gamma Flip" value={gex?.gammaFlip ? fmtPrice(gex.gammaFlip, 0) : '—'} color="text-amber" />
-            <MiniStat label="Call Wall" value={largestPos ? fmtPrice(largestPos.strike, 0) : '—'} color="text-up" />
-            <MiniStat label="Put Wall" value={largestNeg ? fmtPrice(largestNeg.strike, 0) : '—'} color="text-down" />
-            <MiniStat label="Total GEX" value={fmtCompact(gex?.totalGEX ?? 0)} color={gex && gex.totalGEX >= 0 ? 'text-up' : 'text-down'} />
+            <MiniStat label="Max Pain" term="maxPain" value={maxPain ? fmtPrice(maxPain, 0) : '—'} color="text-primary" />
+            <MiniStat label="Gamma Flip" term="gammaFlip" value={gex?.gammaFlip ? fmtPrice(gex.gammaFlip, 0) : '—'} color="text-amber" />
+            <MiniStat label="Call Wall" term="callWall" value={largestPos ? fmtPrice(largestPos.strike, 0) : '—'} color="text-up" />
+            <MiniStat label="Put Wall" term="putWall" value={largestNeg ? fmtPrice(largestNeg.strike, 0) : '—'} color="text-down" />
+            <MiniStat label="Total GEX" term="gex" value={fmtCompact(gex?.totalGEX ?? 0)} color={gex && gex.totalGEX >= 0 ? 'text-up' : 'text-down'} />
             <MiniStat label="Expiries" value={String(snapshot.expiries.length)} />
           </div>
         </Panel>
 
-        <Panel title="Portfolio Risk">
+        <Panel title={<Explain term="portfolioRisk">Portfolio Risk</Explain>}>
           <div className="grid grid-cols-2 gap-3 p-3">
-            <MiniStat label="Net Delta" value={portGreeks?.delta.toFixed(2) ?? '—'} color={portGreeks && portGreeks.delta >= 0 ? 'text-up' : 'text-down'} />
-            <MiniStat label="Net Gamma" value={portGreeks?.gamma.toFixed(4) ?? '—'} color="text-up" />
-            <MiniStat label="Net Vega" value={portGreeks?.vega.toFixed(2) ?? '—'} color="text-amber" />
-            <MiniStat label="Net Theta" value={portGreeks?.theta.toFixed(2) ?? '—'} color={portGreeks && portGreeks.theta >= 0 ? 'text-up' : 'text-down'} />
+            <MiniStat label="Net Delta" term="netDelta" value={portGreeks?.delta.toFixed(2) ?? '—'} color={portGreeks && portGreeks.delta >= 0 ? 'text-up' : 'text-down'} />
+            <MiniStat label="Net Gamma" term="netGamma" value={portGreeks?.gamma.toFixed(4) ?? '—'} color="text-up" />
+            <MiniStat label="Net Vega" term="netVega" value={portGreeks?.vega.toFixed(2) ?? '—'} color="text-amber" />
+            <MiniStat label="Net Theta" term="netTheta" value={portGreeks?.theta.toFixed(2) ?? '—'} color={portGreeks && portGreeks.theta >= 0 ? 'text-up' : 'text-down'} />
           </div>
         </Panel>
 
-        <Panel title="Expected Move">
+        <Panel title={<Explain term="expectedMove">Expected Move</Explain>}>
           <div className="p-3">
             {move ? (
               <div className="space-y-3">
@@ -156,8 +157,8 @@ export function DashboardView() {
                   <div className="font-mono text-xl font-bold tabular-nums text-primary">±{fmtPrice(move.move)}</div>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
-                  <MiniStat label="% Move" value={fmtPct(move.movePct)} color="text-primary" />
-                  <MiniStat label="Prob Touch" value={fmtPct(move.probTouch)} color="text-cyan" />
+                  <MiniStat label="% Move" term="expectedMove" value={fmtPct(move.movePct)} color="text-primary" />
+                  <MiniStat label="Prob Touch" term="probTouch" value={fmtPct(move.probTouch)} color="text-cyan" />
                 </div>
                 <div className="text-[10px] font-mono text-muted-foreground">Based on front ATM straddle (0.8×)</div>
               </div>
@@ -167,44 +168,46 @@ export function DashboardView() {
           </div>
         </Panel>
 
-        <Panel title="SVI & Arbitrage">
+        <Panel title={<Explain term="surface">SVI &amp; Arbitrage</Explain>}>
           <div className="space-y-3 p-3" data-testid="diagnostics-card">
-            <div className="flex items-center justify-between">
-              <span className="text-[9px] font-mono uppercase tracking-wider text-muted-foreground">SVI RMSE</span>
-              <span className="font-mono text-sm font-semibold tabular-nums text-primary" data-testid="svi-rmse">
-                {fmtPct(sviRmse)}
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-[9px] font-mono uppercase tracking-wider text-muted-foreground">SVI Samples</span>
-              <span className="font-mono text-sm font-semibold tabular-nums text-foreground">
-                {String(sviSamples)}
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-[9px] font-mono uppercase tracking-wider text-muted-foreground">Status</span>
-              <span
-                className={`rounded px-2 py-0.5 text-[10px] font-mono uppercase tracking-wider ${
-                  arbClean ? 'bg-up/15 text-up' : 'bg-down/15 text-down'
-                }`}
-                data-testid="arb-badge"
-                data-arb-clean={arbClean ? 'true' : 'false'}
-              >
-                {arbClean ? 'No Arb' : 'Arb Found'}
-              </span>
-            </div>
-            <div className="grid grid-cols-2 gap-3 pt-1">
-              <MiniStat
-                label="Calendar"
-                value={String(calendarCount)}
-                color={calendarCount === 0 ? 'text-up' : 'text-down'}
-              />
-              <MiniStat
-                label="Butterfly"
-                value={String(butterflyCount)}
-                color={butterflyCount === 0 ? 'text-up' : 'text-down'}
-              />
-            </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[9px] font-mono uppercase tracking-wider text-muted-foreground"><Explain term="sviRmse">SVI RMSE</Explain></span>
+                <span className="font-mono text-sm font-semibold tabular-nums text-primary" data-testid="svi-rmse">
+                  {fmtPct(sviRmse)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[9px] font-mono uppercase tracking-wider text-muted-foreground">SVI Samples</span>
+                <span className="font-mono text-sm font-semibold tabular-nums text-foreground">
+                  {String(sviSamples)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[9px] font-mono uppercase tracking-wider text-muted-foreground"><Explain term="arbitrage">Status</Explain></span>
+                <span
+                  className={`rounded px-2 py-0.5 text-[10px] font-mono uppercase tracking-wider ${
+                    arbClean ? 'bg-up/15 text-up' : 'bg-down/15 text-down'
+                  }`}
+                  data-testid="arb-badge"
+                  data-arb-clean={arbClean ? 'true' : 'false'}
+                >
+                  {arbClean ? 'No Arb' : 'Arb Found'}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-3 pt-1">
+                <MiniStat
+                  label="Calendar"
+                  term="calendarArb"
+                  value={String(calendarCount)}
+                  color={calendarCount === 0 ? 'text-up' : 'text-down'}
+                />
+                <MiniStat
+                  label="Butterfly"
+                  term="butterflyArb"
+                  value={String(butterflyCount)}
+                  color={butterflyCount === 0 ? 'text-up' : 'text-down'}
+                />
+              </div>
           </div>
         </Panel>
 
@@ -236,10 +239,10 @@ export function DashboardView() {
   );
 }
 
-function MiniStat({ label, value, color = 'text-foreground' }: { label: string; value: string; color?: string }) {
+function MiniStat({ label, value, color = 'text-foreground', term }: { label: string; value: string; color?: string; term?: string }) {
   return (
     <div>
-      <div className="text-[9px] font-mono uppercase tracking-wider text-muted-foreground">{label}</div>
+      <div className="text-[9px] font-mono uppercase tracking-wider text-muted-foreground">{term ? <Explain term={term}>{label}</Explain> : label}</div>
       <div className={`font-mono text-sm font-semibold tabular-nums ${color}`}>{value}</div>
     </div>
   );

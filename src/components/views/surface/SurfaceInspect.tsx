@@ -1,3 +1,5 @@
+import { Explain } from '../../common/Explain';
+
 export interface InspectPoint {
   strike: number;
   expiry: string;
@@ -28,13 +30,13 @@ export function SurfaceInspect({
       {hover && (
         <div className="pointer-events-none absolute bottom-3 left-3 z-10 bg-card/90 border border-border rounded px-2 py-1 text-[9px] font-mono text-muted-foreground">
           <div className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5">
-            <span>Strike</span>
+            <span><Explain term="strike">Strike</Explain></span>
             <span className="tabular-nums text-foreground text-right">{fmtNum(hover.strike)}</span>
             <span>Expiry</span>
             <span className="tabular-nums text-foreground text-right">{hover.expiry}</span>
-            <span>DTE</span>
+            <span><Explain term="dte">DTE</Explain></span>
             <span className="tabular-nums text-foreground text-right">{hover.dte}</span>
-            <span>IV</span>
+            <span><Explain term="impliedVol">IV</Explain></span>
             <span className="tabular-nums text-cyan text-right">{fmtPct(hover.iv)}</span>
           </div>
         </div>
@@ -44,15 +46,15 @@ export function SurfaceInspect({
         <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10 bg-card border border-border rounded px-3 py-2 text-[10px] font-mono text-muted-foreground">
           <div className="text-muted-foreground uppercase tracking-wider mb-1">Selected Point</div>
           <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
-            <span>Strike</span>
+            <span><Explain term="strike">Strike</Explain></span>
             <span className="tabular-nums text-foreground text-right">{fmtNum(selected.strike)}</span>
             <span>Expiry</span>
             <span className="tabular-nums text-foreground text-right">{selected.expiry}</span>
-            <span>DTE</span>
+            <span><Explain term="dte">DTE</Explain></span>
             <span className="tabular-nums text-foreground text-right">{selected.dte}</span>
-            <span>IV</span>
+            <span><Explain term="impliedVol">IV</Explain></span>
             <span className="tabular-nums text-cyan text-right">{fmtPct(selected.iv)}</span>
-            <span>Delta</span>
+            <span><Explain term="delta">Delta</Explain></span>
             <span className="tabular-nums text-foreground text-right">{fmtPct(selected.delta)}</span>
           </div>
         </div>

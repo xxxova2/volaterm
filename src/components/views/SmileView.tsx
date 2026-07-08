@@ -7,6 +7,7 @@ import { cn } from '../../lib/utils';
 import { DiagnosticsStrip } from './DiagnosticsStrip';
 import { fitSVI, svi } from '../../lib/options/svi';
 import type { OptionQuote } from '../../lib/options/types';
+import { Explain } from '../common/Explain';
 
 type XMode = 'moneyness' | 'strike' | 'delta';
 
@@ -206,22 +207,22 @@ export function SmileView() {
             Bid-Ask
           </button>
           <div className="flex-1" />
-          <span className="text-[10px] text-muted-foreground font-mono">ATM IV: {fmtPct(snapshot.expiries[selectedExpiryIdx]?.atmIV ?? 0)}</span>
+          <span className="text-[10px] text-muted-foreground font-mono"><Explain term="atmIV">ATM IV</Explain>: {fmtPct(snapshot.expiries[selectedExpiryIdx]?.atmIV ?? 0)}</span>
         </div>
 
         {skewMetrics && (
           <div className="flex gap-3 px-3 py-1 border-b border-border text-[10px] font-mono items-center">
-            <span className="text-muted-foreground">ATM: <span className="text-foreground">{(skewMetrics.atmIV * 100).toFixed(1)}%</span></span>
+            <span className="text-muted-foreground"><Explain term="atmIV">ATM</Explain>: <span className="text-foreground">{(skewMetrics.atmIV * 100).toFixed(1)}%</span></span>
             <span className="text-border">|</span>
-            <span className="text-muted-foreground">25Δ RR:
+            <span className="text-muted-foreground"><Explain term="riskReversal">25Δ RR</Explain>:
               <span className={skewMetrics.rr25 != null ? (skewMetrics.rr25 > 0 ? ' text-up' : ' text-down') : ' text-muted'}>
                 {skewMetrics.rr25 != null ? `${skewMetrics.rr25 > 0 ? '+' : ''}${(skewMetrics.rr25 * 100).toFixed(2)}%` : ' —'}
               </span>
             </span>
             <span className="text-border">|</span>
-            <span className="text-muted-foreground">25Δ Fly: <span className="text-purple">{skewMetrics.fly25 != null ? `${(skewMetrics.fly25 * 100).toFixed(2)}%` : '—'}</span></span>
+            <span className="text-muted-foreground"><Explain term="butterfly">25Δ Fly</Explain>: <span className="text-purple">{skewMetrics.fly25 != null ? `${(skewMetrics.fly25 * 100).toFixed(2)}%` : '—'}</span></span>
             <span className="text-border">|</span>
-            <span className="text-muted-foreground">10Δ RR:
+            <span className="text-muted-foreground"><Explain term="riskReversal">10Δ RR</Explain>:
               <span className={skewMetrics.rr10 != null ? (skewMetrics.rr10 > 0 ? ' text-up' : ' text-down') : ' text-muted'}>
                 {skewMetrics.rr10 != null ? `${skewMetrics.rr10 > 0 ? '+' : ''}${(skewMetrics.rr10 * 100).toFixed(2)}%` : ' —'}
               </span>
@@ -310,7 +311,7 @@ export function SmileView() {
         {sviCurve && (
           <div className="flex gap-3 px-3 py-0.5 border-t border-border text-[9px] font-mono text-muted-foreground">
             <span>SVI: a={sviCurve.params.a.toFixed(4)} b={sviCurve.params.b.toFixed(4)} ρ={sviCurve.params.rho.toFixed(3)} m={sviCurve.params.m.toFixed(4)} σ={sviCurve.params.sigma.toFixed(4)}</span>
-            <span className="text-purple">RMSE {(sviCurve.rmse * 100).toFixed(3)}%</span>
+            <span className="text-purple"><Explain term="sviRmse">RMSE</Explain> {(sviCurve.rmse * 100).toFixed(3)}%</span>
           </div>
         )}
 

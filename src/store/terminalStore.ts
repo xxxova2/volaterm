@@ -1,12 +1,22 @@
 import { create } from 'zustand';
 import type { VolSnapshot, SurfaceGrid, ActiveTab, DisplayMode } from '../lib/options/types';
-import { buildSnapshot, buildSurfaceGrid, generateHistory, presetFor } from '../lib/options/synthetic';
-import { fetchYahooSnapshot } from '../lib/options/yahoo';
+import { buildSurfaceGrid } from '../lib/options/synthetic';
 import { diagnoseArbitrage, type NoArbResult } from '../lib/options/noarb';
 import { sviReadout, type SVIReadout } from '../lib/options/surfaceTools';
-import { REFRESH_CONFIG, VALIDATION_CONFIG, DATA_CONFIG } from '../config/constants';
-import { fetchFmpQuote, fetchFmpTreasuryRates } from '../lib/data/fmpClient';
-import type { FmpQuote, FmpTreasuryRate } from '../lib/data/types';
+import { REFRESH_CONFIG, VALIDATION_CONFIG } from '../config/constants';
+import {
+  fetchFmpQuote,
+  fetchFmpTreasuryRates,
+  fetchFmpPriceHistory,
+  fetchFmpProfile,
+  fetchFmpNews,
+  fetchFmpEarnings,
+  invalidateFmpCache,
+} from '../lib/data/fmpClient';
+import { fetchYfHistory, fetchYfInfo, invalidateYfCache } from '../lib/data/yfinanceClient';
+import { invalidateYahooChainCache } from '../lib/options/yahoo';
+import { getProvider, LiveProvider, type ChainMode } from '../lib/data/provider';
+import type { FmpQuote, FmpTreasuryRate, FmpProfile, FmpNewsItem, FmpPriceBar, FmpEarnings } from '../lib/data/types';
 import { toast } from 'sonner';
 
 
@@ -31,6 +41,7 @@ interface TerminalStore {
   isPlaying: boolean;
   speed: number;
   source: 'demo' | 'live';
+  chainMode: ChainMode;
   liveAvailable: boolean;
   loading: boolean;
   lastUpdate: number;
@@ -42,6 +53,20 @@ interface TerminalStore {
   fmpTreasuryRates: FmpTreasuryRate[] | null;
   liveRFR: number | null;
   fmpSpot: number | null;
+  fmpProfile: FmpProfile | null;
+  fmpNews: FmpNewsItem[] | null;
+  fmpHistory: FmpPriceBar[] | null;
+  fmpEarnings: FmpEarnings[] | null;
+  /** Whether the live surface used a real option chain (vs synthetic fallback). */
+  chainAvailable: boolean;
+  /** Where the live spot came from. */
+  spotSource: 'fmp' | 'synthetic';
+  /** Which source actually served the chain / history / profile. */
+  chainUsed: 'fmp' | 'yfinance' | 'synthetic';
+  historySource: 'fmp' | 'yfinance' | 'none';
+  profileSource: 'fmp' | 'yfinance' | 'none';
+  /** Beginner hover hints: show plain-English explanations on tool metrics. */
+  explainHovers: boolean;
 
   playbackInterval: ReturnType<typeof setInterval> | null;
   refreshInterval: ReturnType<typeof setInterval> | null;
@@ -56,7 +81,9 @@ interface TerminalStore {
   setSpeed: (speed: number) => void;
   refresh: () => void;
   setSource: (source: 'demo' | 'live') => void;
+  setChainMode: (chain: ChainMode) => void;
   storeFrames: (snap: VolSnapshot) => void;
+  toggleExplainHovers: () => void;
 }
 
 export const useTerminalStore = create<TerminalStore>((set, get) => ({
@@ -70,6 +97,7 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
   isPlaying: false,
   speed: 1,
   source: 'live',
+  chainMode: 'auto',
   liveAvailable: false,
   loading: true,
   lastUpdate: Date.now(),
@@ -81,12 +109,22 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
   fmpTreasuryRates: null,
   liveRFR: null,
   fmpSpot: null,
+  fmpProfile: null,
+  fmpNews: null,
+  fmpHistory: null,
+  fmpEarnings: null,
+  chainAvailable: false,
+  spotSource: 'synthetic',
+  chainUsed: 'synthetic',
+  historySource: 'none',
+  profileSource: 'none',
+  explainHovers: true,
 
   playbackInterval: null,
   refreshInterval: null,
 
   // Fetch FMP enrichment on startup
-  setSymbol: (symbol: string) => {
+  setSymbol: async (symbol: string) => {
     const trimmed = symbol.trim().toUpperCase();
     const { MIN_LENGTH, MAX_LENGTH, PATTERN } = VALIDATION_CONFIG.symbol;
     if (!trimmed || trimmed.length < MIN_LENGTH || trimmed.length > MAX_LENGTH || !PATTERN.test(trimmed)) {
@@ -102,10 +140,9 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
 
     set({ symbol: trimmed, loading: true, snapshot: null, surface: null, sviReadout: null, arbResult: null, historicalFrames: [], frameIndex: 0, isPlaying: false });
 
-    const preset = presetFor(trimmed);
-    const defSpot = preset?.spot ?? DATA_CONFIG.SYMBOL_PRESETS.SPY.spot;
-    const snapshot = buildSnapshot(trimmed, Date.now(), defSpot, 0, 0);
-    const frames = generateHistory(trimmed, 64);
+    const demo = getProvider('demo');
+    const snapshot = (await demo.getSnapshot(trimmed, { jitter: 0 }))!;
+    const frames = demo.getHistory!(trimmed, 64);
     const surface = frames[0]?.surface ?? buildSurfaceGrid(snapshot);
     const { sviReadout: readout, arbResult: arb } = processSurface(surface, snapshot.spot);
 
@@ -122,38 +159,41 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
     // Immediately fetch live data if we're in live mode
     const currentSource = get().source;
     if (currentSource === 'live') {
+      const provider = getProvider('live') as LiveProvider;
       const rfr = get().liveRFR ?? undefined;
-      fetchYahooSnapshot(trimmed, 12, rfr).then(snap => {
+      provider.getSnapshot(trimmed, { rfr, chainMode: get().chainMode }).then(snap => {
         if (snap) {
           const { surface, sviReadout: readout, arbResult: arb } = processSnapshot(snap);
-          set({ snapshot: snap, surface, sviReadout: readout, arbResult: arb, loading: false, lastUpdate: Date.now(), liveAvailable: true });
+          set({
+            snapshot: snap,
+            surface,
+            sviReadout: readout,
+            arbResult: arb,
+            loading: false,
+            lastUpdate: Date.now(),
+            liveAvailable: true,
+            chainAvailable: provider.lastChainAvailable,
+            spotSource: provider.lastSpotSource,
+            chainUsed: provider.lastChainSource,
+          });
           get().storeFrames(snap);
+
+          if (!provider.lastChainAvailable && provider.lastSpotSource === 'synthetic' && !liveWarned) {
+            liveWarned = true;
+            toast.warning('Live data limited', {
+              description: 'No FMP API key / paid options package — showing a synthetic surface over the real spot.',
+            });
+          }
         }
       }).catch((err) => {
         console.error('Failed to fetch live snapshot:', err);
         toast.error('Live fetch failed', {
-          description: 'Could not retrieve options data',
+          description: err instanceof Error ? err.message : 'Could not retrieve options data',
         });
       });
 
-      // Fetch FMP enrichment (quote + treasury) in parallel
-      fetchFmpQuote(trimmed).then(quotes => {
-        if (quotes && quotes.length > 0) {
-          set({ fmpQuote: quotes[0]!, fmpSpot: quotes[0]!.price });
-        }
-      });
-    }
-
-    // Fetch treasury rates (one-time, symbol-independent)
-    if (!get().fmpTreasuryRates) {
-      fetchFmpTreasuryRates().then(rates => {
-        if (rates && rates.length > 0) {
-          const latest = rates[0]!;
-          // Use 1y Treasury as risk-free rate (converted from % to decimal)
-          const rfr = latest.year1 / 100;
-          set({ fmpTreasuryRates: rates, liveRFR: rfr });
-        }
-      });
+      // Fetch FMP enrichment (quote, price history, profile, news, earnings, treasury)
+      fetchLiveEnrichment(trimmed);
     }
 
     const id = setInterval(() => {
@@ -164,7 +204,7 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
   },
 
   storeFrames: (snap: VolSnapshot) => {
-    const frames = generateHistory(snap.symbol, 64);
+    const frames = getProvider('demo').getHistory!(snap.symbol, 64);
     set({ historicalFrames: frames });
   },
 
@@ -214,50 +254,36 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
     }
   },
 
-  refresh: () => {
+  refresh: async () => {
     const state = get();
-    // Refresh FMP quote and treasury on every cycle
-    fetchFmpQuote(state.symbol).then(quotes => {
-      if (quotes && quotes.length > 0) {
-        set({ fmpQuote: quotes[0]!, fmpSpot: quotes[0]!.price });
-      }
-    });
-    fetchFmpTreasuryRates().then(rates => {
-      if (rates && rates.length > 0) {
-        const latest = rates[0]!;
-        set({ fmpTreasuryRates: rates, liveRFR: latest.year1 / 100 });
-      }
-    });
 
     const rfr = get().liveRFR ?? undefined;
     if (state.source === 'live') {
-      fetchYahooSnapshot(state.symbol, 12, rfr).then(snap => {
+      const provider = getProvider('live') as LiveProvider;
+      provider.getSnapshot(state.symbol, { rfr, chainMode: get().chainMode }).then(snap => {
         if (snap) {
           const { surface, sviReadout: readout, arbResult: arb } = processSnapshot(snap);
-          set({ snapshot: snap, surface, sviReadout: readout, arbResult: arb, lastUpdate: Date.now() });
-        } else {
-          toast.error('Failed to fetch live data', {
-            description: 'Unable to retrieve options data from Yahoo Finance',
+          set({
+            snapshot: snap,
+            surface,
+            sviReadout: readout,
+            arbResult: arb,
+            lastUpdate: Date.now(),
+            chainAvailable: provider.lastChainAvailable,
+            spotSource: provider.lastSpotSource,
+            chainUsed: provider.lastChainSource,
           });
         }
       }).catch((err) => {
         console.error('Failed to fetch live data:', err);
-        toast.error('Network Error', {
-          description: 'Failed to fetch live data. Switching to demo mode.',
-        });
-        // Fallback to demo mode on error
-        set({ source: 'demo' });
-        const defSpot = presetFor(state.symbol)?.spot ?? DATA_CONFIG.SYMBOL_PRESETS.SPY.spot;
-        const spot = state.snapshot?.spot || defSpot;
-        const snap = buildSnapshot(state.symbol, Date.now(), spot, 0, (Math.random() - 0.5) * 0.02);
-        const { surface, sviReadout: readout, arbResult: arb } = processSnapshot(snap);
-        set({ snapshot: snap, surface, sviReadout: readout, arbResult: arb, lastUpdate: Date.now() });
       });
+      // Refresh cross-cutting FMP enrichment (cached — cheap on repeat).
+      fetchLiveEnrichment(state.symbol);
     } else {
       try {
-        const defSpot = presetFor(state.symbol)?.spot ?? DATA_CONFIG.SYMBOL_PRESETS.SPY.spot;
-        const spot = state.snapshot?.spot || defSpot;
-        const snap = buildSnapshot(state.symbol, Date.now(), spot, 0, (Math.random() - 0.5) * 0.02);
+        const spot = state.snapshot?.spot || undefined;
+        const snap = await getProvider('demo').getSnapshot(state.symbol, { spot, jitter: (Math.random() - 0.5) * 0.02 });
+        if (!snap) throw new Error('synthetic generation failed');
         const { surface, sviReadout: readout, arbResult: arb } = processSnapshot(snap);
         set({ snapshot: snap, surface, sviReadout: readout, arbResult: arb, lastUpdate: Date.now() });
       } catch (err) {
@@ -269,19 +295,47 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
     }
   },
 
-  setSource: (source: 'demo' | 'live') => {
+  setChainMode: (chain: ChainMode) => {
+    set({ chainMode: chain });
+    // Drop cached chain results (both sources) so the new mode is actually tried.
+    invalidateFmpCache('options/symbol');
+    invalidateYfCache();
+    invalidateYahooChainCache();
+    liveWarned = false;
+    get().refresh();
+  },
+
+  toggleExplainHovers: () => set(s => ({ explainHovers: !s.explainHovers })),
+
+  setSource: async (source: 'demo' | 'live') => {
     const { refreshInterval } = get();
     if (refreshInterval) clearInterval(refreshInterval);
     set({ source });
     if (source === 'live') {
-      fetchYahooSnapshot(get().symbol).then(snap => {
+      const provider = getProvider(source) as LiveProvider;
+      provider.getSnapshot(get().symbol, { chainMode: get().chainMode }).then(snap => {
         if (snap) {
           const { surface, sviReadout: readout, arbResult: arb } = processSnapshot(snap);
-          set({ snapshot: snap, surface, sviReadout: readout, arbResult: arb, loading: false, lastUpdate: Date.now(), liveAvailable: true });
+          set({
+            snapshot: snap,
+            surface,
+            sviReadout: readout,
+            arbResult: arb,
+            loading: false,
+            lastUpdate: Date.now(),
+            liveAvailable: true,
+            chainAvailable: provider.lastChainAvailable,
+            spotSource: provider.lastSpotSource,
+            chainUsed: provider.lastChainSource,
+          });
         }
       }).catch((err) => {
         console.error('Failed to fetch live snapshot on source switch:', err);
+        toast.error('Live data error', {
+          description: err instanceof Error ? err.message : 'Failed to fetch live snapshot',
+        });
       });
+      fetchLiveEnrichment(get().symbol);
     }
     const id = setInterval(() => {
       get().refresh();
@@ -289,3 +343,54 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
     set({ refreshInterval: id });
   },
 }));
+
+// One-time warning so we don't toast on every refresh cycle.
+let liveWarned = false;
+
+/**
+ * Fetch the cross-cutting FMP market data (spot quote, price history, profile,
+ * news, earnings, treasury) and push it into the store. All reads go through
+ * the cached fmpClient, so repeated calls are cheap once values are warm.
+ */
+async function fetchLiveEnrichment(symbol: string) {
+  const set = useTerminalStore.setState;
+
+  const quotes = await fetchFmpQuote(symbol);
+  if (quotes && quotes.length > 0) {
+    set({ fmpQuote: quotes[0]!, fmpSpot: quotes[0]!.price, liveAvailable: true });
+  }
+
+  // Price history: FMP primary, yfinance fallback.
+  let history = await fetchFmpPriceHistory(symbol);
+  if (history && history.length > 0) {
+    set({ fmpHistory: history, historySource: 'fmp' });
+  } else {
+    history = await fetchYfHistory(symbol);
+    if (history && history.length > 0) set({ fmpHistory: history, historySource: 'yfinance' });
+    else set({ fmpHistory: null, historySource: 'none' });
+  }
+
+  // Fundamentals: FMP primary, yfinance fallback.
+  let profile = await fetchFmpProfile(symbol);
+  if (profile) {
+    set({ fmpProfile: profile, profileSource: 'fmp' });
+  } else {
+    profile = await fetchYfInfo(symbol);
+    if (profile) set({ fmpProfile: profile, profileSource: 'yfinance' });
+    else set({ fmpProfile: null, profileSource: 'none' });
+  }
+
+  const news = await fetchFmpNews(symbol);
+  if (news) set({ fmpNews: news });
+
+  const earnings = await fetchFmpEarnings(symbol);
+  if (earnings) set({ fmpEarnings: earnings });
+
+  // Treasury rates are symbol-independent; fetch once.
+  if (!useTerminalStore.getState().fmpTreasuryRates) {
+    const rates = await fetchFmpTreasuryRates();
+    if (rates && rates.length > 0) {
+      set({ fmpTreasuryRates: rates, liveRFR: rates[0]!.year1 / 100 });
+    }
+  }
+}

@@ -6,11 +6,12 @@ import { useTerminalStore } from '../../store/terminalStore';
 import { Panel } from '../terminal/Panel';
 import { fmtPct } from '../../lib/format';
 import { DiagnosticsStrip } from './DiagnosticsStrip';
+import { Explain } from '../common/Explain';
 
-function Stat({ label, value, color, sub }: { label: string; value: string; color?: string; sub?: string }) {
+function Stat({ label, value, color, sub, term }: { label: string; value: string; color?: string; sub?: string; term?: string }) {
   return (
     <div className="flex flex-col">
-      <span className="text-[10px] text-muted-foreground font-mono">{label}</span>
+      <span className="text-[10px] text-muted-foreground font-mono">{term ? <Explain term={term}>{label}</Explain> : label}</span>
       <span className="text-sm font-semibold font-mono tabular-nums" style={{ color: color ?? 'var(--foreground)' }}>{value}</span>
       {sub && <span className="text-[10px] text-muted-foreground">{sub}</span>}
     </div>
@@ -50,10 +51,10 @@ export function TermView() {
     <Panel title="Term Structure" className="h-full">
       <div className="flex flex-col h-full">
         <div className="flex gap-4 px-3 py-2 border-b border-border">
-          <Stat label="Front ATM IV" value={fmtPct(frontIV)} color="var(--cyan)" />
-          <Stat label="Term Slope" value={`${(termSlope * 100).toFixed(2)}%`} color={isContango ? 'var(--up)' : 'var(--down)'} sub={isContango ? 'Contango' : 'Backwardation'} />
-          <Stat label="Back ATM IV" value={fmtPct(backIV)} sub={`${snapshot.expiries[snapshot.expiries.length - 1]!.dte}d`} />
-          <Stat label="Structure" value="Normal" sub={`${snapshot.expiries.length} expiries`} />
+          <Stat label="Front ATM IV" term="atmIV" value={fmtPct(frontIV)} color="var(--cyan)" />
+          <Stat label="Term Slope" term="termStructure" value={`${(termSlope * 100).toFixed(2)}%`} color={isContango ? 'var(--up)' : 'var(--down)'} sub={isContango ? 'Contango' : 'Backwardation'} />
+          <Stat label="Back ATM IV" term="atmIV" value={fmtPct(backIV)} sub={`${snapshot.expiries[snapshot.expiries.length - 1]!.dte}d`} />
+          <Stat label="Structure" term="termStructure" value="Normal" sub={`${snapshot.expiries.length} expiries`} />
         </div>
         <DiagnosticsStrip sviReadout={sviReadout} arbResult={arbResult} data-testid="term-diagnostics" />
         <div className="flex-1">
