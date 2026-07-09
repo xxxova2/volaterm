@@ -17,6 +17,7 @@ export function ShapeSection({
   shapeHistoryCharts: {
     s2s10: { date: string; bps: number }[];
     s5s30: { date: string; bps: number }[];
+    s3m10y: { date: string; bps: number }[];
     fly: { date: string; bps: number }[];
   };
   onOpenImply: (i: ImplyRead) => void;

@@ -66,7 +66,6 @@ export function PositioningView() {
   const snapshot = useTerminalStore((s) => s.snapshot);
   const sviReadout = useTerminalStore((s) => s.sviReadout);
   const arbResult = useTerminalStore((s) => s.arbResult);
-  const source = useTerminalStore((s) => s.source);
   const setDeskContext = useTerminalStore((s) => s.setDeskContext);
 
   useEffect(() => {

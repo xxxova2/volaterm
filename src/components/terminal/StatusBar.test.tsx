@@ -26,6 +26,9 @@ describe('StatusBar', () => {
     render(<StatusBar />);
     expect(screen.getByText(/SPY/)).toBeTruthy();
     expect(screen.getByText(/chain:none/)).toBeTruthy();
+    // Missing live feeds should still render freshness chips (spot/chain labels)
+    expect(screen.getByTitle('Spot freshness')).toBeTruthy();
+    expect(screen.getByTitle('Chain / surface freshness')).toBeTruthy();
   });
 
   it('shows spot price when available', () => {

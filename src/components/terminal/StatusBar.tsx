@@ -16,18 +16,18 @@ function kindFromProvenance(
   kind: FreshnessKind | undefined,
   asOfMs: number | null | undefined,
   domain: 'spot' | 'chain',
-  opts?: { demo?: boolean },
+  opts?: { demo?: boolean; down?: boolean },
 ): FreshnessKind {
   // Recompute from asOf so chips age without waiting for next store write
   return classifyDomainFreshness(asOfMs, domain, {
     demo: opts?.demo,
+    down: opts?.down,
     previousKind: kind,
   });
 }
 
 export function StatusBar() {
   const {
-    source,
     symbol,
     snapshot,
     lastUpdate,

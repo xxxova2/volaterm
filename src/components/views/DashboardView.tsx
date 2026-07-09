@@ -519,14 +519,13 @@ function Sep() {
 }
 
 function FeedHealth({
-  source,
   chainUsed,
   macroHealth,
   hasQuote,
   hasHistory,
   onRetryMacro,
 }: {
-  source: string;
+  source?: string;
   chainUsed: string;
   macroHealth: 'ok' | 'down' | 'pending';
   hasQuote: boolean;
