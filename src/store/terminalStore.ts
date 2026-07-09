@@ -249,32 +249,35 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
       source: 'live',
     });
 
-    // LIVE-only: never seed demo/synthetic surfaces.
-    await fetchLiveEnrichment(trimmed);
-    if (get().symbol !== trimmed) return;
-    await fetchLiveSnapshot(trimmed, true);
-    if (get().symbol !== trimmed) return;
-    if (!get().snapshot) {
-      set({
-        snapshot: null,
-        surface: null,
-        sviReadout: null,
-        arbResult: null,
-        historicalFrames: [],
-        loading: false,
-        chainUsed: 'none',
-        chainAvailable: false,
-        session: usEquitySession(),
-      });
-      if (!liveWarned) {
-        liveWarned = true;
-        toast.warning('Live chain unavailable', {
-          description: 'No real option chain. Equities: yfinance/FMP · Crypto: BTC/ETH (Deribit).',
-        });
-      }
-    }
-
+    // Background load — do not block first paint (boot briefing uses this window).
     startRefreshLoop(get, set, 'live');
+    void (async () => {
+      try {
+        await fetchLiveEnrichment(trimmed);
+      } catch { /* optional */ }
+      if (get().symbol !== trimmed) return;
+      await fetchLiveSnapshot(trimmed, true);
+      if (get().symbol !== trimmed) return;
+      if (!get().snapshot) {
+        set({
+          snapshot: null,
+          surface: null,
+          sviReadout: null,
+          arbResult: null,
+          historicalFrames: [],
+          loading: false,
+          chainUsed: 'none',
+          chainAvailable: false,
+          session: usEquitySession(),
+        });
+        if (!liveWarned) {
+          liveWarned = true;
+          toast.warning('Live chain unavailable', {
+            description: 'No real option chain. Equities: yfinance/FMP · Crypto: BTC/ETH (Deribit).',
+          });
+        }
+      }
+    })();
   },
 
   storeFrames: (snap: VolSnapshot) => {
@@ -488,10 +491,15 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
     }
     const { refreshInterval } = get();
     if (refreshInterval) clearInterval(refreshInterval);
-    set({ source: 'live', lastSpotUpdate: 0, lastChainUpdate: 0 });
-    await fetchLiveEnrichment(get().symbol);
-    await fetchLiveSnapshot(get().symbol, true);
+    set({ source: 'live', lastSpotUpdate: 0, lastChainUpdate: 0, loading: true });
     startRefreshLoop(get, set, 'live');
+    // Non-blocking: boot UI shows rates/macro while chain loads in background.
+    void (async () => {
+      try {
+        await fetchLiveEnrichment(get().symbol);
+      } catch { /* enrichment is optional */ }
+      await fetchLiveSnapshot(get().symbol, true);
+    })();
   },
 }));
 

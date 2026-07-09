@@ -6,6 +6,16 @@ import { execFile } from 'child_process';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { FMP_BASE, FMP_ALLOWED_ENDPOINTS, isFmpEndpointAllowed, buildSpyHistoryAsync, proxyFmp } from './api/_shared.js';
+import {
+  getOrFetch,
+  peek,
+  cacheStats,
+  TTL,
+  budgetAllows,
+  recordBudget,
+  getBudgetUsed,
+  FMP_FREE_DAILY,
+} from './api/upstreamCache.js';
 
 // The FMP key must come from the environment — no hardcoded fallback.
 // If absent, equity enrichment falls back to yfinance only (never synthetic market data).
@@ -25,6 +35,8 @@ const ALLOWED_ORIGINS = (process.env.CORS_ORIGIN || 'http://localhost:5173,http:
   .filter(Boolean);
 
 const DERIBIT_BASE = 'https://www.deribit.com/api/v2/public';
+// MacroVol FastAPI (FRED rates / macro). Defined early for boot briefing + warmer.
+const MACROVOL_API_URL = (process.env.MACROVOL_API_URL || 'http://127.0.0.1:8765').replace(/\/$/, '');
 
 const fastify = Fastify({ logger: false });
 
@@ -67,10 +79,48 @@ function validateSymbol(symbol) {
   return sanitized;
 }
 
-const cacheStore = new Map();
-const CACHE_TTL = 30000;
-
 fastify.get('/api/health', async () => ({ status: 'ok', timestamp: Date.now() }));
+
+/** Shared cache stats (HIT ages + FMP daily budget). */
+fastify.get('/api/cache/status', async () => ({
+  status: 'ok',
+  ...cacheStats(),
+  fmpDailyBudget: { used: getBudgetUsed('fmp'), cap: FMP_FREE_DAILY },
+  ttlsMs: TTL,
+}));
+
+/**
+ * Boot briefing: lightweight rates + macro for the first-open UI.
+ * Served from shared cache so N visitors do not N× FRED.
+ */
+fastify.get('/api/boot/briefing', async (request, reply) => {
+  try {
+    const { data, fromCache, ageMs } = await getOrFetch(
+      'boot:briefing',
+      TTL.BRIEFING_MS,
+      async () => {
+        const base = MACROVOL_API_URL;
+        const [ratesRes, macroRes] = await Promise.all([
+          fetch(`${base}/api/rates/summary`, { signal: AbortSignal.timeout(20_000) }),
+          fetch(`${base}/api/macro/summary`, { signal: AbortSignal.timeout(25_000) }),
+        ]);
+        const rates = ratesRes.ok ? await ratesRes.json() : null;
+        const macro = macroRes.ok ? await macroRes.json() : null;
+        return {
+          rates,
+          macro,
+          as_of: new Date().toISOString(),
+          source: 'macrovol+fred',
+        };
+      },
+      { allowStaleOnError: true },
+    );
+    return { ...data, fromCache, ageMs };
+  } catch (err) {
+    reply.code(502);
+    return { error: 'Briefing unavailable', detail: err.message };
+  }
+});
 
 fastify.get('/api/options/:symbol', async (request, reply) => {
   const { symbol: rawSymbol } = request.params;
@@ -79,64 +129,58 @@ fastify.get('/api/options/:symbol', async (request, reply) => {
     reply.code(400);
     return { error: 'Invalid symbol' };
   }
-  const now = Date.now();
   const { probe, max: maxStr } = request.query;
   const isProbe = probe === '1' || probe === 'true';
   const max = parseInt(maxStr, 10);
   const maxArg = Number.isFinite(max) && max > 0 ? max : null;
-
-  const cached = cacheStore.get(symbol);
-  if (cached && now - cached.timestamp < CACHE_TTL) {
-    if (isProbe) {
-      const contracts = Array.isArray(cached.data.quotes) ? cached.data.quotes.length : 0;
-      return { available: true, contracts };
-    }
-    return cached.data;
-  }
-
-  const args = [join(__dirname, 'fetch_options.py'), symbol];
-  if (maxArg) args.push(String(maxArg));
+  const cacheKey = `options:${symbol}:${maxArg || 'full'}`;
 
   try {
-    const result = await new Promise((resolve, reject) => {
-      // yfinance often needs 45–90s for multi-expiry equity chains (Yahoo rate
-      // limits + sequential option_chain). 25s was killing valid fetches mid-run
-      // and surface as LIVE "no real option chain" with fail-closed store.
-      execFile('python3', args, { timeout: isProbe ? 20000 : 90000 }, (err, stdout, stderr) => {
-        // Prefer JSON on stdout even when yfinance prints noise on stderr
-        // (e.g. "$SPY: possibly delisted") or the process was slow/noisy.
-        const tryParse = (raw) => {
-          if (!raw) return null;
-          try {
-            const data = JSON.parse(String(raw).trim().split('\n').filter(Boolean).pop());
-            if (data && !data.error && Array.isArray(data.quotes)) return data;
-            if (data?.error) return { __err: data.error };
-          } catch { /* fall through */ }
-          return null;
-        };
-        const parsed = tryParse(stdout);
-        if (parsed && !parsed.__err) return resolve(parsed);
-        if (err) {
-          console.error('Python script error:', err);
-          console.error('Python stderr:', stderr);
-          console.error('Python stdout:', stdout?.slice(0, 500));
-          const detail = parsed?.__err || stderr || stdout?.slice(0, 500) || err.message;
-          return reject(new Error(detail));
-        }
-        if (parsed?.__err) {
-          console.error('Data fetcher error:', parsed.__err);
-          return reject(new Error(parsed.__err));
-        }
-        console.error('JSON parse error / empty options payload');
-        reject(new Error('Invalid response from data fetcher'));
-      });
-    });
+    // Stale shared chain still serves while a refresh is in flight (stale-while-revalidate).
+    const stale = peek(cacheKey);
+    if (stale && Date.now() - stale.timestamp < TTL.OPTIONS_MS) {
+      if (isProbe) {
+        const contracts = Array.isArray(stale.data?.quotes) ? stale.data.quotes.length : 0;
+        return { available: true, contracts, fromCache: true };
+      }
+      return { ...stale.data, _cache: { hit: true, ageMs: Date.now() - stale.timestamp } };
+    }
+
+    const { data: result, fromCache, ageMs } = await getOrFetch(
+      cacheKey,
+      isProbe ? TTL.OPTIONS_PROBE_MS : TTL.OPTIONS_MS,
+      () => new Promise((resolve, reject) => {
+        const args = [join(__dirname, 'fetch_options.py'), symbol];
+        if (maxArg) args.push(String(maxArg));
+        // yfinance often needs 45–90s for multi-expiry equity chains.
+        execFile('python3', args, { timeout: isProbe ? 20000 : 90000 }, (err, stdout, stderr) => {
+          const tryParse = (raw) => {
+            if (!raw) return null;
+            try {
+              const data = JSON.parse(String(raw).trim().split('\n').filter(Boolean).pop());
+              if (data && !data.error && Array.isArray(data.quotes)) return data;
+              if (data?.error) return { __err: data.error };
+            } catch { /* fall through */ }
+            return null;
+          };
+          const parsed = tryParse(stdout);
+          if (parsed && !parsed.__err) return resolve(parsed);
+          if (err) {
+            console.error('Python script error:', err);
+            const detail = parsed?.__err || stderr || stdout?.slice(0, 500) || err.message;
+            return reject(new Error(detail));
+          }
+          if (parsed?.__err) return reject(new Error(parsed.__err));
+          reject(new Error('Invalid response from data fetcher'));
+        });
+      }),
+      { allowStaleOnError: true },
+    );
 
     const contracts = Array.isArray(result.quotes) ? result.quotes.length : 0;
-    if (isProbe) return { available: contracts >= 10, contracts };
+    if (isProbe) return { available: contracts >= 10, contracts, fromCache };
 
-    cacheStore.set(symbol, { data: result, timestamp: now });
-    return result;
+    return { ...result, _cache: { hit: fromCache, ageMs } };
   } catch (err) {
     console.error('API endpoint error:', err);
     reply.code(502);
@@ -587,15 +631,73 @@ fastify.get('/api/fmp/stable/*', async (request, reply) => {
     return { error: 'Endpoint not allowed', allowed: [...FMP_ALLOWED_ENDPOINTS] };
   }
 
-  const { status, body } = await proxyFmp(url, FMP_API_KEY, FMP_BASE);
-  reply.code(status);
-  return body;
+  // Shared cache + daily budget so many users don't burn FMP free tier (250/day).
+  const fmpKey = `fmp:${url}`;
+  const isQuote = endpoint.startsWith('quote');
+  const ttl = isQuote ? TTL.FMP_QUOTE_MS : TTL.FMP_HEAVY_MS;
+  try {
+    const stale = peek(fmpKey);
+    if (stale && Date.now() - stale.timestamp < ttl) {
+      reply.header('X-Cache', 'HIT');
+      return stale.data;
+    }
+    if (!budgetAllows('fmp', FMP_FREE_DAILY) && stale) {
+      reply.header('X-Cache', 'STALE-BUDGET');
+      return stale.data;
+    }
+    if (!FMP_API_KEY) {
+      reply.code(503);
+      return { error: 'FMP_API_KEY not configured' };
+    }
+    if (!budgetAllows('fmp', FMP_FREE_DAILY)) {
+      reply.code(429);
+      return {
+        error: 'FMP daily budget exhausted',
+        used: getBudgetUsed('fmp'),
+        cap: FMP_FREE_DAILY,
+      };
+    }
+    const { data, fromCache } = await getOrFetch(fmpKey, ttl, async () => {
+      recordBudget('fmp', 1);
+      const { status, body } = await proxyFmp(url, FMP_API_KEY, FMP_BASE);
+      if (status >= 400) {
+        const err = new Error(body?.error || `FMP ${status}`);
+        err.status = status;
+        err.body = body;
+        throw err;
+      }
+      return body;
+    }, { allowStaleOnError: true });
+    reply.header('X-Cache', fromCache ? 'HIT' : 'MISS');
+    return data;
+  } catch (err) {
+    if (err.body) {
+      reply.code(err.status || 502);
+      return err.body;
+    }
+    reply.code(502);
+    return { error: 'FMP proxy failed', detail: err.message };
+  }
 });
 
 // ── MacroVol API proxy ─────────────────────────────────────────
 // Forwards /api/macrovol/* → MacroVol FastAPI (FRED rates/macro + yfinance greeks/surface).
-// Default backend: http://127.0.0.1:8765  (override with MACROVOL_API_URL)
-const MACROVOL_API_URL = (process.env.MACROVOL_API_URL || 'http://127.0.0.1:8765').replace(/\/$/, '');
+// Lightweight rates/macro paths are shared-cached so page loads do not stampede FRED.
+
+const MACRO_LIGHT_TTL_MS = TTL.BRIEFING_MS;
+const MACRO_LIGHT_PREFIXES = [
+  '/rates/summary',
+  '/macro/summary',
+  '/rates/curve',
+  '/rates/shape',
+  '/rates/basis',
+  '/rates/plumbing',
+];
+
+function isMacroLightPath(suffix) {
+  const path = (suffix.split('?')[0] || '').replace(/\/$/, '') || '/';
+  return MACRO_LIGHT_PREFIXES.some((p) => path === p || path.startsWith(`${p}?`));
+}
 
 fastify.route({
   method: ['GET', 'POST', 'OPTIONS'],
@@ -605,20 +707,34 @@ fastify.route({
     // /api/macrovol/rates/summary → /api/rates/summary
     const suffix = raw.replace(/^\/api\/macrovol/, '') || '/';
     const target = `${MACROVOL_API_URL}/api${suffix.startsWith('/') ? suffix : `/${suffix}`}`;
+    const light = request.method === 'GET' && isMacroLightPath(suffix);
     try {
-      const res = await fetch(target, {
-        method: request.method === 'OPTIONS' ? 'GET' : request.method,
-        headers: { Accept: 'application/json' },
-        signal: AbortSignal.timeout(90_000), // greeks/surface can take 15–30s
-      });
-      const text = await res.text();
-      let body;
-      try {
-        body = JSON.parse(text);
-      } catch {
-        body = { error: 'Invalid JSON from MacroVol API', raw: text.slice(0, 300) };
+      const loader = async () => {
+        const res = await fetch(target, {
+          method: request.method === 'OPTIONS' ? 'GET' : request.method,
+          headers: { Accept: 'application/json' },
+          signal: AbortSignal.timeout(90_000),
+        });
+        const text = await res.text();
+        let body;
+        try {
+          body = JSON.parse(text);
+        } catch {
+          body = { error: 'Invalid JSON from MacroVol API', raw: text.slice(0, 300) };
+        }
+        return { status: res.status, body };
+      };
+
+      const result = light
+        ? await getOrFetch(`macrovol:${suffix}`, MACRO_LIGHT_TTL_MS, loader, { allowStaleOnError: true })
+        : { data: await loader(), fromCache: false, ageMs: 0 };
+
+      const { status, body } = result.data;
+      reply.code(status).header('X-MacroVol-Upstream', MACROVOL_API_URL);
+      if (light) {
+        reply.header('X-Cache', result.fromCache ? 'HIT' : 'MISS');
+        reply.header('X-Cache-Age-Ms', String(result.ageMs));
       }
-      reply.code(res.status).header('X-MacroVol-Upstream', MACROVOL_API_URL);
       return body;
     } catch (err) {
       reply.code(502);
@@ -700,5 +816,22 @@ fastify.setNotFoundHandler((request, reply) => {
   reply.code(404).send({ error: 'Not found' });
 });
 
+/** Background warmer: pre-fill shared cache so first visitors get fast hits. */
+async function warmSharedCaches() {
+  try {
+    // Boot briefing (rates + macro)
+    await fetch(`http://127.0.0.1:${PORT}/api/boot/briefing`).catch(() => null);
+    // SPY chain — expensive; only one in-flight via getOrFetch
+    await fetch(`http://127.0.0.1:${PORT}/api/options/SPY`).catch(() => null);
+    console.log('[warm] shared caches refreshed', cacheStats().entries, 'keys');
+  } catch (err) {
+    console.warn('[warm] skipped:', err?.message || err);
+  }
+}
+
 await fastify.listen({ port: PORT, host: '0.0.0.0' });
 console.log(`Server running at http://localhost:${PORT}${OPRA_ENABLED ? ` · OPRA skeleton (${OPRA_VENDOR})` : ''}`);
+
+// Warm shortly after boot, then on a cadence under Yahoo/FMP limits.
+setTimeout(() => { void warmSharedCaches(); }, 2_000);
+setInterval(() => { void warmSharedCaches(); }, TTL.OPTIONS_MS);

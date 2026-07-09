@@ -14,6 +14,7 @@ import { TabNav } from '../terminal/TabNav';
 import { DeskContextBar } from '../terminal/DeskContextBar';
 import { StatusBar } from '../terminal/StatusBar';
 import { ShortcutsOverlay } from '../terminal/ShortcutsOverlay';
+import { BootBriefing } from '../terminal/BootBriefing';
 import { SidePanel } from './SidePanel';
 import { DashboardView } from '../views/DashboardView';
 import { VolStructureView } from '../views/VolStructureView';
@@ -36,8 +37,12 @@ const GreeksView = lazy(() =>
 export function TerminalLayout() {
   const {
     activeTab, setActiveTab, setSymbol, refresh, loading, source, symbol, uiDensity, setDeskContext,
+    snapshot, chainAvailable, lastChainUpdate,
   } = useTerminalStore();
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  /** First-open rates/macro briefing while heavy chain loads in the background. */
+  const [bootOpen, setBootOpen] = useState(true);
+  const heavyReady = Boolean(snapshot && chainAvailable && lastChainUpdate > 0) || (!loading && lastChainUpdate > 0);
 
   const jumpSection = useCallback((dir: 1 | -1) => {
     const tab = useTerminalStore.getState().activeTab;
@@ -218,6 +223,12 @@ export function TerminalLayout() {
       <SidePanel />
       <StatusBar />
       {shortcutsOpen && <ShortcutsOverlay onClose={() => setShortcutsOpen(false)} />}
+      {bootOpen && (
+        <BootBriefing
+          heavyReady={heavyReady}
+          onEnter={() => setBootOpen(false)}
+        />
+      )}
     </div>
   );
 }

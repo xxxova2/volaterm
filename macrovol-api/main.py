@@ -51,6 +51,11 @@ async def get_sofr():
         "source": "FRED",
     }
 
+# Lightweight rates/macro shared TTL (seconds) — many website users share one FRED pull.
+RATES_SUMMARY_TTL = 300
+MACRO_SUMMARY_TTL = 300
+
+
 @app.get("/api/rates/summary")
 async def rates_summary():
     """
@@ -58,6 +63,11 @@ async def rates_summary():
     T10Y2Y / T10Y3M from FRED are already yield spreads in percentage points
     (e.g. 0.35 = 35 bps). Frontend multiplies by 100 for bps display.
     """
+    key = "rates:summary:v1"
+    hit = ttl_cache.get_cached(key, RATES_SUMMARY_TTL)
+    if not ttl_cache.is_miss(hit):
+        return hit
+
     keys = ["SOFR", "DFF", "DGS2", "DGS10", "T10Y2Y", "T10Y3M"]
     # Fail-closed: do not inject hardcoded FALLBACK_DATA into trader-facing rates.
     results = await asyncio.gather(
@@ -78,7 +88,7 @@ async def rates_summary():
             field_src[k] = meta.get("source", "FRED")
             if meta.get("obs_date"):
                 obs_dates[k] = meta["obs_date"]
-    return {
+    out = {
         "sofr": values[0],
         "effr": values[1],
         "usy2": values[2],
@@ -94,6 +104,8 @@ async def rates_summary():
         "as_of": datetime.now(timezone.utc).isoformat(),
         "source": source_label(keys),
     }
+    ttl_cache.set_cached(key, out)
+    return out
 
 
 async def _default_r() -> float:
@@ -634,6 +646,11 @@ async def rates_correlations(window: int = Query(30, ge=5, le=252), period: str 
 
 @app.get("/api/macro/summary")
 async def get_macro_summary():
+    mkey = "macro:summary:v1"
+    mhit = ttl_cache.get_cached(mkey, MACRO_SUMMARY_TTL)
+    if not ttl_cache.is_miss(mhit):
+        return mhit
+
     results = await asyncio.gather(
         fetch_series("CPIAUCSL", limit=14),
         fetch_series("PCEPILFE", limit=14),
@@ -715,7 +732,7 @@ async def get_macro_summary():
     def _obs(data):
         return data[0]["date"] if data else None
 
-    return {
+    out = {
         "cpi_yoy": cpi_yoy,
         "core_pce_yoy": core_pce_yoy,
         "core_cpi_yoy": core_cpi_yoy,
@@ -750,6 +767,8 @@ async def get_macro_summary():
         "source": "FRED" if not missing else ("FRED+partial" if len(missing) < 8 else "unavailable"),
         "note": "CPI/PCE release dates lag; obs_dates show last published observation, not request time. Missing fields are null — never hard-coded.",
     }
+    ttl_cache.set_cached(mkey, out)
+    return out
 
 @app.get("/api/macro/series/{series_id}")
 async def get_macro_series(series_id: str, limit: int = Query(500)):
