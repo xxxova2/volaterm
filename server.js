@@ -240,12 +240,14 @@ fastify.get('/api/yf/history/:symbol', async (request, reply) => {
     reply.code(400);
     return { error: 'Invalid symbol' };
   }
-  const now = Date.now();
-  const cached = cacheStore.get(`yf:history:${symbol}`);
-  if (cached && now - cached.timestamp < CACHE_TTL) return cached.data;
+  const cacheKey = `yf:history:${symbol}`;
   try {
-    const data = await runYf(symbol, 'history');
-    cacheStore.set(`yf:history:${symbol}`, { data, timestamp: now });
+    const { data } = await getOrFetch(
+      cacheKey,
+      TTL.YF_ENRICH_MS,
+      () => runYf(symbol, 'history'),
+      { allowStaleOnError: true },
+    );
     return data;
   } catch (err) {
     reply.code(502);
@@ -259,12 +261,14 @@ fastify.get('/api/yf/info/:symbol', async (request, reply) => {
     reply.code(400);
     return { error: 'Invalid symbol' };
   }
-  const now = Date.now();
-  const cached = cacheStore.get(`yf:info:${symbol}`);
-  if (cached && now - cached.timestamp < CACHE_TTL) return cached.data;
+  const cacheKey = `yf:info:${symbol}`;
   try {
-    const data = await runYf(symbol, 'info');
-    cacheStore.set(`yf:info:${symbol}`, { data, timestamp: now });
+    const { data } = await getOrFetch(
+      cacheKey,
+      TTL.YF_ENRICH_MS,
+      () => runYf(symbol, 'info'),
+      { allowStaleOnError: true },
+    );
     return data;
   } catch (err) {
     reply.code(502);
@@ -358,17 +362,20 @@ fastify.get('/api/deribit/index/:name', async (request, reply) => {
     return { error: 'Invalid index (use btc_usd or eth_usd)' };
   }
   const cacheKey = `deribit:index:${name}`;
-  const cached = cacheStore.get(cacheKey);
-  const now = Date.now();
-  if (cached && now - cached.timestamp < 8_000) return cached.data;
   try {
-    const result = await deribitFetch(`get_index_price?index_name=${name}`);
-    const data = {
-      index_price: result.index_price,
-      estimated_delivery_price: result.estimated_delivery_price,
-      timestamp: now,
-    };
-    cacheStore.set(cacheKey, { data, timestamp: now });
+    const { data } = await getOrFetch(
+      cacheKey,
+      8_000,
+      async () => {
+        const result = await deribitFetch(`get_index_price?index_name=${name}`);
+        return {
+          index_price: result.index_price,
+          estimated_delivery_price: result.estimated_delivery_price,
+          timestamp: Date.now(),
+        };
+      },
+      { allowStaleOnError: true },
+    );
     return data;
   } catch (err) {
     reply.code(502);
@@ -383,21 +390,24 @@ fastify.get('/api/deribit/options/:currency', async (request, reply) => {
     return { error: 'currency must be BTC or ETH' };
   }
   const cacheKey = `deribit:options:${currency}`;
-  const cached = cacheStore.get(cacheKey);
-  const now = Date.now();
-  // Options book: 20s cache (878 instruments — don't hammer)
-  if (cached && now - cached.timestamp < 20_000) return cached.data;
   try {
-    const result = await deribitFetch(
-      `get_book_summary_by_currency?currency=${currency}&kind=option`,
+    // Options book: short TTL (hundreds of instruments — don't hammer Deribit)
+    const { data } = await getOrFetch(
+      cacheKey,
+      20_000,
+      async () => {
+        const result = await deribitFetch(
+          `get_book_summary_by_currency?currency=${currency}&kind=option`,
+        );
+        return {
+          currency,
+          options: Array.isArray(result) ? result : [],
+          count: Array.isArray(result) ? result.length : 0,
+          timestamp: Date.now(),
+        };
+      },
+      { allowStaleOnError: true },
     );
-    const data = {
-      currency,
-      options: Array.isArray(result) ? result : [],
-      count: Array.isArray(result) ? result.length : 0,
-      timestamp: now,
-    };
-    cacheStore.set(cacheKey, { data, timestamp: now });
     return data;
   } catch (err) {
     reply.code(502);
@@ -412,15 +422,18 @@ fastify.get('/api/deribit/futures/:currency', async (request, reply) => {
     return { error: 'currency must be BTC or ETH' };
   }
   const cacheKey = `deribit:futures:${currency}`;
-  const cached = cacheStore.get(cacheKey);
-  const now = Date.now();
-  if (cached && now - cached.timestamp < 15_000) return cached.data;
   try {
-    const result = await deribitFetch(
-      `get_book_summary_by_currency?currency=${currency}&kind=future`,
+    const { data } = await getOrFetch(
+      cacheKey,
+      15_000,
+      async () => {
+        const result = await deribitFetch(
+          `get_book_summary_by_currency?currency=${currency}&kind=future`,
+        );
+        return { futures: Array.isArray(result) ? result : [], currency, fetchedAt: Date.now() };
+      },
+      { allowStaleOnError: true },
     );
-    const data = { futures: Array.isArray(result) ? result : [], currency, fetchedAt: now };
-    cacheStore.set(cacheKey, { data, timestamp: now });
     return data;
   } catch (err) {
     reply.code(502);
@@ -435,24 +448,27 @@ fastify.get('/api/deribit/ticker/:instrument', async (request, reply) => {
     return { error: 'instrument must be BTC-PERPETUAL or ETH-PERPETUAL' };
   }
   const cacheKey = `deribit:ticker:${instrument}`;
-  const cached = cacheStore.get(cacheKey);
-  const now = Date.now();
-  if (cached && now - cached.timestamp < 8_000) return cached.data;
   try {
-    const result = await deribitFetch(`ticker?instrument_name=${instrument}`);
-    const data = {
-      instrument_name: result.instrument_name,
-      index_price: result.index_price,
-      mark_price: result.mark_price,
-      last_price: result.last_price ?? null,
-      current_funding: result.current_funding ?? 0,
-      funding_8h: result.funding_8h ?? 0,
-      open_interest: result.open_interest ?? 0,
-      best_bid_price: result.best_bid_price ?? null,
-      best_ask_price: result.best_ask_price ?? null,
-      timestamp: now,
-    };
-    cacheStore.set(cacheKey, { data, timestamp: now });
+    const { data } = await getOrFetch(
+      cacheKey,
+      8_000,
+      async () => {
+        const result = await deribitFetch(`ticker?instrument_name=${instrument}`);
+        return {
+          instrument_name: result.instrument_name,
+          index_price: result.index_price,
+          mark_price: result.mark_price,
+          last_price: result.last_price ?? null,
+          current_funding: result.current_funding ?? 0,
+          funding_8h: result.funding_8h ?? 0,
+          open_interest: result.open_interest ?? 0,
+          best_bid_price: result.best_bid_price ?? null,
+          best_ask_price: result.best_ask_price ?? null,
+          timestamp: Date.now(),
+        };
+      },
+      { allowStaleOnError: true },
+    );
     return data;
   } catch (err) {
     reply.code(502);
@@ -468,42 +484,45 @@ fastify.get('/api/deribit/market/:currency', async (request, reply) => {
     return { error: 'currency must be BTC or ETH' };
   }
   const cacheKey = `deribit:market:${currency}`;
-  const cached = cacheStore.get(cacheKey);
-  const now = Date.now();
-  if (cached && now - cached.timestamp < 15_000) return cached.data;
   try {
-    const indexName = currency === 'BTC' ? 'btc_usd' : 'eth_usd';
-    const perpName = `${currency}-PERPETUAL`;
-    const [index, options, perp, futures] = await Promise.all([
-      deribitFetch(`get_index_price?index_name=${indexName}`),
-      deribitFetch(`get_book_summary_by_currency?currency=${currency}&kind=option`),
-      deribitFetch(`ticker?instrument_name=${perpName}`),
-      deribitFetch(`get_book_summary_by_currency?currency=${currency}&kind=future`),
-    ]);
-    const funding_8h = perp?.funding_8h ?? 0;
-    const data = {
-      currency,
-      indexPrice: index?.index_price ?? perp?.index_price,
-      options: Array.isArray(options) ? options : [],
-      futures: Array.isArray(futures) ? futures : [],
-      perp: perp
-        ? {
-            instrument_name: perp.instrument_name,
-            index_price: perp.index_price,
-            mark_price: perp.mark_price,
-            last_price: perp.last_price ?? null,
-            current_funding: perp.current_funding ?? 0,
-            funding_8h,
-            open_interest: perp.open_interest ?? 0,
-            best_bid_price: perp.best_bid_price ?? null,
-            best_ask_price: perp.best_ask_price ?? null,
-          }
-        : null,
-      fundingAnn: isFinite(funding_8h) ? funding_8h * 3 * 365 : null,
-      fetchedAt: now,
-      source: 'deribit',
-    };
-    cacheStore.set(cacheKey, { data, timestamp: now });
+    const { data } = await getOrFetch(
+      cacheKey,
+      TTL.DERIBIT_MS,
+      async () => {
+        const indexName = currency === 'BTC' ? 'btc_usd' : 'eth_usd';
+        const perpName = `${currency}-PERPETUAL`;
+        const [index, options, perp, futures] = await Promise.all([
+          deribitFetch(`get_index_price?index_name=${indexName}`),
+          deribitFetch(`get_book_summary_by_currency?currency=${currency}&kind=option`),
+          deribitFetch(`ticker?instrument_name=${perpName}`),
+          deribitFetch(`get_book_summary_by_currency?currency=${currency}&kind=future`),
+        ]);
+        const funding_8h = perp?.funding_8h ?? 0;
+        return {
+          currency,
+          indexPrice: index?.index_price ?? perp?.index_price,
+          options: Array.isArray(options) ? options : [],
+          futures: Array.isArray(futures) ? futures : [],
+          perp: perp
+            ? {
+                instrument_name: perp.instrument_name,
+                index_price: perp.index_price,
+                mark_price: perp.mark_price,
+                last_price: perp.last_price ?? null,
+                current_funding: perp.current_funding ?? 0,
+                funding_8h,
+                open_interest: perp.open_interest ?? 0,
+                best_bid_price: perp.best_bid_price ?? null,
+                best_ask_price: perp.best_ask_price ?? null,
+              }
+            : null,
+          fundingAnn: isFinite(funding_8h) ? funding_8h * 3 * 365 : null,
+          fetchedAt: Date.now(),
+          source: 'deribit',
+        };
+      },
+      { allowStaleOnError: true },
+    );
     return data;
   } catch (err) {
     reply.code(502);
