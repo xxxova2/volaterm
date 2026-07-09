@@ -71,7 +71,7 @@ export function IVSurfaceMacro({ defaultTicker }: { defaultTicker?: string }) {
 
   return (
     <div className="flex flex-col gap-4 p-3 font-mono">
-      <div className="flex flex-wrap items-center gap-2 text-[10px]">
+      <div className="flex flex-wrap items-center gap-2 text-type-xs">
         <span className="text-muted-foreground">EXPIRY:</span>
         {TIME_FILTERS.map((f) => (
           <button
@@ -108,7 +108,7 @@ export function IVSurfaceMacro({ defaultTicker }: { defaultTicker?: string }) {
 
       <div className="flex flex-wrap items-end gap-3">
         <div className="flex flex-col gap-1">
-          <label className="text-[10px] text-muted-foreground">Ticker</label>
+          <label className="text-type-xs text-muted-foreground">Ticker</label>
           <div className="flex gap-1">
             <input
               className="w-24 rounded border border-border bg-background px-2 py-1.5 text-xs outline-none"
@@ -128,7 +128,7 @@ export function IVSurfaceMacro({ defaultTicker }: { defaultTicker?: string }) {
           </div>
         </div>
         <div className="flex flex-col gap-1">
-          <label className="text-[10px] text-muted-foreground">r ({rLabel})</label>
+          <label className="text-type-xs text-muted-foreground">r ({rLabel})</label>
           <input
             type="number"
             step="0.001"
@@ -143,7 +143,7 @@ export function IVSurfaceMacro({ defaultTicker }: { defaultTicker?: string }) {
           />
         </div>
         <div className="flex flex-col gap-1">
-          <label className="text-[10px] text-muted-foreground">q (div yield)</label>
+          <label className="text-type-xs text-muted-foreground">q (div yield)</label>
           <input
             type="number"
             step="0.001"
@@ -153,7 +153,7 @@ export function IVSurfaceMacro({ defaultTicker }: { defaultTicker?: string }) {
           />
         </div>
         <div className="flex flex-col gap-1">
-          <label className="text-[10px] text-muted-foreground">Y-Axis</label>
+          <label className="text-type-xs text-muted-foreground">Y-Axis</label>
           <select
             className="rounded border border-border bg-background px-2 py-1.5 text-xs"
             value={yAxis}
@@ -173,24 +173,24 @@ export function IVSurfaceMacro({ defaultTicker }: { defaultTicker?: string }) {
       </div>
 
       {loading && (
-        <div className="text-xs text-muted-foreground animate-pulse">
+        <div className="text-type-xs text-muted-foreground">
           Fetching option chain for {ticker} via MacroVol API (yfinance)… 15–30s
         </div>
       )}
       {error && (
-        <div className="rounded border border-red-500/40 bg-red-950/20 px-3 py-2 text-xs text-red-400">{error}</div>
+        <div className="rounded border border-down/40 bg-down/15 px-3 py-2 text-xs text-down">{error}</div>
       )}
 
       {data && !loading && (
         <>
-          <div className="flex flex-wrap gap-4 text-[10px] text-muted-foreground">
+          <div className="flex flex-wrap gap-4 text-type-xs text-muted-foreground">
             <span>{ticker}</span>
             <span>Spot: <strong className="text-foreground">${data.spot?.toFixed(2)}</strong></span>
             <span>Expiries: <strong className="text-foreground">{filteredExpiries.length}</strong></span>
             <span>Strikes: <strong className="text-foreground">{data.strikes?.length}</strong></span>
             <span>Points: <strong className="text-foreground">{data.raw_points ?? '—'}</strong></span>
             <span>r: <strong className="text-foreground">{rLabel}</strong></span>
-            <span>API: <strong className="text-emerald-400">yfinance · MacroVol</strong></span>
+            <span>API: <strong className="text-up">yfinance · MacroVol</strong></span>
           </div>
 
           <div className="overflow-hidden rounded-xl border border-border bg-[#0a0a0a]">

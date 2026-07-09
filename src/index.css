@@ -4,6 +4,11 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/*
+ * VOLATERM design tokens (D-PR-1 / D-PR-2)
+ * Roles: bg, surface, ink, muted, line, brand, up, down, warn, info, rate
+ * shadcn-ish names kept as aliases so utilities stay stable.
+ */
 @theme inline {
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -30,40 +35,83 @@
   --color-ring: var(--ring);
   --color-up: var(--up);
   --color-down: var(--down);
+  --color-warn: var(--warn);
+  --color-info: var(--info);
+  --color-brand: var(--brand);
   --color-amber: var(--amber);
   --color-cyan: var(--cyan);
+  --color-rate: var(--rate);
   --color-grid: var(--grid);
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  /* Type scale exposed as Tailwind text-* sizes */
+  --text-type-2xs: var(--type-2xs);
+  --text-type-xs: var(--type-xs);
+  --text-type-sm: var(--type-sm);
+  --text-type-base: var(--type-base);
+  --text-type-md: var(--type-md);
+  --text-type-lg: var(--type-lg);
+  --text-type-xl: var(--type-xl);
+  --text-type-2xl: var(--type-2xl);
 }
 
 :root {
   --radius: 0.375rem;
-  --background: oklch(0.14 0.01 240);
-  --foreground: oklch(0.92 0.02 90);
-  --card: oklch(0.17 0.012 240);
-  --card-foreground: oklch(0.92 0.02 90);
-  --popover: oklch(0.18 0.012 240);
-  --popover-foreground: oklch(0.94 0.02 90);
-  --primary: oklch(0.82 0.17 75);
-  --primary-foreground: oklch(0.15 0.01 240);
-  --secondary: oklch(0.22 0.015 240);
-  --secondary-foreground: oklch(0.92 0.02 90);
-  --muted: oklch(0.21 0.012 240);
-  --muted-foreground: oklch(0.62 0.02 240);
-  --accent: oklch(0.78 0.14 200);
-  --accent-foreground: oklch(0.14 0.01 240);
-  --destructive: oklch(0.62 0.22 25);
-  --destructive-foreground: oklch(0.98 0 0);
-  --border: oklch(0.27 0.012 240);
-  --input: oklch(0.24 0.012 240);
-  --ring: oklch(0.82 0.17 75);
+
+  /* Canvas / surface — graphite with ~0.01 amber tint (authored, not empty) */
+  --background: oklch(0.14 0.012 75);
+  --foreground: oklch(0.92 0.015 90);
+  --card: oklch(0.17 0.014 75);
+  --card-foreground: oklch(0.92 0.015 90);
+  --popover: oklch(0.18 0.014 75);
+  --popover-foreground: oklch(0.94 0.015 90);
+
+  /* Brand (amber hue 75) — primary CTA, active tab, brand mark only */
+  --brand: oklch(0.82 0.17 75);
+  --primary: var(--brand);
+  --primary-foreground: oklch(0.15 0.01 75);
+  --amber: var(--brand);
+
+  --secondary: oklch(0.22 0.016 75);
+  --secondary-foreground: oklch(0.92 0.015 90);
+  --muted: oklch(0.21 0.014 75);
+  --muted-foreground: oklch(0.62 0.02 75);
+  --border: oklch(0.27 0.014 75);
+  --input: oklch(0.24 0.014 75);
+  --ring: var(--brand);
+  --grid: oklch(0.28 0.014 75);
+
+  /* Data semantics */
   --up: oklch(0.78 0.2 145);
   --down: oklch(0.65 0.24 25);
-  --amber: oklch(0.82 0.17 75);
-  --cyan: oklch(0.78 0.14 200);
+  --destructive: var(--down);
+  --destructive-foreground: oklch(0.98 0 0);
+
+  /* Warn — amber-family, hue ~55, lower chroma than brand (alerts ≠ CTA) */
+  --warn: oklch(0.78 0.12 55);
+
+  /* Info — cyan, liquidity/flow only (not second brand) */
+  --info: oklch(0.78 0.14 200);
+  --cyan: var(--info);
+  --accent: var(--info);
+  --accent-foreground: oklch(0.14 0.01 200);
+
+  /* Rates desk accent */
   --rate: oklch(0.72 0.14 300);
-  --grid: oklch(0.28 0.012 240);
+
+  /*
+   * Modular type scale (D-PR-2)
+   * 2xs 9 / xs 10 / sm 11 / base 12 / md 13 / lg 15 / xl 18 / 2xl 24
+   */
+  --type-2xs: 9px;
+  --type-xs: 10px;
+  --type-sm: 11px;
+  --type-base: 12px;
+  --type-md: 13px;
+  --type-lg: 15px;
+  --type-xl: 18px;
+  --type-2xl: 24px;
+  --type-line: 1.25;
 }
 
 @layer base {
@@ -77,12 +125,23 @@
     background-color: var(--color-background);
     color: var(--color-foreground);
     font-family: var(--font-sans);
+    font-size: var(--type-base);
+    line-height: var(--type-line);
     font-feature-settings: "ss01", "cv11";
     -webkit-font-smoothing: antialiased;
   }
   .font-mono, code, pre, .tabular-nums {
     font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
+  }
+
+  /* D-PR-5 — unified focus ring: dashed 2px brand, 2px offset */
+  :focus {
+    outline: none;
+  }
+  :focus-visible {
+    outline: 2px dashed var(--brand);
+    outline-offset: 2px;
   }
 }
 
@@ -92,10 +151,22 @@
   border-radius: var(--radius);
 }
 
+/* Brand glow — use sparingly (live edge, not default focus) */
 @utility glow-amber {
   box-shadow:
-    0 0 0 1px color-mix(in oklab, var(--amber) 40%, transparent),
-    0 0 18px color-mix(in oklab, var(--amber) 25%, transparent);
+    0 0 0 1px color-mix(in oklab, var(--brand) 40%, transparent),
+    0 0 18px color-mix(in oklab, var(--brand) 25%, transparent);
+}
+
+/* D-PR-5 — same ring for board-focus rows and interactive chrome */
+@utility focus-ring-term {
+  outline: 2px dashed var(--brand);
+  outline-offset: 2px;
+}
+
+@utility focus-ring-term-inset {
+  box-shadow: inset 0 0 0 2px color-mix(in oklab, var(--brand) 70%, transparent);
+  outline: none;
 }
 
 @utility scanline {
@@ -111,34 +182,88 @@
   font-feature-settings: "tnum";
 }
 
-/* Phase A/B — dense terminal chrome; numbers stay high-contrast */
+/* Type scale utilities (density-aware via CSS vars) */
+@utility text-type-2xs {
+  font-size: var(--type-2xs);
+  line-height: var(--type-line);
+}
+@utility text-type-xs {
+  font-size: var(--type-xs);
+  line-height: var(--type-line);
+}
+@utility text-type-sm {
+  font-size: var(--type-sm);
+  line-height: var(--type-line);
+}
+@utility text-type-base {
+  font-size: var(--type-base);
+  line-height: var(--type-line);
+}
+@utility text-type-md {
+  font-size: var(--type-md);
+  line-height: var(--type-line);
+}
+@utility text-type-lg {
+  font-size: var(--type-lg);
+  line-height: 1.3;
+}
+@utility text-type-xl {
+  font-size: var(--type-xl);
+  line-height: 1.25;
+}
+@utility text-type-2xl {
+  font-size: var(--type-2xl);
+  line-height: 1.2;
+}
+
+/* Density — scales TYPE, not just padding */
 .density-terminal {
-  --chrome-header: 2.25rem; /* h-9 */
-  --chrome-tabs: 1.75rem;   /* h-7 */
-  --chrome-status: 1.5rem;  /* h-6 */
+  --chrome-header: 2.25rem;
+  --chrome-tabs: 1.75rem;
+  --chrome-status: 1.5rem;
   --chrome-controls: 2rem;
   --desk-pad: 0.5rem;
   --desk-gap: 0.75rem;
-  --panel-title: 0.75rem;
-  --panel-meta: 0.625rem;
+  --panel-title: var(--type-base);
+  --panel-meta: var(--type-xs);
+  --type-2xs: 9px;
+  --type-xs: 10px;
+  --type-sm: 11px;
+  --type-base: 12px;
+  --type-md: 13px;
+  --type-lg: 15px;
+  --type-xl: 18px;
+  --type-2xl: 24px;
 }
 
 .density-dense {
   --desk-pad: 0.5rem;
   --desk-gap: 0.75rem;
+  --type-2xs: 8px;
   --type-xs: 9px;
   --type-sm: 10px;
   --type-base: 11px;
   --type-md: 12px;
+  --type-lg: 14px;
+  --type-xl: 16px;
+  --type-2xl: 22px;
+  --panel-title: var(--type-base);
+  --panel-meta: var(--type-xs);
 }
 
 .density-readable {
   --desk-pad: 0.75rem;
   --desk-gap: 1rem;
-  --type-xs: 10px;
-  --type-sm: 11px;
-  --type-base: 12px;
-  --type-md: 13px;
+  --type-2xs: 10px;
+  --type-xs: 11px;
+  --type-sm: 12px;
+  --type-base: 13px;
+  --type-md: 14px;
+  --type-lg: 16px;
+  --type-xl: 20px;
+  --type-2xl: 26px;
+  --panel-title: var(--type-base);
+  --panel-meta: var(--type-xs);
 }
 
 .density-readable .term-panel {
@@ -156,12 +281,11 @@
   display: none;
 }
 
-/* Shared chart / table density helpers */
 @utility term-chip {
   border-radius: 0.25rem;
   border: 1px solid var(--border);
   padding: 0.125rem 0.375rem;
-  font-size: 9px;
+  font-size: var(--type-2xs);
   font-family: var(--font-mono);
   line-height: 1.2;
 }
@@ -174,14 +298,72 @@
   letter-spacing: -0.01em;
 }
 
-/* Hide secondary chrome labels under 1280px (Phase A responsive) */
+/* D-PR-3 — motion (transform/opacity only) */
+@keyframes term-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes term-crossfade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes term-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+@utility term-fade-in {
+  animation: term-fade-in 150ms ease-out both;
+}
+@utility term-crossfade {
+  animation: term-crossfade 120ms ease-out both;
+}
+
+/* Skeleton shimmer on --muted */
+@utility skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--muted) 0%,
+    color-mix(in oklab, var(--muted-foreground) 18%, var(--muted)) 45%,
+    var(--muted) 90%
+  );
+  background-size: 200% 100%;
+  animation: term-shimmer 1.2s ease-in-out infinite;
+  border-radius: var(--radius);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .term-fade-in,
+  .term-crossfade,
+  .skeleton,
+  .animate-pulse {
+    animation: none !important;
+    transition: none !important;
+  }
+  .skeleton {
+    background: var(--muted);
+  }
+}
+
+/* Hide secondary chrome labels under 1280px */
 @media (max-width: 1279px) {
   .hide-below-xl {
     display: none !important;
   }
 }
 
-/* Phase E — sticky table headers inside scroll boards */
+/* Spacing rhythm 1-4-9 (4 / 16 / 36) */
+@utility gap-micro {
+  gap: 0.25rem; /* 4px */
+}
+@utility gap-component {
+  gap: 1rem; /* 16px */
+}
+@utility gap-section {
+  gap: 2.25rem; /* 36px */
+}
+
+/* Sticky table headers */
 .sticky-table-wrap table {
   border-collapse: collapse;
   width: 100%;
@@ -197,7 +379,7 @@
   height: 1.75rem;
 }
 
-/* Phase G — skip layout/paint for off-screen desk sections */
+/* Off-screen panels */
 .below-fold {
   content-visibility: auto;
   contain-intrinsic-size: auto 280px;

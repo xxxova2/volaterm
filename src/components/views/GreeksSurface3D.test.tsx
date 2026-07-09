@@ -211,7 +211,7 @@ describe('GreeksSurface3D component', () => {
   it('shows a placeholder when no snapshot is available', () => {
     useTerminalStore.setState({ snapshot: null });
     render(<GreeksSurface3D />);
-    expect(screen.getByText('No data')).toBeInTheDocument();
+    expect(screen.getByText('No chain for 3D surface')).toBeInTheDocument();
   });
 });
 

@@ -250,32 +250,30 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
 
     const currentSource = get().source;
     if (currentSource === 'live') {
-      // Live path: do NOT seed synthetic IV first (that looked like "wrong"
-      // data until the user forced yfinance). Stay on loading until the real
-      // chain arrives; only fall back to synthetic if the live fetch fails.
+      // Live path: fail-closed — never seed synthetic IV under LIVE.
+      // Stay loading until a real chain arrives; empty state if unavailable.
       await fetchLiveEnrichment(trimmed);
       if (get().symbol !== trimmed) return;
       await fetchLiveSnapshot(trimmed, true);
       if (get().symbol !== trimmed) return;
-      // If live returned nothing usable, seed a synthetic surface so the UI
-      // is not blank forever.
       if (!get().snapshot) {
-        const demo = getProvider('demo');
-        const snapshot = (await demo.getSnapshot(trimmed, { jitter: 0 }))!;
-        const surface = buildSurfaceGrid(snapshot);
-        const { sviReadout: readout, arbResult: arb } = processSurface(surface, snapshot.spot);
         set({
-          snapshot,
-          surface,
-          sviReadout: readout,
-          arbResult: arb,
-          historicalFrames: demo.getHistory!(trimmed, 64),
+          snapshot: null,
+          surface: null,
+          sviReadout: null,
+          arbResult: null,
+          historicalFrames: [],
           loading: false,
-          lastUpdate: Date.now(),
           chainUsed: 'synthetic',
           chainAvailable: false,
           session: usEquitySession(),
         });
+        if (!liveWarned) {
+          liveWarned = true;
+          toast.warning('Live chain unavailable', {
+            description: 'No real option chain. Try Chain → yfinance / FMP, open BTC for Deribit, or switch to DEMO.',
+          });
+        }
       }
     } else {
       const demo = getProvider('demo');
@@ -580,7 +578,22 @@ async function fetchLiveSnapshot(symbol: string, force: boolean) {
     const snap = await provider.getSnapshot(upper, liveSnapshotCtx(useTerminalStore.getState()));
     // Drop stale replies (user switched symbol / mode mid-flight).
     if (gen !== liveFetchGen || useTerminalStore.getState().symbol !== upper) return;
-    if (!snap) return;
+    if (!snap) {
+      // Fail-closed: clear any previous surface so we never keep stale/synth under LIVE.
+      set({
+        loading: false,
+        chainAvailable: false,
+        chainUsed: 'synthetic',
+        session: usEquitySession(Date.now()),
+      });
+      if (!liveWarned) {
+        liveWarned = true;
+        toast.warning('Live chain unavailable', {
+          description: 'No real option chain for this symbol. Try yfinance/FMP/Deribit or DEMO mode.',
+        });
+      }
+      return;
+    }
     const { surface, sviReadout: readout, arbResult: arb } = processSnapshot(snap);
     const now = Date.now();
     const liveSpot = provider.lastSpotSource !== 'synthetic';

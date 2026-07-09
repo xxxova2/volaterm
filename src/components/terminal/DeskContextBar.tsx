@@ -35,7 +35,7 @@ export function DeskContextBar() {
 
   return (
     <div
-      className="flex h-5 shrink-0 items-center gap-1.5 border-b border-border/70 bg-card/30 px-2 font-mono text-[9px] text-muted-foreground"
+      className="flex h-5 shrink-0 items-center gap-1.5 border-b border-border/70 bg-card/30 px-2 font-mono text-type-2xs text-muted-foreground"
       role="status"
       aria-label="Desk context"
     >

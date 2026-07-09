@@ -12,9 +12,9 @@ import { Explain } from '../common/Explain';
 
 function SourceChip({ label, ok, source }: { label: string; ok: boolean; source: string }) {
   return (
-    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-muted text-[10px] font-mono">
+    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-muted text-type-xs font-mono">
       <span
-        className={cn('w-1.5 h-1.5 rounded-full', ok ? 'bg-emerald-400' : 'bg-amber')}
+        className={cn('w-1.5 h-1.5 rounded-full', ok ? 'bg-up' : 'bg-amber')}
         aria-hidden="true"
       />
       {label}: <span className="text-foreground">{source}</span>
@@ -114,7 +114,7 @@ export function MarketView() {
             <span className={cn('text-xs font-mono tabular-nums', periodChange >= 0 ? 'text-up' : 'text-down')}>
               {fmtSignedPct(periodPct)} ({fmtSignedPct(periodChange, 2)})
             </span>
-            <div className="ml-auto flex items-center gap-1 text-[10px] font-mono">
+            <div className="ml-auto flex items-center gap-1 text-type-xs font-mono">
               <button
                 onClick={() => setChainMode('auto')}
                 className={cn('px-1.5 py-0.5 rounded', chainMode === 'auto' ? 'bg-primary/20 text-primary' : 'text-muted-foreground')}
@@ -196,7 +196,7 @@ export function MarketView() {
             </ResponsiveContainer>
           </div>
 
-          <div className="px-3 py-1 text-[10px] text-muted-foreground font-mono border-t border-border flex gap-3">
+          <div className="px-3 py-1 text-type-xs text-muted-foreground font-mono border-t border-border flex gap-3">
             <span><span className="text-primary">━</span> Close</span>
             <span><span className="text-cyan">━</span> <Explain term="sma20">SMA20</Explain></span>
             <span><span className="text-violet">━</span> <Explain term="sma50">SMA50</Explain></span>
@@ -207,9 +207,9 @@ export function MarketView() {
         {/* Profile + news */}
         <div className="flex flex-col bg-background overflow-hidden">
           <div className="border-b border-border p-3">
-            <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Profile</div>
+            <div className="text-type-xs uppercase tracking-wider text-muted-foreground mb-1">Profile</div>
             {fmpProfile ? (
-              <div className="space-y-1 text-[11px] font-mono">
+              <div className="space-y-1 text-type-sm font-mono">
                 <div className="font-semibold text-foreground">{fmpProfile.companyName ?? symbol}</div>
                 {fmpProfile.sector && (
                   <div className="text-muted-foreground">
@@ -226,20 +226,20 @@ export function MarketView() {
                   {fmpProfile.ceo && (<><span className="text-muted-foreground">CEO</span><span className="truncate text-right">{fmpProfile.ceo}</span></>)}
                 </div>
                 {fmpProfile.description && (
-                  <p className="text-[10px] leading-snug text-muted-foreground mt-1 line-clamp-4">{fmpProfile.description}</p>
+                  <p className="text-type-xs leading-snug text-muted-foreground mt-1 line-clamp-4">{fmpProfile.description}</p>
                 )}
               </div>
             ) : (
-              <div className="text-[11px] text-muted-foreground font-mono">No profile data.</div>
+              <div className="text-type-sm text-muted-foreground font-mono">No profile data.</div>
             )}
           </div>
 
           <div className="flex-1 min-h-0 overflow-y-auto p-2">
-            <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">News</div>
+            <div className="text-type-xs uppercase tracking-wider text-muted-foreground mb-1">News</div>
             {fmpNews && fmpNews.length > 0 ? (
               <ul className="space-y-1.5">
                 {fmpNews.slice(0, 25).map((n, i) => (
-                  <li key={i} className="text-[11px] leading-snug">
+                  <li key={i} className="text-type-sm leading-snug">
                     <a
                       href={n.url ?? '#'}
                       target="_blank"
@@ -248,14 +248,14 @@ export function MarketView() {
                     >
                       {n.title ?? '(untitled)'}
                     </a>
-                    <div className="text-[9px] text-muted-foreground font-mono">
+                    <div className="text-type-2xs text-muted-foreground font-mono">
                       {n.site ?? ''}{n.publishedDate ? ` · ${n.publishedDate.slice(0, 10)}` : ''}
                     </div>
                   </li>
                 ))}
               </ul>
             ) : (
-              <div className="text-[11px] text-muted-foreground font-mono">No news data.</div>
+              <div className="text-type-sm text-muted-foreground font-mono">No news data.</div>
             )}
           </div>
         </div>

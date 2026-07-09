@@ -46,7 +46,7 @@ export function RatesPanel() {
         action={
           <button
             type="button"
-            className="rounded border border-border px-2 py-1 text-[10px] hover:border-primary"
+            className="rounded border border-border px-2 py-1 text-type-xs hover:border-primary"
             onClick={() => window.location.reload()}
           >
             Reload
@@ -70,11 +70,11 @@ export function RatesPanel() {
             <h2 className="text-sm font-bold text-foreground">RATES &amp; STIR</h2>
             <ApiSources apis={['FRED', 'NYFed', 'yfinance', 'MacroVol']} />
           </div>
-          <p className="mt-0.5 text-[10px] text-muted-foreground">
+          <p className="mt-0.5 text-type-xs text-muted-foreground">
             Priority stack: snapshot → STIR strip → NYFed → basis → curve → plumbing → carry → DV01
           </p>
           {summary?.risk_free_rate != null && (
-            <p className="mt-1 text-[10px] text-emerald-400/90">
+            <p className="mt-1 text-type-xs text-up/90">
               Pricing r(T) = Treasury curve (term) · SOFR anchor {(summary.risk_free_rate * 100).toFixed(2)}% for short T
             </p>
           )}

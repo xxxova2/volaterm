@@ -105,6 +105,23 @@ export function PositioningView() {
       }));
   }, [dealer, fields.call, fields.put, fields.net, snapshot, zoomThr]);
 
+  /** Snap a price to nearest chart category label (Recharts categorical X needs exact match). */
+  const nearestLabel = (price: number | null | undefined): string | null => {
+    if (price == null || !chartData.length) return null;
+    let best = chartData[0]!;
+    let bestAbs = Math.abs(best.strike - price);
+    for (const p of chartData) {
+      const d = Math.abs(p.strike - price);
+      if (d < bestAbs) {
+        bestAbs = d;
+        best = p;
+      }
+    }
+    return best.label;
+  };
+  const spotLabel = nearestLabel(snapshot?.spot);
+  const flipLabel = metric === 'gex' ? nearestLabel(dealer?.gammaFlip) : null;
+
   const chartRef = useRef(chartData);
   chartRef.current = chartData;
   const { focused: dealerFocused, rowIndex: dealerRow, focusRow: focusDealer } = useBoardFocus('dealer-bars');
@@ -148,7 +165,7 @@ export function PositioningView() {
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <div className="sticky top-0 z-20 flex shrink-0 flex-wrap items-center gap-1 border-b border-border bg-background/95 px-2 py-1 backdrop-blur-sm">
-        <span className="mr-1 font-mono text-[10px] font-bold tracking-wider text-primary">
+        <span className="mr-1 font-mono text-type-xs font-bold tracking-wider text-primary">
           POSITIONING
         </span>
         {SUBS.map((s) => (
@@ -161,7 +178,7 @@ export function PositioningView() {
             onClick={() => setSub(s.id)}
             title={s.blurb}
             className={cn(
-              'rounded px-2 py-0.5 font-mono text-[10px] transition-colors',
+              'rounded px-2 py-0.5 font-mono text-type-xs transition-colors',
               sub === s.id
                 ? 'bg-primary text-primary-foreground'
                 : 'text-muted-foreground hover:bg-muted hover:text-foreground',
@@ -179,7 +196,7 @@ export function PositioningView() {
       {snapshot && flip != null && (
         <div
           className={cn(
-            'flex flex-wrap items-center gap-x-3 gap-y-0.5 border-b px-3 py-1 font-mono text-[10px]',
+            'flex flex-wrap items-center gap-x-3 gap-y-0.5 border-b px-3 py-1 font-mono text-type-xs',
             aboveFlip
               ? 'border-up/30 bg-up/10 text-up'
               : 'border-down/30 bg-down/10 text-down',
@@ -204,7 +221,7 @@ export function PositioningView() {
 
       {/* Always-on levels strip */}
       {snapshot && (
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-border bg-card/40 px-3 py-1.5 font-mono text-[10px]">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-border bg-card/40 px-3 py-1.5 font-mono text-type-xs">
           <span>
             <span className="text-muted-foreground">Spot </span>
             <span className="font-semibold text-foreground">{fmtPrice(snapshot.spot)}</span>
@@ -240,7 +257,7 @@ export function PositioningView() {
               {tradeableParity.length} parity flag{tradeableParity.length > 1 ? 's' : ''}
             </span>
           )}
-          <span className="ml-auto text-[9px] text-muted-foreground">
+          <span className="ml-auto text-type-2xs text-muted-foreground">
             {dealer?.unitNote ?? ''}
           </span>
         </div>
@@ -276,7 +293,7 @@ export function PositioningView() {
                         type="button"
                         onClick={() => setMetric(m.id)}
                         className={cn(
-                          'rounded px-2 py-0.5 font-mono text-[10px] border transition-colors',
+                          'rounded px-2 py-0.5 font-mono text-type-xs border transition-colors',
                           metric === m.id
                             ? 'border-primary bg-primary/15 text-primary'
                             : 'border-border text-muted-foreground hover:text-foreground',
@@ -293,7 +310,7 @@ export function PositioningView() {
                         type="button"
                         onClick={() => setWeight(w)}
                         className={cn(
-                          'rounded px-2 py-0.5 font-mono text-[10px] border',
+                          'rounded px-2 py-0.5 font-mono text-type-xs border',
                           weight === w
                             ? 'border-amber bg-amber/10 text-amber'
                             : 'border-border text-muted-foreground',
@@ -315,7 +332,7 @@ export function PositioningView() {
                         type="button"
                         onClick={() => setStrikeZoom(id)}
                         className={cn(
-                          'rounded px-1.5 py-0.5 font-mono text-[9px] border',
+                          'rounded px-1.5 py-0.5 font-mono text-type-2xs border',
                           strikeZoom === id
                             ? 'border-cyan bg-cyan/10 text-cyan'
                             : 'border-border text-muted-foreground hover:text-foreground',
@@ -325,7 +342,7 @@ export function PositioningView() {
                       </button>
                     ))}
                   </div>
-                  <div className="ml-auto flex flex-wrap gap-3 font-mono text-[10px]">
+                  <div className="ml-auto flex flex-wrap gap-3 font-mono text-type-xs">
                     <StatMini label={`Σ ${metric.toUpperCase()}`} value={fmtCompact(totalVal)} color={totalVal >= 0 ? 'var(--up)' : 'var(--down)'} />
                     <StatMini label="DEX $" value={fmtCompact(dealer.totalDEX)} color={dealer.totalDEX >= 0 ? 'var(--up)' : 'var(--down)'} />
                     <StatMini label="Charm/d" value={fmtCompact(dealer.totalCharm)} />
@@ -333,90 +350,96 @@ export function PositioningView() {
                   </div>
                 </div>
                 <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-                  <div className="min-h-0 min-w-0 flex-1">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={chartData} margin={{ top: 10, right: 16, bottom: 8, left: 8 }}>
-                        <CartesianGrid {...chartGridProps} />
-                        <XAxis
-                          dataKey="label"
-                          tick={{ fontSize: 9, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }}
-                          tickLine={false}
-                          interval={Math.max(1, Math.floor(chartData.length / 15))}
-                        />
-                        <YAxis
-                          tick={{ fontSize: 10, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }}
-                          tickLine={false}
-                          tickFormatter={(v: number) => `${v.toFixed(0)}M`}
-                        />
-                        <Tooltip contentStyle={chartTooltipStyle} />
-                        <ReferenceLine y={0} stroke="var(--muted-foreground)" />
-                        {snapshot && (
-                          <ReferenceLine
-                            x={fmtPrice(snapshot.spot, snapshot.spot > 1000 ? 0 : 2)}
-                            stroke="var(--amber)"
-                            strokeDasharray="4 4"
-                            label={{ value: 'Spot', position: 'top', fill: 'var(--amber)', fontSize: 9, fontFamily: 'JetBrains Mono' }}
+                  {/* Absolute fill so Recharts ResponsiveContainer gets a real height */}
+                  <div className="relative min-h-[240px] min-w-0 flex-1 lg:min-h-0">
+                    <div className="absolute inset-0">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={chartData} margin={{ top: 14, right: 12, bottom: 8, left: 4 }}>
+                          <CartesianGrid {...chartGridProps} />
+                          <XAxis
+                            dataKey="label"
+                            tick={{ fontSize: 9, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }}
+                            tickLine={false}
+                            interval={Math.max(0, Math.floor(chartData.length / 14))}
                           />
-                        )}
-                        {metric === 'gex' && dealer.gammaFlip != null && (
-                          <ReferenceLine
-                            x={fmtPrice(dealer.gammaFlip, 0)}
-                            stroke="var(--down)"
-                            strokeDasharray="3 3"
-                            label={{ value: 'Flip', position: 'top', fill: 'var(--down)', fontSize: 9, fontFamily: 'JetBrains Mono' }}
+                          <YAxis
+                            tick={{ fontSize: 10, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }}
+                            tickLine={false}
+                            width={44}
+                            tickFormatter={(v: number) => `${v.toFixed(0)}M`}
                           />
-                        )}
-                        {metric === 'gex' ? (
-                          <>
-                            <Bar dataKey="call" fill="var(--up)" stackId="m" opacity={0.85} name="Call" />
-                            <Bar dataKey="put" fill="var(--down)" stackId="m" opacity={0.85} name="Put" />
-                          </>
-                        ) : (
-                          <Bar dataKey="net" fill="var(--cyan)" opacity={0.9} name="Net" />
-                        )}
-                      </BarChart>
-                    </ResponsiveContainer>
+                          <Tooltip contentStyle={chartTooltipStyle} />
+                          <ReferenceLine y={0} stroke="var(--muted-foreground)" />
+                          {spotLabel && (
+                            <ReferenceLine
+                              x={spotLabel}
+                              stroke="var(--amber)"
+                              strokeDasharray="4 4"
+                              label={{ value: 'Spot', position: 'top', fill: 'var(--amber)', fontSize: 9, fontFamily: 'JetBrains Mono' }}
+                            />
+                          )}
+                          {flipLabel && flipLabel !== spotLabel && (
+                            <ReferenceLine
+                              x={flipLabel}
+                              stroke="var(--down)"
+                              strokeDasharray="3 3"
+                              label={{ value: 'Flip', position: 'top', fill: 'var(--down)', fontSize: 9, fontFamily: 'JetBrains Mono' }}
+                            />
+                          )}
+                          {metric === 'gex' ? (
+                            <>
+                              <Bar dataKey="call" fill="var(--up)" stackId="m" opacity={0.85} name="Call" isAnimationActive={false} />
+                              <Bar dataKey="put" fill="var(--down)" stackId="m" opacity={0.85} name="Put" isAnimationActive={false} />
+                            </>
+                          ) : (
+                            <Bar dataKey="net" fill="var(--cyan)" opacity={0.9} name="Net" isAnimationActive={false} />
+                          )}
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
                   </div>
                   {/* Keyboard-focusable strike board (dealer-bars) */}
-                  <div className="flex w-full shrink-0 flex-col border-t border-border lg:w-44 lg:border-l lg:border-t-0">
-                    <div className="border-b border-border/60 px-1.5 py-0.5 font-mono text-[8px] text-muted-foreground">
+                  <div className="flex h-44 w-full shrink-0 flex-col border-t border-border lg:h-auto lg:min-h-0 lg:w-48 lg:border-l lg:border-t-0">
+                    <div className="shrink-0 border-b border-border/60 px-1.5 py-0.5 font-mono text-type-2xs text-muted-foreground">
                       STRIKES · j/k · y copy
                     </div>
-                    <VirtualRows
-                      items={chartData}
-                      rowHeight={22}
-                      overscanCount={PERF_BUDGET.virtualOverscan}
-                      height={Math.min(280, Math.max(120, chartData.length * 22))}
-                      className="min-h-0 flex-1"
-                      renderRow={({ index, style, item: r }) => {
-                        const isFocused = dealerFocused && index === dealerRow;
-                        return (
-                          <div
-                            style={style}
-                            role="row"
-                            aria-selected={isFocused}
-                            onClick={() => focusDealer(index, 'strike')}
-                            className={cn(
-                              'flex cursor-default items-center justify-between gap-1 border-b border-border/30 px-1.5 font-mono text-[9px] hover:bg-muted/20',
-                              isFocused && 'bg-primary/10 ring-1 ring-inset ring-primary/70',
-                            )}
-                          >
-                            <span className="tabular-nums text-foreground">{r.label}</span>
-                            <span
+                    <div className="min-h-0 flex-1">
+                      <VirtualRows
+                        items={chartData}
+                        rowHeight={22}
+                        overscanCount={PERF_BUDGET.virtualOverscan}
+                        height="100%"
+                        className="h-full"
+                        renderRow={({ index, style, item: r }) => {
+                          const isFocused = dealerFocused && index === dealerRow;
+                          return (
+                            <div
+                              style={style}
+                              role="row"
+                              aria-selected={isFocused}
+                              onClick={() => focusDealer(index, 'strike')}
                               className={cn(
-                                'tabular-nums',
-                                r.net >= 0 ? 'text-up' : 'text-down',
+                                'flex cursor-default items-center justify-between gap-1 border-b border-border/30 px-1.5 font-mono text-type-2xs hover:bg-muted/20',
+                                isFocused && 'focus-ring-term-inset bg-primary/10',
                               )}
                             >
-                              {r.net.toFixed(1)}M
-                            </span>
-                          </div>
-                        );
-                      }}
-                    />
+                              <span className="tabular-nums text-foreground">{r.label}</span>
+                              <span
+                                className={cn(
+                                  'tabular-nums',
+                                  r.net >= 0 ? 'text-up' : 'text-down',
+                                )}
+                              >
+                                {r.net.toFixed(1)}M
+                              </span>
+                            </div>
+                          );
+                        }}
+                      />
+                    </div>
                   </div>
                 </div>
-                <div className="border-t border-border px-3 py-1 font-mono text-[9px] text-muted-foreground leading-snug">
+                <div className="border-t border-border px-3 py-1 font-mono text-type-2xs text-muted-foreground leading-snug">
                   {METRICS.find((m) => m.id === metric)?.unit}. GEX: net+ ≈ dealers long γ (dampen); net− ≈ short γ (amplify).
                   DEX = signed $ delta inventory of listed OI. VEX = vanna flow. Charm = overnight delta bleed.
                   Not a free signal — assumes customer long OI / dealers short.
@@ -483,7 +506,7 @@ export function PositioningView() {
                     value={move ? fmtPct(move.movePct) : '—'}
                   />
                 </div>
-                <p className="border-t border-border px-3 py-2 text-[9px] font-mono text-muted-foreground leading-snug">
+                <p className="border-t border-border px-3 py-2 text-type-2xs font-mono text-muted-foreground leading-snug">
                   Walls = largest call / put GEX strikes. Flip = cumulative net GEX zero-cross.
                   Max pain = strike minimising aggregate option payoff at front expiry.
                 </p>
@@ -565,7 +588,7 @@ export function PositioningView() {
             className="h-full"
           >
             <div className="flex h-full flex-col">
-              <div className="flex flex-wrap gap-4 border-b border-border px-3 py-2 font-mono text-[10px]">
+              <div className="flex flex-wrap gap-4 border-b border-border px-3 py-2 font-mono text-type-xs">
                 <span>
                   <span className="text-muted-foreground">Pairs scanned </span>
                   <span className="text-foreground">{parity.length}</span>
@@ -586,7 +609,7 @@ export function PositioningView() {
                     No ATM pairs with mids — need live chain
                   </div>
                 ) : (
-                  <table className="w-full font-mono text-[10px]">
+                  <table className="w-full font-mono text-type-xs">
                     <thead className="sticky top-0 bg-card border-b border-border text-muted-foreground">
                       <tr>
                         <th className="px-2 py-1.5 text-left">DTE</th>
@@ -637,7 +660,7 @@ export function PositioningView() {
                   </table>
                 )}
               </div>
-              <div className="border-t border-border px-3 py-1.5 font-mono text-[9px] text-muted-foreground leading-snug">
+              <div className="border-t border-border px-3 py-1.5 font-mono text-type-2xs text-muted-foreground leading-snug">
                 Positive residual ⇒ synthetic stock (C−P) rich vs cash-and-carry. American early exercise,
                 borrow, and dividends can explain residuals — do not auto-trade. Crypto: use carefully (often European on Deribit).
               </div>
@@ -671,7 +694,7 @@ function LevelStat({
 }) {
   return (
     <div>
-      <div className="text-[9px] uppercase tracking-wider text-muted-foreground">
+      <div className="text-type-2xs uppercase tracking-wider text-muted-foreground">
         {term ? <Explain term={term}>{label}</Explain> : label}
       </div>
       <div className={`text-sm font-semibold tabular-nums ${color}`}>{value}</div>

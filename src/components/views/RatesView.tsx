@@ -42,12 +42,12 @@ export function RatesView() {
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border bg-card/40 px-2 py-1">
-        <span className="font-mono text-[11px] font-bold tracking-wider text-primary">MACROS &amp; RATES</span>
-        <span className="hidden font-mono text-[10px] text-muted-foreground md:inline">
+        <span className="font-mono text-type-sm font-bold tracking-wider text-primary">MACROS &amp; RATES</span>
+        <span className="hidden font-mono text-type-xs text-muted-foreground md:inline">
           Macro · SOFR / STIR · curve · plumbing · basis · carry
         </span>
         <span className="ml-auto flex flex-wrap items-center gap-2">
-          <span className="hidden font-mono text-[9px] text-muted-foreground/70 lg:inline" title="Resolved upstreams for this desk">
+          <span className="hidden font-mono text-type-2xs text-muted-foreground/70 lg:inline" title="Resolved upstreams for this desk">
             desk sources
           </span>
           <ApiSources apis={['FRED', 'NYFed', 'yfinance', 'MacroVol']} />
@@ -81,7 +81,7 @@ export function RatesView() {
             >
               <div className="overflow-x-auto">
                 {corr.instruments?.length && corr.matrix?.length ? (
-                  <table className="w-full border-collapse text-[10px]">
+                  <table className="w-full border-collapse text-type-xs">
                     <thead>
                       <tr>
                         <th className="p-1 text-left font-normal text-muted-foreground" />
@@ -99,8 +99,8 @@ export function RatesView() {
                               key={`${i}-${j}`}
                               className={`p-1 text-right tabular-nums ${
                                 i === j ? 'text-muted-foreground'
-                                  : v != null && v > 0.5 ? 'text-emerald-400'
-                                    : v != null && v < -0.3 ? 'text-red-400'
+                                  : v != null && v > 0.5 ? 'text-up'
+                                    : v != null && v < -0.3 ? 'text-down'
                                       : 'text-foreground'
                               }`}
                             >
@@ -112,7 +112,7 @@ export function RatesView() {
                     </tbody>
                   </table>
                 ) : (
-                  <div className="text-[10px] text-muted-foreground">
+                  <div className="text-type-xs text-muted-foreground">
                     Correlation matrix unavailable{corr.error ? `: ${corr.error}` : ''}.
                   </div>
                 )}

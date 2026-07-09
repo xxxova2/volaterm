@@ -72,13 +72,25 @@ export function computeGreeks(
     ? S * eq * normCdf(d1) - K * ert * normCdf(d2)
     : K * ert * normCdf(-d2) - S * eq * normCdf(-d1);
 
-  // Higher-order greeks kept on the mathematical (raw-σ, year) scale of BS.
+  // Higher-order greeks on mathematical (raw-σ, year) scale of BS.
+  // Charm = ∂Δ/∂T (Haug / Wikipedia). Call vs put differ by the q·N(·) term.
+  // Consumers that want per-calendar-day charm divide by 365 (see dealerExposure).
   const vanna = -eq * pdf * d2 / vol;
-  const charm = eq * pdf * (2 * (r - q) * T - d2 * volSqrtT) / (2 * T * volSqrtT);
+  const charmCore = pdf * (2 * (r - q) * T - d2 * volSqrtT) / (2 * T * volSqrtT);
+  const nd1Call = type === 'call' ? normCdf(d1) : normCdf(-d1);
+  const charm = type === 'call'
+    ? -eq * (charmCore - q * nd1Call)
+    : -eq * (charmCore + q * nd1Call);
   const volga = vegaRaw * d1 * d2 / vol;
   const speed = -gamma * (d1 / volSqrtT + 1 / S);
-  const veta = -S * eq * pdf * d1 * (r - q) / (volSqrtT * T);
-  const color = -eq * pdf * (d1 / (volSqrtT * T) + (2 * (r - q) * T - d2 * volSqrtT) / (2 * T * volSqrtT)) / S;
+  // Veta = ∂ν/∂T (year); includes full Haug terms
+  const veta = -S * eq * pdf * sqrtT * (
+    q + ((r - q) * d1) / volSqrtT - (1 + d1 * d2) / (2 * T)
+  );
+  const color = -eq * pdf / (S * volSqrtT) * (
+    2 * q * T + 1
+    + (2 * (r - q) * T - d2 * volSqrtT) * d1 / volSqrtT
+  ) / (2 * T);
   const zomma = gamma * (d1 * d2 - 1) / vol;
   const ultima = -vegaRaw * (d1 * d2 * (1 - d1 * d2) + d1 * d1 + d2 * d2) / (vol * vol);
 

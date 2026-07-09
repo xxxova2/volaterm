@@ -31,13 +31,13 @@ export function ImplyDrawer({
   const bias = (imply.bias || 'neutral').toLowerCase();
   const biasColor =
     bias === 'easing' || bias === 'ample' || bias === 'trough'
-      ? 'text-emerald-400'
+      ? 'text-up'
       : bias === 'tightening' || bias === 'stress' || bias === 'humped' || bias === 'inverted'
         ? 'text-amber'
         : bias === 'steepener'
-          ? 'text-sky-400'
+          ? 'text-info'
           : bias === 'flattener'
-            ? 'text-violet-400'
+            ? 'text-rate'
             : 'text-muted-foreground';
 
   return (
@@ -54,7 +54,7 @@ export function ImplyDrawer({
       >
         <div className="mb-2 flex items-start justify-between gap-2">
           <div>
-            <div className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
+            <div className="font-mono text-type-2xs uppercase tracking-wider text-muted-foreground">
               Imply read{context ? ` · ${context}` : ''}
             </div>
             <div className="mt-0.5 font-mono text-sm font-bold text-foreground">{imply.label}</div>
@@ -62,13 +62,13 @@ export function ImplyDrawer({
           <button
             type="button"
             onClick={onClose}
-            className="rounded px-2 py-0.5 font-mono text-[10px] text-muted-foreground hover:bg-muted hover:text-foreground"
+            className="rounded px-2 py-0.5 font-mono text-type-xs text-muted-foreground hover:bg-muted hover:text-foreground"
           >
             Esc
           </button>
         </div>
-        <p className="font-mono text-[11px] leading-relaxed text-foreground/90">{imply.text}</p>
-        <div className="mt-3 flex flex-wrap gap-2 font-mono text-[10px]">
+        <p className="font-mono text-type-sm leading-relaxed text-foreground/90">{imply.text}</p>
+        <div className="mt-3 flex flex-wrap gap-2 font-mono text-type-xs">
           <span className={cn('rounded border border-border px-1.5 py-0.5', biasColor)}>
             bias: {imply.bias || 'neutral'}
           </span>
@@ -78,7 +78,7 @@ export function ImplyDrawer({
             </span>
           )}
         </div>
-        <p className="mt-3 border-t border-border/60 pt-2 font-mono text-[9px] text-muted-foreground">
+        <p className="mt-3 border-t border-border/60 pt-2 font-mono text-type-2xs text-muted-foreground">
           Heuristic label from curve / strip geometry — not a trade recommendation. Confirm vs
           your model and liquidity.
         </p>
@@ -99,19 +99,19 @@ export function ImplyChip({
 }) {
   if (!imply?.label || imply.label === '—') {
     return compact ? null : (
-      <span className="text-[9px] text-muted-foreground/70">—</span>
+      <span className="text-type-2xs text-muted-foreground/70">—</span>
     );
   }
   const bias = (imply.bias || 'neutral').toLowerCase();
   const color =
     bias === 'easing' || bias === 'ample' || bias === 'trough'
-      ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+      ? 'bg-up/15 text-up border-up/30'
       : bias === 'tightening' || bias === 'stress' || bias === 'humped' || bias === 'inverted'
         ? 'bg-amber-500/15 text-amber-400 border-amber-500/30'
         : bias === 'steepener'
-          ? 'bg-sky-500/15 text-sky-400 border-sky-500/30'
+          ? 'bg-info/15 text-info border-info/30'
           : bias === 'flattener'
-            ? 'bg-violet-500/15 text-violet-400 border-violet-500/30'
+            ? 'bg-rate/15 text-rate border-rate/30'
             : bias === 'flat'
               ? 'bg-zinc-500/15 text-zinc-300 border-zinc-500/30'
               : 'bg-muted text-muted-foreground border-border';
@@ -119,7 +119,7 @@ export function ImplyChip({
   const interactive = !!onOpen;
 
   const className = cn(
-    'inline-flex max-w-full items-center gap-1 rounded border px-1 py-0.5 text-[9px] font-bold leading-tight',
+    'inline-flex max-w-full items-center gap-1 rounded border px-1 py-0.5 text-type-2xs font-bold leading-tight',
     color,
     interactive && 'cursor-pointer hover:ring-1 hover:ring-primary/40',
   );

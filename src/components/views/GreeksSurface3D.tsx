@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Html } from '@react-three/drei';
 import * as THREE from 'three';
@@ -7,6 +7,7 @@ import { VISUAL_CONFIG } from '../../config/constants';
 import { GREEK_META, type GreekKey } from './greeksTypes';
 import { greekRamp01, useGreekSurfaceGeometry } from './useGreekSurfaceGeometry';
 import { cn } from '../../lib/utils';
+import { EmptyState } from '../common/EmptyState';
 
 const { WIDTH, DEPTH, VISUAL_HEIGHT } = VISUAL_CONFIG.surface;
 
@@ -58,7 +59,7 @@ function Axes({
   info: NonNullable<ReturnType<typeof useGreekSurfaceGeometry>>;
   greekLabel: string;
 }) {
-  const labelCls = 'text-[9px] font-mono whitespace-nowrap';
+  const labelCls = 'text-type-2xs font-mono whitespace-nowrap';
 
   return (
     <>
@@ -137,7 +138,7 @@ function Legend({
     .join(', ');
 
   return (
-    <div className="absolute bottom-3 right-3 flex flex-col gap-1 text-[10px] font-mono">
+    <div className="absolute bottom-3 right-3 flex flex-col gap-1 text-type-xs font-mono">
       <div className="flex justify-between gap-2 text-muted-foreground">
         <span>{minV.toExponential(2)}</span>
         <span className="uppercase tracking-wider">{greekLabel}</span>
@@ -153,8 +154,19 @@ export function GreeksSurface3D() {
   const [greek, setGreek] = useState<GreekKey>('gamma');
   const [wireframe, setWireframe] = useState(false);
   const [hover, setHover] = useState<ReadoutPoint | null>(null);
+  const [pointerOver, setPointerOver] = useState(false);
+  const [reduceMotion, setReduceMotion] = useState(false);
+
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const sync = () => setReduceMotion(mq.matches);
+    sync();
+    mq.addEventListener('change', sync);
+    return () => mq.removeEventListener('change', sync);
+  }, []);
 
   const info = useGreekSurfaceGeometry(greek);
+  const autoRotate = !reduceMotion && !pointerOver;
 
   const atmX = useMemo(() => {
     if (!info || info.strikes.length === 0) return 0;
@@ -212,14 +224,21 @@ export function GreeksSurface3D() {
 
   if (!snapshot) {
     return (
-      <div className="flex items-center justify-center h-full text-muted-foreground text-xs font-mono">
-        No data
-      </div>
+      <EmptyState
+        kind="no-data"
+        title="No chain for 3D surface"
+        body="Load a surface (LIVE or demo) to render greek mesh."
+        className="h-full"
+      />
     );
   }
 
   return (
-    <div className="relative h-full w-full">
+    <div
+      className="relative h-full w-full"
+      onPointerEnter={() => setPointerOver(true)}
+      onPointerLeave={() => setPointerOver(false)}
+    >
       <Canvas
         camera={{ position: [3.4, 2.8, 3.8], fov: 42 }}
         gl={{ antialias: true, alpha: false }}
@@ -234,6 +253,8 @@ export function GreeksSurface3D() {
           maxPolarAngle={Math.PI / 2.2}
           minDistance={2}
           maxDistance={9}
+          autoRotate={autoRotate}
+          autoRotateSpeed={0.4}
         />
         {info && (
           <>
@@ -262,12 +283,12 @@ export function GreeksSurface3D() {
           <button
             data-testid="wireframe-toggle"
             onClick={() => setWireframe(w => !w)}
-            className="px-2 py-1 text-[10px] font-mono bg-card border border-border rounded hover:bg-muted text-muted-foreground"
+            className="px-2 py-1 text-type-xs font-mono bg-card border border-border rounded hover:bg-muted text-muted-foreground"
           >
             {wireframe ? 'Solid' : 'Wireframe'}
           </button>
           {info && (
-            <div className="px-2 py-1 text-[9px] font-mono bg-card/80 border border-border rounded text-muted-foreground">
+            <div className="px-2 py-1 text-type-2xs font-mono bg-card/80 border border-border rounded text-muted-foreground">
               <div>
                 Spot <span className="text-foreground tabular-nums">{snapshot.spot.toFixed(2)}</span>
               </div>
@@ -288,7 +309,7 @@ export function GreeksSurface3D() {
                 data-greek-button={g.key}
                 onClick={() => setGreek(g.key)}
                 className={cn(
-                  'px-1.5 py-0.5 text-[10px] font-mono rounded',
+                  'px-1.5 py-0.5 text-type-xs font-mono rounded',
                   greek === g.key ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:text-foreground',
                 )}
               >
@@ -303,7 +324,7 @@ export function GreeksSurface3D() {
                 data-greek-button={g.key}
                 onClick={() => setGreek(g.key)}
                 className={cn(
-                  'px-1.5 py-0.5 text-[10px] font-mono rounded',
+                  'px-1.5 py-0.5 text-type-xs font-mono rounded',
                   greek === g.key ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:text-foreground',
                 )}
               >
@@ -317,7 +338,7 @@ export function GreeksSurface3D() {
       {hover && (
         <div
           data-greek-3d-readout=""
-          className="pointer-events-none absolute bottom-3 left-3 z-10 bg-card/90 border border-border rounded px-2 py-1 text-[9px] font-mono text-muted-foreground"
+          className="pointer-events-none absolute bottom-3 left-3 z-10 bg-card/90 border border-border rounded px-2 py-1 text-type-2xs font-mono text-muted-foreground"
         >
           <div className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5">
             <span>Strike</span>

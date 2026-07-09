@@ -26,7 +26,7 @@ export function CurveSection({
       defaultOpen
       storageKey="rates.sec.curve"
       badge={
-        <span className="text-[10px] text-muted-foreground">{curveLive}/{curve.length} tenors live</span>
+        <span className="text-type-xs text-muted-foreground">{curveLive}/{curve.length} tenors live</span>
       }
     >
       <ResponsiveContainer width="100%" height={200}>

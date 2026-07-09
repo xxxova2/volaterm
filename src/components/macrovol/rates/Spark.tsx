@@ -1,5 +1,5 @@
 export function Spark({ values, color = '#3b82f6' }: { values: number[]; color?: string }) {
-  if (!values.length) return <div className="h-8 text-[9px] text-muted-foreground">no history</div>;
+  if (!values.length) return <div className="h-8 text-type-2xs text-muted-foreground">no history</div>;
   const min = Math.min(...values);
   const max = Math.max(...values);
   const span = max - min || 1;

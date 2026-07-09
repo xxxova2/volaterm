@@ -60,10 +60,10 @@ export function MacrovolView() {
       {/* Top bar */}
       <div className="flex flex-wrap items-center gap-2 border-b border-border bg-card/40 px-3 py-2">
         <span className="font-mono text-xs font-bold tracking-wider text-primary">MACROVOL</span>
-        <span className="font-mono text-[10px] text-muted-foreground">
+        <span className="font-mono text-type-xs text-muted-foreground">
           IV SURFACE · STIR RATES · MACRO · FRED · yfinance
         </span>
-        <div className="ml-auto flex items-center gap-3 overflow-x-auto font-mono text-[10px]">
+        <div className="ml-auto flex items-center gap-3 overflow-x-auto font-mono text-type-xs">
           {ticker.map((t) => (
             <span key={t.label} className="flex items-center gap-1 whitespace-nowrap">
               <span className="text-muted-foreground">{t.label}</span>
@@ -71,9 +71,9 @@ export function MacrovolView() {
             </span>
           ))}
           {apiOk === false && (
-            <span className="text-red-400">API offline — start macrovol-api :8765</span>
+            <span className="text-down">API offline — start macrovol-api :8765</span>
           )}
-          {apiOk && <span className="text-emerald-400">API live</span>}
+          {apiOk && <span className="text-up">API live</span>}
         </div>
       </div>
 
@@ -84,7 +84,7 @@ export function MacrovolView() {
             key={s.id}
             type="button"
             onClick={() => setSub(s.id)}
-            className={`rounded px-2.5 py-1 font-mono text-[10px] transition-colors ${
+            className={`rounded px-2.5 py-1 font-mono text-type-xs transition-colors ${
               sub === s.id
                 ? 'bg-primary text-primary-foreground'
                 : 'text-muted-foreground hover:bg-muted hover:text-foreground'
@@ -118,15 +118,15 @@ export function MacrovolView() {
                   onClick={() => setSub(card.id)}
                   className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-5 text-left transition-all hover:border-primary"
                 >
-                  <div className="text-[10px] text-muted-foreground">MODULE {card.mod}</div>
+                  <div className="text-type-xs text-muted-foreground">MODULE {card.mod}</div>
                   <div className="text-base font-semibold text-foreground">{card.title}</div>
                   <div className="text-xs leading-relaxed text-muted-foreground">{card.body}</div>
-                  <div className="mt-auto text-[10px] text-primary">OPEN →</div>
+                  <div className="mt-auto text-type-xs text-primary">OPEN →</div>
                 </button>
               ))}
             </div>
 
-            <div className="rounded-2xl border border-border bg-card p-4 text-[10px] text-muted-foreground">
+            <div className="rounded-2xl border border-border bg-card p-4 text-type-xs text-muted-foreground">
               <div className="flex flex-wrap gap-4">
                 <span>DATA: FRED API · yfinance</span>
                 <span>SURFACE: Black-Scholes · Cubic interpolation</span>

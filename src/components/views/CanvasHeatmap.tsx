@@ -219,7 +219,7 @@ export function CanvasHeatmap({
 
       <div className="flex items-center justify-between gap-2 px-1">
         <div className="flex items-center gap-2">
-          <span className="text-[9px] font-mono text-muted-foreground min-w-[4ch] text-right">{txt}</span>
+          <span className="text-type-2xs font-mono text-muted-foreground min-w-[4ch] text-right">{txt}</span>
           <div
             className="h-2 w-28 rounded-sm"
             style={{
@@ -230,11 +230,11 @@ export function CanvasHeatmap({
             data-legend=""
             data-legend-mode={diverging ? 'diverging' : 'sequential'}
           />
-          <span className="text-[9px] font-mono text-muted-foreground">{txtMax}</span>
+          <span className="text-type-2xs font-mono text-muted-foreground">{txtMax}</span>
           {onSortModeChange && (
             <button
               onClick={() => onSortModeChange(sortMode === 'delta' ? 'strike' : 'delta')}
-              className={cn('ml-2 px-1.5 py-0.5 text-[9px] font-mono rounded',
+              className={cn('ml-2 px-1.5 py-0.5 text-type-2xs font-mono rounded',
                 sortMode === 'delta' ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground hover:text-foreground'
               )}
             >

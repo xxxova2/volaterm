@@ -69,7 +69,7 @@ function PackTable({
 
   return (
     <>
-      <div className="grid grid-cols-[1.2fr_72px_72px_100px_1.4fr] gap-0 border-b border-border/60 px-1.5 py-1 text-[9px] text-muted-foreground">
+      <div className="grid grid-cols-[1.2fr_72px_72px_100px_1.4fr] gap-0 border-b border-border/60 px-1.5 py-1 text-type-2xs text-muted-foreground">
         <span>Spread</span>
         <span className="text-right">Rate bps</span>
         <span className="text-right">Price spr</span>
@@ -90,13 +90,13 @@ function PackTable({
               role={focusable ? 'row' : undefined}
               aria-selected={focusable ? isFocused : undefined}
               onClick={focusable ? () => focusRow(index, 'name') : undefined}
-              className={`grid grid-cols-[1.2fr_72px_72px_100px_1.4fr] items-center gap-0 border-t border-border/40 px-1.5 text-[10px] ${
+              className={`grid grid-cols-[1.2fr_72px_72px_100px_1.4fr] items-center gap-0 border-t border-border/40 px-1.5 text-type-xs ${
                 focusable ? 'cursor-default hover:bg-muted/20' : ''
-              } ${isFocused ? 'ring-1 ring-inset ring-primary/70 bg-primary/10' : ''} ${
+              } ${isFocused ? 'focus-ring-term-inset bg-primary/10' : ''} ${
                 !isFocused && bps != null && bps < 0
-                  ? 'bg-red-950/20'
+                  ? 'bg-down/15'
                   : !isFocused && bps != null && bps > 0
-                    ? 'bg-blue-950/15'
+                    ? 'bg-info/10'
                     : ''
               }`}
             >
@@ -106,9 +106,9 @@ function PackTable({
                   bps == null
                     ? 'text-muted-foreground'
                     : bps < 0
-                      ? 'text-red-400'
+                      ? 'text-down'
                       : bps > 0
-                        ? 'text-emerald-400'
+                        ? 'text-up'
                         : ''
                 }`}
               >
@@ -129,7 +129,7 @@ function PackTable({
                 <ImplyChip imply={s.imply} compact onOpen={onOpenImply} />
               </span>
               <span
-                className="truncate text-[9px] text-muted-foreground"
+                className="truncate text-type-2xs text-muted-foreground"
                 title={s.imply?.text || s.note}
               >
                 {s.imply?.text || s.note || s.legs?.join(' / ')}
@@ -154,8 +154,8 @@ export function CalendarPacksBoard({
   return (
     <div className="mt-4 space-y-3">
       <div>
-        <h4 className="text-[11px] font-semibold text-foreground">STIR SPREADS DESK</h4>
-        <p className="text-[9px] text-muted-foreground">
+        <h4 className="text-type-sm font-semibold text-foreground">STIR SPREADS DESK</h4>
+        <p className="text-type-2xs text-muted-foreground">
           Calendars · flies · packs · SERFF (SOFR−EFFR) · cash corridor · {stir.spreads.note}
         </p>
       </div>
@@ -169,7 +169,7 @@ export function CalendarPacksBoard({
         if (!rows.length) return null;
         return (
           <div key={kind} className="overflow-hidden rounded border border-border">
-            <div className="border-b border-border bg-background/40 px-2 py-1 text-[10px] font-semibold tracking-wide text-foreground">
+            <div className="border-b border-border bg-background/40 px-2 py-1 text-type-xs font-semibold tracking-wide text-foreground">
               {titleFor(kind)}
               <span className="ml-2 font-normal text-muted-foreground">
                 {rows.length} legs · hover chip for full read

@@ -34,13 +34,13 @@ export function SnapshotCards({ summary }: { summary: RatesSummary | null }) {
           return (
             <div
               key={card.label}
-              className={`rounded-lg border p-2.5 ${isNeg ? 'border-red-500/50 bg-red-950/20' : 'border-border bg-background/40'}`}
+              className={`rounded-lg border p-2.5 ${isNeg ? 'border-down/50 bg-down/15' : 'border-border bg-background/40'}`}
             >
-              <div className={`text-[10px] ${isNeg ? 'text-red-400' : 'text-muted-foreground'}`}>{card.label}</div>
-              <div className={`text-lg font-bold tabular-nums ${isNeg ? 'text-red-400' : 'text-foreground'}`}>
+              <div className={`text-type-xs ${isNeg ? 'text-down' : 'text-muted-foreground'}`}>{card.label}</div>
+              <div className={`text-lg font-bold tabular-nums ${isNeg ? 'text-down' : 'text-foreground'}`}>
                 {display}
               </div>
-              {isNeg && <div className="mt-0.5 text-[10px] text-red-400">⚠ INVERTED</div>}
+              {isNeg && <div className="mt-0.5 text-type-xs text-down">⚠ INVERTED</div>}
             </div>
           );
         })}

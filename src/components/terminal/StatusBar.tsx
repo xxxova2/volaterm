@@ -88,14 +88,14 @@ export function StatusBar() {
   const streamKind: FreshnessKind = streamConnected ? 'live' : 'unknown';
 
   return (
-    <footer className="flex h-6 items-center justify-between border-t border-border bg-card px-3 text-[10px] font-mono text-muted-foreground">
+    <footer className="flex h-6 items-center justify-between border-t border-border bg-card px-3 text-type-xs font-mono text-muted-foreground">
       <div className="flex items-center gap-2 sm:gap-3">
         <span className="flex items-center gap-1" title="Spot freshness">
-          <span className="text-[9px] uppercase opacity-70">spot</span>
+          <span className="text-type-2xs uppercase opacity-70">spot</span>
           <FreshnessChip kind={source === 'demo' ? 'demo' : spotKind} />
         </span>
         <span className="flex items-center gap-1" title="Chain / surface freshness">
-          <span className="text-[9px] uppercase opacity-70">chain</span>
+          <span className="text-type-2xs uppercase opacity-70">chain</span>
           <FreshnessChip kind={chainKind} />
         </span>
         <span className="text-muted-foreground/80">{sessionLabel}</span>
@@ -121,14 +121,14 @@ export function StatusBar() {
               : spotSource === 'fmp'
                 ? ' · spot:fmp'
                 : ' · spot:synth'}
-          {historyMode === 'live' ? ` · hist:${historicalFrames.length}` : ' · hist:synth'}
+          {historyMode === 'live' ? ` · hist:buf:${historicalFrames.length}` : ' · hist:synth'}
         </span>
       </div>
       <div className="flex items-center gap-2 sm:gap-3">
         <button
           type="button"
           onClick={toggleUiDensity}
-          className="rounded px-1.5 py-0.5 text-[9px] uppercase tracking-wider hover:bg-muted hover:text-foreground"
+          className="rounded px-1.5 py-0.5 text-type-2xs uppercase tracking-wider hover:bg-muted hover:text-foreground"
           title="Toggle dense / readable UI (D)"
         >
           {uiDensity === 'dense' ? 'dense' : 'read'}

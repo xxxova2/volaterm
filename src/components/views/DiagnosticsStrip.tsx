@@ -18,7 +18,7 @@ interface StatBlockProps {
 function StatBlock({ label, value, valueClassName, testId }: StatBlockProps) {
   return (
     <div className="flex items-center gap-2">
-      <span className="text-[9px] font-mono uppercase tracking-wider text-muted-foreground">
+      <span className="text-type-2xs font-mono uppercase tracking-wider text-muted-foreground">
         {label}
       </span>
       <span
@@ -36,8 +36,8 @@ export function DiagnosticsStrip({ sviReadout, arbResult, 'data-testid': testId 
   const calendarValue = arbResult ? fmtInt(arbResult.calendar.violations) : '\u2014';
   const butterflyValue = arbResult ? fmtInt(arbResult.butterfly.violations) : '\u2014';
 
-  const calendarClass = arbResult && arbResult.calendar.violations > 0 ? 'text-red-400' : 'text-green-400';
-  const butterflyClass = arbResult && arbResult.butterfly.violations > 0 ? 'text-red-400' : 'text-green-400';
+  const calendarClass = arbResult && arbResult.calendar.violations > 0 ? 'text-down' : 'text-up';
+  const butterflyClass = arbResult && arbResult.butterfly.violations > 0 ? 'text-down' : 'text-up';
 
   const arbClean = arbResult?.clean ?? true;
 
@@ -63,7 +63,7 @@ export function DiagnosticsStrip({ sviReadout, arbResult, 'data-testid': testId 
         />
       </div>
       <span
-        className={`rounded px-2 py-0.5 text-[10px] font-mono uppercase tracking-wider ${
+        className={`rounded px-2 py-0.5 text-type-xs font-mono uppercase tracking-wider ${
           arbClean ? 'bg-up/15 text-up' : 'bg-down/15 text-down'
         }`}
         data-testid="diagnostics-arb-badge"

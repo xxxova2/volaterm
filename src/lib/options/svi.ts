@@ -1,12 +1,12 @@
 import type { SVIParams, SVIFit } from './types';
 
 /**
- * Pure SVI total implied variance evaluation.
+ * Pure SVI total implied variance evaluation (Gatheral raw SVI).
  *
  *   w(k) = a + b * (rho * (k - m) + sqrt((k - m)^2 + sigma^2))
  *
- * where k = log(K/F) is log-moneyness. Kept as a standalone export because
- * downstream code/tests call it directly.
+ * where k = log(K/F) is log-moneyness and w = σ² · T is total variance.
+ * Convert to IV with: σ = sqrt(w / T)  (see sviIv).
  */
 export function svi(param: SVIParams, k: number): number {
   const { a, b, rho, m, sigma } = param;
@@ -14,21 +14,25 @@ export function svi(param: SVIParams, k: number): number {
   return a + b * term;
 }
 
+/** Implied vol from SVI total variance: σ = √(max(w,0) / T). */
+export function sviIv(param: SVIParams, k: number, T: number): number {
+  const w = svi(param, k);
+  const t = Math.max(T, 1e-12);
+  if (!(w > 0) || !isFinite(w)) return 0;
+  return Math.sqrt(w / t);
+}
+
 const NO_ARB_EPS = 1e-9;
 
 /**
  * Project SVI parameters onto the no-arbitrage (no-calendar + no-butterfly)
- * feasible set.
+ * feasible set on total variance w(k).
  *
  * Constraints enforced:
  *   b >= 1e-4            (positive slope, no calendar arb)
  *   |rho| <= 0.999       (slope bounded by asymptotes)
  *   sigma >= 1e-4        (positive smile curvature)
  *   a + b * sigma * sqrt(1 - rho^2) >= 0   (no butterfly arbitrage)
- *
- * The butterfly constraint is enforced by bumping `a` upward when needed;
- * this preserves the already-fit shape (b, rho, m, sigma) rather than
- * distorting it.
  */
 function projectNoArb(p: SVIParams): SVIParams {
   const b = Math.max(p.b, 1e-4);
@@ -44,48 +48,36 @@ function projectNoArb(p: SVIParams): SVIParams {
 
 /**
  * Jacobian of the SVI model w.r.t. {a, b, rho, m, sigma} at log-moneyness k.
- * Returns the five partial derivatives as a tuple.
  */
 function sviJacobian(p: SVIParams, k: number): [number, number, number, number, number] {
-  const { a: _a, b, rho, m, sigma } = p;
+  const { b, rho, m, sigma } = p;
   const dk = k - m;
   const dist = Math.sqrt(dk * dk + sigma * sigma);
   const term = rho * dk + dist;
-  // d/da = 1
   const dA = 1;
-  // d/db = term
   const dB = term;
-  // d/drho = b * (k - m)
   const dRho = b * dk;
-  // d/dm = b * (-rho + d(dist)/dm) = b * (-rho - (k-m)/dist)
   const dM = b * (-rho - dk / dist);
-  // d/dsigma = b * (sigma / dist)
   const dSigma = b * (sigma / dist);
   return [dA, dB, dRho, dM, dSigma];
 }
 
-function residual(p: SVIParams, k: number, iv: number): number {
-  return svi(p, k) - iv;
+function residual(p: SVIParams, k: number, w: number): number {
+  return svi(p, k) - w;
 }
 
-function sse(p: SVIParams, samples: { k: number; iv: number }[]): number {
+function sse(p: SVIParams, samples: { k: number; w: number }[]): number {
   let s = 0;
-  for (const { k, iv } of samples) {
-    const r = residual(p, k, iv);
+  for (const { k, w } of samples) {
+    const r = residual(p, k, w);
     s += r * r;
   }
   return s;
 }
 
-/**
- * Solve a 5x5 linear system A x = rhs via Gaussian elimination with partial
- * pivoting. Returns the solution vector (length 5).
- */
 function solve5x5(A: number[][], rhs: number[]): number[] {
-  // Augmented matrix copy.
   const M: number[][] = A.map((row, i) => [...row, rhs[i]!]);
   for (let col = 0; col < 5; col++) {
-    // Partial pivot.
     let pivot = col;
     let best = Math.abs(M[col]![col]!);
     for (let r = col + 1; r < 5; r++) {
@@ -95,7 +87,7 @@ function solve5x5(A: number[][], rhs: number[]): number[] {
         pivot = r;
       }
     }
-    if (best < 1e-18) continue; // singular column; skip
+    if (best < 1e-18) continue;
     if (pivot !== col) {
       const tmp = M[pivot]!;
       M[pivot] = M[col]!;
@@ -120,49 +112,55 @@ function solve5x5(A: number[][], rhs: number[]): number[] {
 }
 
 /**
- * Fit SVI parameters to an implied-volatility smile using Levenberg-Marquardt
- * with projection onto the no-arbitrage feasible set after each accepted step.
+ * Fit SVI to an implied-volatility smile via total variance.
  *
- * @param strikes  strike prices (same length as ivs)
- * @param ivs      implied volatilities (sqrt variance per unit time), parallel to strikes
- * @param spot     reference spot/forward used for log-moneyness k = log(K/spot)
- * @returns SVIFit with fitted params, RMSE, and sample count, or null when
- *          fewer than 5 valid (finite) points are available.
+ * Fits w(k) = IV² · T (canonical Gatheral raw SVI). Pass the year fraction T
+ * for the expiry being fit. When T is omitted, defaults to 1 (fit on variance
+ * units with unit time — only appropriate for synthetic/unit tests).
+ *
+ * @param strikes  strike prices
+ * @param ivs      implied vols (decimal σ), parallel to strikes
+ * @param spot     reference spot/forward for k = log(K/spot)
+ * @param T        time to expiry in years (default 1)
  */
-export function fitSVI(strikes: number[], ivs: (number | null)[], spot: number): SVIFit | null {
+export function fitSVI(
+  strikes: number[],
+  ivs: (number | null)[],
+  spot: number,
+  T = 1,
+): SVIFit | null {
   if (spot <= 0 || !isFinite(spot)) return null;
+  const yearFrac = Math.max(T, 1e-8);
 
-  const samples: { k: number; iv: number }[] = [];
+  const samples: { k: number; w: number }[] = [];
   for (let i = 0; i < strikes.length; i++) {
     const iv = ivs[i];
     const strike = strikes[i];
     if (strike == null || iv == null) continue;
     if (!isFinite(strike) || !isFinite(iv)) continue;
-    if (strike <= 0) continue;
+    if (strike <= 0 || iv <= 0) continue;
     const k = Math.log(strike / spot);
     if (!isFinite(k)) continue;
-    samples.push({ k, iv });
+    // Total variance w = σ² T
+    samples.push({ k, w: iv * iv * yearFrac });
   }
   if (samples.length < 5) return null;
 
-  // ---- Initial parameter estimate from the data shape ----
   const kVals = samples.map(s => s.k);
   const kMin = Math.min(...kVals);
   const kMax = Math.max(...kVals);
   const width = Math.max(kMax - kMin, 1e-6);
 
-  const ivMean = samples.reduce((acc, s) => acc + s.iv, 0) / samples.length;
-  const ivMin = Math.min(...samples.map(s => s.iv));
-  // a ~ minimum of the smile (level); b ~ vertical scale.
-  const aEst = Math.max(ivMin, 1e-3) * 0.5;
-  // Estimate skew direction (rho sign) from the slope of iv vs k.
-  const left = samples[0]!.iv;
-  const right = samples[samples.length - 1]!.iv;
-  const rhoEst = Math.max(-0.5, Math.min(0.5, (right - left) / Math.max(ivMean, 1e-3)));
+  const wMean = samples.reduce((acc, s) => acc + s.w, 0) / samples.length;
+  const wMin = Math.min(...samples.map(s => s.w));
+  // a ~ minimum total variance; b ~ vertical scale of w(k)
+  const aEst = Math.max(wMin, 1e-6) * 0.5;
+  const left = samples[0]!.w;
+  const right = samples[samples.length - 1]!.w;
+  const rhoEst = Math.max(-0.5, Math.min(0.5, (right - left) / Math.max(wMean, 1e-6)));
   const mEst = (kMin + kMax) / 2;
   const sigmaEst = Math.max(width / 4, 1e-2);
-  // b chosen so that the ATM-ish level roughly matches ivMean.
-  const bEst = Math.max((ivMean - aEst) / Math.max(sigmaEst, 1e-3), 1e-2);
+  const bEst = Math.max((wMean - aEst) / Math.max(sigmaEst, 1e-3), 1e-4);
 
   let params = projectNoArb({
     a: aEst,
@@ -179,7 +177,6 @@ export function fitSVI(strikes: number[], ivs: (number | null)[], spot: number):
   let prevSSE = sse(params, samples);
 
   for (let iter = 0; iter < MAX_ITER; iter++) {
-    // Build J^T J (5x5) and J^T r (5).
     const JtJ = [
       [0, 0, 0, 0, 0],
       [0, 0, 0, 0, 0],
@@ -188,9 +185,9 @@ export function fitSVI(strikes: number[], ivs: (number | null)[], spot: number):
       [0, 0, 0, 0, 0],
     ];
     const Jtr = [0, 0, 0, 0, 0];
-    for (const { k, iv } of samples) {
+    for (const { k, w } of samples) {
       const jac = sviJacobian(params, k);
-      const r = residual(params, k, iv);
+      const r = residual(params, k, w);
       for (let i = 0; i < 5; i++) {
         Jtr[i]! += jac[i]! * r;
         for (let j = 0; j < 5; j++) {
@@ -199,7 +196,6 @@ export function fitSVI(strikes: number[], ivs: (number | null)[], spot: number):
       }
     }
 
-    // Levenberg-Marquardt damping: (J^T J + lambda * diag(J^T J)).
     const A: number[][] = JtJ.map((row, i) => {
       const d = row[i]!;
       const diag = d <= 0 ? lambda : lambda * d;
@@ -226,7 +222,6 @@ export function fitSVI(strikes: number[], ivs: (number | null)[], spot: number):
       const improvement = prevSSE - trialSSE;
       params = trial;
       lambda *= 0.7;
-      // Convergence: relative SSE improvement negligible.
       if (improvement / Math.max(prevSSE, 1e-30) < REL_TOL) {
         prevSSE = trialSSE;
         break;
@@ -239,6 +234,7 @@ export function fitSVI(strikes: number[], ivs: (number | null)[], spot: number):
   }
 
   const finalSSE = sse(params, samples);
+  // RMSE in total-variance units
   const rmse = Math.sqrt(finalSSE / n);
   return { params, rmse, samples: n };
 }

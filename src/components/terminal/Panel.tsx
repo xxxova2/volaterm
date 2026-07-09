@@ -37,11 +37,11 @@ export function Panel({
             {title && <h3 className="text-xs font-semibold text-foreground">{title}</h3>}
             {apis && apis.length > 0 && <ApiSources apis={apis} />}
             {asOf && (
-              <span className="font-mono text-[9px] text-muted-foreground/80 tabular-nums" title="As of">
+              <span className="font-mono text-type-2xs text-muted-foreground/80 tabular-nums" title="As of">
                 {asOf}
               </span>
             )}
-            {subtitle && <span className="text-[10px] text-muted-foreground">{subtitle}</span>}
+            {subtitle && <span className="text-type-xs text-muted-foreground">{subtitle}</span>}
             {badge}
           </div>
           {actions && <div className="flex shrink-0 items-center gap-1">{actions}</div>}

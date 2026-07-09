@@ -40,7 +40,7 @@ export function GreeksExpiryView() {
                 content={({ active, payload, label }) => {
                   if (!active || !payload?.length) return null;
                   return (
-                    <div className="rounded border border-border bg-popover/95 p-2 font-mono text-[10px] shadow backdrop-blur">
+                    <div className="rounded border border-border bg-popover/95 p-2 font-mono text-type-xs shadow backdrop-blur">
                       <div className="mb-1 font-semibold text-foreground">{label}</div>
                       {payload.map(p => (
                         <div key={p.name} className="flex items-center justify-between gap-3">
@@ -73,7 +73,7 @@ export function GreeksExpiryView() {
 function Stat({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
     <div className="rounded border border-border bg-card px-3 py-2">
-      <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">{label}</div>
+      <div className="text-type-xs font-mono uppercase tracking-wider text-muted-foreground">{label}</div>
       <div className="mt-0.5 text-lg font-semibold font-mono tabular-nums" style={{ color: color ?? 'var(--foreground)' }}>{value}</div>
     </div>
   );

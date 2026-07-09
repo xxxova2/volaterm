@@ -100,7 +100,7 @@ export function useRatesData() {
       return stir.chart.map((p) => ({
         x: p.x,
         rate: p.implied_rate,
-        vsSofr: p.vs_sofr_bps,
+        vsSofr: p.vs_sofr_bps ?? null,
         source: p.source,
       }));
     }

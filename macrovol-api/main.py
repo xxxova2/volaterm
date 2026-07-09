@@ -58,10 +58,10 @@ async def rates_summary():
     T10Y2Y / T10Y3M from FRED are already yield spreads in percentage points
     (e.g. 0.35 = 35 bps). Frontend multiplies by 100 for bps display.
     """
-    from services.fred_client import FALLBACK_DATA
     keys = ["SOFR", "DFF", "DGS2", "DGS10", "T10Y2Y", "T10Y3M"]
+    # Fail-closed: do not inject hardcoded FALLBACK_DATA into trader-facing rates.
     results = await asyncio.gather(
-        *[get_latest(k) for k in keys],
+        *[get_latest(k, allow_fallback=False) for k in keys],
         return_exceptions=True
     )
     values = []
@@ -70,8 +70,8 @@ async def rates_summary():
     for i, r in enumerate(results):
         k = keys[i]
         if isinstance(r, Exception) or r is None:
-            values.append(FALLBACK_DATA.get(k))
-            field_src[k] = "fallback" if FALLBACK_DATA.get(k) is not None else "unavailable"
+            values.append(None)
+            field_src[k] = "unavailable"
         else:
             values.append(r)
             meta = get_meta(k)
@@ -90,7 +90,7 @@ async def rates_summary():
         "spread_note": "FRED T10Y2Y/T10Y3M are in percentage points. ×100 = bps.",
         "field_source": field_src,
         "obs_dates": obs_dates,
-        "risk_free_rate": round((values[0] or 0.0) / 100.0, 6) if values[0] is not None else None,
+        "risk_free_rate": round(float(values[0]) / 100.0, 6) if values[0] is not None else None,
         "as_of": datetime.now(timezone.utc).isoformat(),
         "source": source_label(keys),
     }
@@ -616,16 +616,8 @@ async def rates_correlations(window: int = Query(30, ge=5, le=252), period: str 
             content={"error": f"{type(e).__name__}: {str(e)}", "as_of": datetime.now(timezone.utc).isoformat()},
         )
 
-MACRO_FALLBACKS = {
-    "cpi_yoy": 2.3,
-    "core_cpi_yoy": 3.0,
-    "core_pce_yoy": 2.6,
-    "nfp_mom": 177.0,
-    "unemployment": 4.2,
-    "retail_sales": 724000.0,
-    "housing_starts": 1310.0,
-    "fed_balance_sheet": 6800.0,
-}
+# No hardcoded market levels — missing FRED observations stay None.
+# UI must render "—" / unavailable rather than stale demo numbers.
 
 @app.get("/api/macro/summary")
 async def get_macro_summary():
@@ -680,9 +672,6 @@ async def get_macro_summary():
             return None
         return round(((latest_val - year_ago_val) / year_ago_val) * 100, 2)
 
-    def val_or(v, fb):
-        return v if v is not None else fb
-
     cpi_yoy = yoY(cpi_data)
     core_pce_yoy = yoY(pce_data)
     core_cpi_yoy = yoY(core_cpi_data)
@@ -696,30 +685,32 @@ async def get_macro_summary():
     housing = results[5][0]["value"] if not isinstance(results[5], Exception) and results[5] else None
     fed_bs = results[6][0]["value"] if not isinstance(results[6], Exception) and results[6] else None
 
-    used_fallback = []
-    if cpi_yoy is None:
-        used_fallback.append("cpi_yoy")
-    if core_pce_yoy is None:
-        used_fallback.append("core_pce_yoy")
-    if core_cpi_yoy is None:
-        used_fallback.append("core_cpi_yoy")
-    if nfp_raw is None:
-        used_fallback.append("nfp_mom")
-    if unrate is None:
-        used_fallback.append("unemployment")
+    missing = []
+    for name, val in (
+        ("cpi_yoy", cpi_yoy),
+        ("core_pce_yoy", core_pce_yoy),
+        ("core_cpi_yoy", core_cpi_yoy),
+        ("nfp_mom", nfp_raw),
+        ("unemployment", unrate),
+        ("retail_sales", retail),
+        ("housing_starts", housing),
+        ("fed_balance_sheet", fed_bs),
+    ):
+        if val is None:
+            missing.append(name)
 
     def _obs(data):
         return data[0]["date"] if data else None
 
     return {
-        "cpi_yoy": val_or(cpi_yoy, MACRO_FALLBACKS["cpi_yoy"]),
-        "core_pce_yoy": val_or(core_pce_yoy, MACRO_FALLBACKS["core_pce_yoy"]),
-        "core_cpi_yoy": val_or(core_cpi_yoy, MACRO_FALLBACKS["core_cpi_yoy"]),
-        "nfp_mom": val_or(nfp_raw, MACRO_FALLBACKS["nfp_mom"]),
-        "unemployment": val_or(unrate, MACRO_FALLBACKS["unemployment"]),
-        "retail_sales": val_or(retail, MACRO_FALLBACKS["retail_sales"]),
-        "housing_starts": val_or(housing, MACRO_FALLBACKS["housing_starts"]),
-        "fed_balance_sheet": val_or(fed_bs, MACRO_FALLBACKS["fed_balance_sheet"]),
+        "cpi_yoy": cpi_yoy,
+        "core_pce_yoy": core_pce_yoy,
+        "core_cpi_yoy": core_cpi_yoy,
+        "nfp_mom": nfp_raw,
+        "unemployment": unrate,
+        "retail_sales": retail,
+        "housing_starts": housing,
+        "fed_balance_sheet": fed_bs,
         "units": {
             "cpi_yoy": "percent_yoy",
             "core_cpi_yoy": "percent_yoy",
@@ -740,10 +731,11 @@ async def get_macro_summary():
             "housing_starts": _obs(get(5)),
             "fed_balance_sheet": _obs(get(6)),
         },
-        "fallback_fields": used_fallback,
+        "fallback_fields": [],
+        "missing_fields": missing,
         "as_of": datetime.now(timezone.utc).isoformat(),
-        "source": "FRED+fallback" if used_fallback else "FRED",
-        "note": "CPI/PCE release dates lag; obs_dates show last published observation, not request time.",
+        "source": "FRED" if not missing else ("FRED+partial" if len(missing) < 8 else "unavailable"),
+        "note": "CPI/PCE release dates lag; obs_dates show last published observation, not request time. Missing fields are null — never hard-coded.",
     }
 
 @app.get("/api/macro/series/{series_id}")

@@ -117,8 +117,8 @@ export function Greeks10View() {
     <div className="flex h-full flex-col overflow-hidden">
       {/* Header / section toggle */}
       <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2">
-        <span className="text-[10px] font-mono font-bold tracking-wider text-primary">GREEKS 1.0</span>
-        <span className="text-[10px] font-mono text-muted-foreground">
+        <span className="text-type-xs font-mono font-bold tracking-wider text-primary">GREEKS 1.0</span>
+        <span className="text-type-xs font-mono text-muted-foreground">
           MacroVol · BS · yfinance
           {data?.r != null && (
             <> · r={(data.r * 100).toFixed(2)}% ({data.r_source || 'SOFR'}) · q={((data.q ?? 0.013) * 100).toFixed(2)}%</>
@@ -133,7 +133,7 @@ export function Greeks10View() {
               key={s.id}
               type="button"
               onClick={() => setSection(s.id)}
-              className={`rounded px-2.5 py-1 font-mono text-[10px] ${
+              className={`rounded px-2.5 py-1 font-mono text-type-xs ${
                 section === s.id
                   ? 'bg-primary text-primary-foreground'
                   : 'border border-border text-muted-foreground hover:border-primary'
@@ -181,7 +181,7 @@ export function Greeks10View() {
                 <button
                   type="button"
                   onClick={() => setTicker(storeSymbol)}
-                  className="rounded border border-amber-500/40 px-2 py-1 text-[10px] text-amber-400"
+                  className="rounded border border-amber-500/40 px-2 py-1 text-type-xs text-amber-400"
                 >
                   Use terminal: {storeSymbol}
                 </button>
@@ -189,12 +189,12 @@ export function Greeks10View() {
             </div>
 
             {loading && (
-              <div className="text-xs text-muted-foreground animate-pulse">
+              <div className="text-type-xs text-muted-foreground">
                 Computing Greeks for {ticker}… fetching option chain via MacroVol API (15–30s)
               </div>
             )}
             {error && (
-              <div className="rounded border border-red-500/40 bg-red-950/20 px-3 py-2 text-xs text-red-400">
+              <div className="rounded border border-down/40 bg-down/15 px-3 py-2 text-xs text-down">
                 {error} — Try SPY if index options fail. Ensure MacroVol API is on :8765.
               </div>
             )}
@@ -205,10 +205,10 @@ export function Greeks10View() {
                 <div>
                   <div className="mb-2 flex flex-wrap items-center gap-2">
                     <h3 className="text-xs font-semibold text-foreground">ATM GREEKS SNAPSHOT</h3>
-                    <span className="text-[10px] text-muted-foreground">
+                    <span className="text-type-xs text-muted-foreground">
                       {ticker} · Spot: ${data.spot?.toFixed(2)} · {data.total_points} option points · nearest expiry
                     </span>
-                    <span className="text-[10px] text-emerald-400">API: {data.source || 'yfinance'} · MacroVol</span>
+                    <span className="text-type-xs text-up">API: {data.source || 'yfinance'} · MacroVol</span>
                   </div>
                   <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-6">
                     {GREEKS.map((g) => (
@@ -222,14 +222,14 @@ export function Greeks10View() {
                             : 'border-border bg-card hover:border-border/80'
                         }`}
                       >
-                        <div className="text-[10px] font-mono" style={{ color: g.color }}>{g.label}</div>
+                        <div className="text-type-xs font-mono" style={{ color: g.color }}>{g.label}</div>
                         <div className="text-lg font-bold text-foreground">
                           {data.atm?.[g.key as keyof typeof data.atm] != null
                             ? Number(data.atm[g.key as keyof typeof data.atm]).toFixed(4)
                             : '—'}
                         </div>
-                        <div className="mt-1 text-[9px] leading-snug text-muted-foreground">{g.desc}</div>
-                        <div className="mt-1 text-[9px] text-muted-foreground/70">{g.formula}</div>
+                        <div className="mt-1 text-type-2xs leading-snug text-muted-foreground">{g.desc}</div>
+                        <div className="mt-1 text-type-2xs text-muted-foreground/70">{g.formula}</div>
                       </button>
                     ))}
                   </div>
@@ -240,7 +240,7 @@ export function Greeks10View() {
                   <div>
                     <div className="mb-1 flex items-center gap-2">
                       <h3 className="text-xs font-semibold" style={{ color: greek.color }}>{greek.label} SURFACE</h3>
-                      <span className="text-[10px] text-muted-foreground">{greek.desc}</span>
+                      <span className="text-type-xs text-muted-foreground">{greek.desc}</span>
                     </div>
                     <div className="overflow-hidden rounded-xl border border-border bg-[#0a0a0a]">
                       <Suspense fallback={<div className="p-8 text-center text-xs text-muted-foreground">Loading surface…</div>}>
@@ -301,33 +301,33 @@ export function Greeks10View() {
                 {gexChartData.length > 0 && (
                   <div>
                     <h3 className="text-xs font-semibold text-foreground">GAMMA EXPOSURE (GEX)</h3>
-                    <p className="mt-0.5 text-[10px] text-muted-foreground">
+                    <p className="mt-0.5 text-type-xs text-muted-foreground">
                       Naive dealer GEX (call + / put −) · + = stabilizing · − = destabilizing · not inventory model
                     </p>
                     <div className="mt-2 grid grid-cols-3 gap-2">
                       <div className="rounded-lg border border-border bg-card p-3">
-                        <div className="text-[10px] text-muted-foreground">NET GEX</div>
-                        <div className={`text-lg font-bold ${gexTotal > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                        <div className="text-type-xs text-muted-foreground">NET GEX</div>
+                        <div className={`text-lg font-bold ${gexTotal > 0 ? 'text-up' : 'text-down'}`}>
                           ${(gexTotal / 1e6).toFixed(1)}M
                         </div>
                       </div>
                       <div className="rounded-lg border border-border bg-card p-3">
-                        <div className="text-[10px] text-muted-foreground">GEX FLIP</div>
+                        <div className="text-type-xs text-muted-foreground">GEX FLIP</div>
                         <div className="text-lg font-bold text-amber-400">
                           {flipStrike != null ? `$${flipStrike.toFixed(0)}` : '—'}
                         </div>
                       </div>
                       <div className="rounded-lg border border-border bg-card p-3">
-                        <div className="text-[10px] text-muted-foreground">SPOT vs FLIP</div>
+                        <div className="text-type-xs text-muted-foreground">SPOT vs FLIP</div>
                         <div className={`text-lg font-bold ${
-                          flipSide === 'above' ? 'text-emerald-400' : flipSide === 'below' ? 'text-red-400' : 'text-muted-foreground'
+                          flipSide === 'above' ? 'text-up' : flipSide === 'below' ? 'text-down' : 'text-muted-foreground'
                         }`}>
                           {flipSide ? flipSide.toUpperCase() : '—'}
                         </div>
                       </div>
                     </div>
                     {data.gex_convention && (
-                      <p className="mt-1 text-[9px] text-muted-foreground/80">{data.gex_convention}</p>
+                      <p className="mt-1 text-type-2xs text-muted-foreground/80">{data.gex_convention}</p>
                     )}
                     <div className="mt-2 rounded-xl border border-border bg-card p-3">
                       <ResponsiveContainer width="100%" height={260}>
@@ -467,7 +467,7 @@ function HeatMaps({
       )}
       <div>
         <h3 className="text-xs font-semibold text-foreground">GEX &amp; CHARM EXPOSURE HEAT MAPS</h3>
-        <p className="text-[10px] text-muted-foreground">
+        <p className="text-type-xs text-muted-foreground">
           GEX = γ × OI × sign · Red = dealers short gamma · Green = long gamma · Dashed = spot
         </p>
       </div>
@@ -484,7 +484,7 @@ function HeatMaps({
         )}
       </div>
       {!gexGrid?.T_vals?.length && (
-        <div className="rounded-xl border border-border bg-card py-6 text-center text-[10px] text-muted-foreground">
+        <div className="rounded-xl border border-border bg-card py-6 text-center text-type-xs text-muted-foreground">
           Insufficient option data for GEX heatmap (need ≥10 points with gamma × OI)
         </div>
       )}
@@ -509,7 +509,7 @@ function OiByStrike({ data }: { data: GreeksData }) {
   return (
     <div>
       <h3 className="text-xs font-semibold text-foreground">POSITIONS BY STRIKE</h3>
-      <p className="text-[10px] text-muted-foreground">
+      <p className="text-type-xs text-muted-foreground">
         Puts ← Left · Calls → Right · Open Interest · Spot ${data.spot?.toFixed(0)}
       </p>
       <div className="mt-2 rounded-xl border border-border bg-card p-3">
@@ -569,11 +569,11 @@ function GexCalendar({ data }: { data: GreeksData }) {
   return (
     <div>
       <h3 className="text-xs font-semibold text-foreground">GAMMA EXPOSURE CALENDAR</h3>
-      <p className="text-[10px] text-muted-foreground">
+      <p className="text-type-xs text-muted-foreground">
         Strike vs Expiry · Blue = MM long gamma · Red = MM short gamma
       </p>
       <div className="mt-2 max-h-[400px] overflow-auto rounded-xl border border-border bg-card p-2">
-        <table className="w-full border-collapse text-[10px]">
+        <table className="w-full border-collapse text-type-xs">
           <thead>
             <tr>
               <th className="w-14 p-1 text-right font-normal text-muted-foreground">Strike</th>
@@ -598,7 +598,7 @@ function GexCalendar({ data }: { data: GreeksData }) {
                       <td
                         key={T}
                         style={{ background: gexColor(val), padding: '3px 4px' }}
-                        className="text-center text-[9px]"
+                        className="text-center text-type-2xs"
                         title={`K=${K} DTE=${Math.round(T * 365)} GEX=$${(val / 1000).toFixed(1)}K`}
                       >
                         {Math.abs(val) > maxGex * 0.1

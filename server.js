@@ -74,7 +74,11 @@ fastify.get('/api/health', async () => ({ status: 'ok', timestamp: Date.now() })
 
 fastify.get('/api/options/:symbol', async (request, reply) => {
   const { symbol: rawSymbol } = request.params;
-  const symbol = validateSymbol(rawSymbol) || 'SPY';
+  const symbol = validateSymbol(rawSymbol);
+  if (!symbol) {
+    reply.code(400);
+    return { error: 'Invalid symbol' };
+  }
   const now = Date.now();
   const { probe, max: maxStr } = request.query;
   const isProbe = probe === '1' || probe === 'true';
@@ -152,7 +156,11 @@ function runYf(symbol, mode) {
 }
 
 fastify.get('/api/yf/history/:symbol', async (request, reply) => {
-  const symbol = validateSymbol(request.params.symbol) || 'SPY';
+  const symbol = validateSymbol(request.params.symbol);
+  if (!symbol) {
+    reply.code(400);
+    return { error: 'Invalid symbol' };
+  }
   const now = Date.now();
   const cached = cacheStore.get(`yf:history:${symbol}`);
   if (cached && now - cached.timestamp < CACHE_TTL) return cached.data;
@@ -167,7 +175,11 @@ fastify.get('/api/yf/history/:symbol', async (request, reply) => {
 });
 
 fastify.get('/api/yf/info/:symbol', async (request, reply) => {
-  const symbol = validateSymbol(request.params.symbol) || 'SPY';
+  const symbol = validateSymbol(request.params.symbol);
+  if (!symbol) {
+    reply.code(400);
+    return { error: 'Invalid symbol' };
+  }
   const now = Date.now();
   const cached = cacheStore.get(`yf:info:${symbol}`);
   if (cached && now - cached.timestamp < CACHE_TTL) return cached.data;
@@ -371,7 +383,11 @@ fastify.get('/api/deribit/market/:currency', async (request, reply) => {
 // Pushes FMP quote ticks to the browser so spot updates without a full poll.
 // Interval is session-aware (faster in RTH). Clients reconnect automatically.
 fastify.get('/api/stream/quote/:symbol', async (request, reply) => {
-  const symbol = validateSymbol(request.params.symbol) || 'SPY';
+  const symbol = validateSymbol(request.params.symbol);
+  if (!symbol) {
+    reply.code(400);
+    return { error: 'Invalid symbol' };
+  }
   const origin = request.headers.origin;
   const allowOrigin =
     !origin || ALLOWED_ORIGINS.includes(origin) ? (origin || ALLOWED_ORIGINS[0]) : null;
@@ -395,12 +411,33 @@ fastify.get('/api/stream/quote/:symbol', async (request, reply) => {
   reply.raw.write(': connected\n\n');
 
   let closed = false;
+  let lastGoodTickAt = 0;
+  let consecutiveFailures = 0;
+  // If no good tick for this long, emit stale + end stream so client SSE chip drops.
+  const STALE_MS = 90_000;
+  const MAX_FAILURES = 5;
+
+  let timer = null;
+  let retune = null;
+  let watchdog = null;
+
+  const cleanup = () => {
+    if (closed) return;
+    closed = true;
+    if (timer) clearInterval(timer);
+    if (retune) clearInterval(retune);
+    if (watchdog) clearInterval(watchdog);
+    try { reply.raw.end(); } catch { /* ignore */ }
+  };
+
   const writeTick = async () => {
     if (closed) return;
     try {
       const { status, body } = await proxyFmp(`quote?symbol=${encodeURIComponent(symbol)}`, FMP_API_KEY, FMP_BASE);
       if (status === 200 && Array.isArray(body) && body[0] && body[0].price > 0) {
         const q = body[0];
+        lastGoodTickAt = Date.now();
+        consecutiveFailures = 0;
         const payload = {
           symbol: q.symbol || symbol,
           price: q.price,
@@ -410,11 +447,23 @@ fastify.get('/api/stream/quote/:symbol', async (request, reply) => {
           source: 'fmp',
         };
         reply.raw.write(`data: ${JSON.stringify(payload)}\n\n`);
-      } else if (!FMP_API_KEY) {
-        reply.raw.write(`data: ${JSON.stringify({ error: 'no_api_key', timestamp: Date.now() })}\n\n`);
+      } else {
+        consecutiveFailures += 1;
+        const errCode = !FMP_API_KEY ? 'no_api_key' : 'tick_failed';
+        reply.raw.write(`data: ${JSON.stringify({ error: errCode, timestamp: Date.now(), consecutiveFailures })}\n\n`);
+        if (
+          consecutiveFailures >= MAX_FAILURES
+          || (lastGoodTickAt > 0 && Date.now() - lastGoodTickAt > STALE_MS)
+          || (!FMP_API_KEY && consecutiveFailures >= 2)
+        ) {
+          reply.raw.write(`data: ${JSON.stringify({ error: 'stream_stale', timestamp: Date.now() })}\n\n`);
+          cleanup();
+        }
       }
     } catch (err) {
-      reply.raw.write(`data: ${JSON.stringify({ error: 'tick_failed', detail: String(err.message || err) })}\n\n`);
+      consecutiveFailures += 1;
+      reply.raw.write(`data: ${JSON.stringify({ error: 'tick_failed', detail: String(err.message || err), timestamp: Date.now() })}\n\n`);
+      if (consecutiveFailures >= MAX_FAILURES) cleanup();
     }
   };
 
@@ -436,19 +485,23 @@ fastify.get('/api/stream/quote/:symbol', async (request, reply) => {
     return closedMs;
   };
 
-  let timer = setInterval(writeTick, pickInterval());
-  const retune = setInterval(() => {
+  timer = setInterval(writeTick, pickInterval());
+  retune = setInterval(() => {
     clearInterval(timer);
     timer = setInterval(writeTick, pickInterval());
   }, 60_000);
 
-  const cleanup = () => {
+  // Watchdog: end stream if last good tick is too old (FMP dead but no throw).
+  watchdog = setInterval(() => {
     if (closed) return;
-    closed = true;
-    clearInterval(timer);
-    clearInterval(retune);
-    try { reply.raw.end(); } catch { /* ignore */ }
-  };
+    if (lastGoodTickAt > 0 && Date.now() - lastGoodTickAt > STALE_MS) {
+      try {
+        reply.raw.write(`data: ${JSON.stringify({ error: 'stream_stale', timestamp: Date.now() })}\n\n`);
+      } catch { /* ignore */ }
+      cleanup();
+    }
+  }, 15_000);
+
   request.raw.on('close', cleanup);
   request.raw.on('error', cleanup);
 });

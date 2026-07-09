@@ -91,7 +91,7 @@ function apiBadge(
 function Stat({ label, value, color, term }: { label: string; value: string; color?: string; term?: string }) {
   return (
     <div className="flex flex-col">
-      <span className="text-[10px] text-muted-foreground font-mono">
+      <span className="text-type-xs text-muted-foreground font-mono">
         {term ? <Explain term={term}>{label}</Explain> : label}
       </span>
       <span className="text-xs font-semibold font-mono tabular-nums" style={{ color: color ?? 'var(--foreground)' }}>{value}</span>
@@ -139,23 +139,23 @@ export function DeskView() {
       <div className="flex flex-col gap-1 rounded border border-border bg-card px-2 py-1.5">
         <div className="flex flex-wrap items-center gap-2">
           <span className="px-1 font-mono text-xs font-bold tracking-wider text-primary">MM DESK</span>
-          <span className="font-mono text-[10px] text-muted-foreground">
+          <span className="font-mono text-type-xs text-muted-foreground">
             {snapshot.symbol} @ {fmtPrice(snapshot.spot, snapshot.spot > 1000 ? 1 : 2)}
           </span>
           <span
-            className="rounded border border-border px-1.5 py-0.5 font-mono text-[9px] text-amber"
+            className="rounded border border-border px-1.5 py-0.5 font-mono text-type-2xs text-amber"
             title={badge.detail}
           >
             {badge.label}
           </span>
           <FreshnessChip kind={source === 'live' ? (chainUsed === 'synthetic' ? 'delayed' : 'live') : 'demo'} />
-          <span className="hidden font-mono text-[9px] text-muted-foreground md:inline">
+          <span className="hidden font-mono text-type-2xs text-muted-foreground md:inline">
             Blotter first · tools secondary · BS-Merton
             {chainUsed === 'deribit' ? ' · Deribit mark IV' : ''}
           </span>
         </div>
         {/* Inventory blotter — primary risk tape */}
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 rounded border border-primary/20 bg-primary/5 px-2 py-1 font-mono text-[10px]">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 rounded border border-primary/20 bg-primary/5 px-2 py-1 font-mono text-type-xs">
           <span className="font-bold uppercase tracking-wider text-primary">Blotter Σ</span>
           <span>
             <span className="text-muted-foreground">Δ </span>
@@ -180,14 +180,14 @@ export function DeskView() {
               {' '}ν<span className="text-foreground">{b.vega.toFixed(0)}</span>
             </span>
           ))}
-          <span className="ml-auto hidden text-[8px] text-muted-foreground sm:inline">
+          <span className="ml-auto hidden text-type-2xs text-muted-foreground sm:inline">
             listed OI scan — not your fills · Combo for real book
           </span>
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
           {(['structure', 'pnl', 'hedge', 'carry'] as const).map((group) => (
             <div key={group} className="flex flex-wrap items-center gap-0.5">
-              <span className="mr-0.5 font-mono text-[8px] uppercase tracking-wider text-muted-foreground/70">
+              <span className="mr-0.5 font-mono text-type-2xs uppercase tracking-wider text-muted-foreground/70">
                 {group}
               </span>
               {TOOLS.filter((t) => t.group === group).map((t) => (
@@ -203,7 +203,7 @@ export function DeskView() {
                     setTool(t.id);
                   }}
                   className={cn(
-                    'px-1.5 py-0.5 text-[10px] font-mono rounded border transition-colors',
+                    'px-1.5 py-0.5 text-type-xs font-mono rounded border transition-colors',
                     tool === t.id
                       ? 'border-primary text-primary bg-primary/10'
                       : 'border-border text-muted-foreground hover:text-foreground',
@@ -298,7 +298,7 @@ function HedgeTool() {
   return (
     <ToolChrome>
       <div className="flex flex-wrap gap-3 px-2 py-1 border border-border bg-card/50 rounded items-end">
-        <label className="text-[10px] font-mono text-muted-foreground flex flex-col gap-0.5">
+        <label className="text-type-xs font-mono text-muted-foreground flex flex-col gap-0.5">
           Mode
           <select className="bg-background border border-border rounded px-1 py-0.5 text-xs font-mono" value={mode} onChange={e => setMode(e.target.value as HedgeMode)}>
             <option value="threshold">Threshold</option>
@@ -307,28 +307,28 @@ function HedgeTool() {
           </select>
         </label>
         {mode === 'threshold' && (
-          <label className="text-[10px] font-mono text-muted-foreground flex flex-col gap-0.5">
+          <label className="text-type-xs font-mono text-muted-foreground flex flex-col gap-0.5">
             |Δ| trigger
             <input type="number" step={0.01} value={threshold} onChange={e => setThreshold(+e.target.value)} className="w-16 bg-background border border-border rounded px-1 py-0.5 text-xs font-mono" />
           </label>
         )}
         {mode === 'tolerance' && (
-          <label className="text-[10px] font-mono text-muted-foreground flex flex-col gap-0.5">
+          <label className="text-type-xs font-mono text-muted-foreground flex flex-col gap-0.5">
             Band
             <input type="number" step={0.01} value={tolerance} onChange={e => setTolerance(+e.target.value)} className="w-16 bg-background border border-border rounded px-1 py-0.5 text-xs font-mono" />
           </label>
         )}
         {mode === 'period' && (
-          <label className="text-[10px] font-mono text-muted-foreground flex flex-col gap-0.5">
+          <label className="text-type-xs font-mono text-muted-foreground flex flex-col gap-0.5">
             Every N steps
             <input type="number" step={1} value={period} onChange={e => setPeriod(+e.target.value)} className="w-16 bg-background border border-border rounded px-1 py-0.5 text-xs font-mono" />
           </label>
         )}
-        <label className="text-[10px] font-mono text-muted-foreground flex flex-col gap-0.5">
+        <label className="text-type-xs font-mono text-muted-foreground flex flex-col gap-0.5">
           Realized vol
           <input type="number" step={0.01} value={rv} onChange={e => setRv(+e.target.value)} className="w-16 bg-background border border-border rounded px-1 py-0.5 text-xs font-mono" />
         </label>
-        <label className="text-[10px] font-mono text-muted-foreground flex flex-col gap-0.5">
+        <label className="text-type-xs font-mono text-muted-foreground flex flex-col gap-0.5">
           Opt qty (− short)
           <input type="number" step={1} value={qty} onChange={e => setQty(+e.target.value)} className="w-16 bg-background border border-border rounded px-1 py-0.5 text-xs font-mono" />
         </label>
@@ -381,7 +381,7 @@ function ComboTool() {
   return (
     <ToolChrome>
       <div className="flex flex-wrap gap-3 px-2 py-1 border border-border bg-card/50 rounded items-end">
-        <label className="text-[10px] font-mono text-muted-foreground flex flex-col gap-0.5">
+        <label className="text-type-xs font-mono text-muted-foreground flex flex-col gap-0.5">
           Template
           <select className="bg-background border border-border rounded px-1 py-0.5 text-xs font-mono" value={template} onChange={e => setTemplate(e.target.value as typeof template)}>
             <option value="short_straddle">Short straddle (MM)</option>
@@ -391,7 +391,7 @@ function ComboTool() {
             <option value="long_call">Long call</option>
           </select>
         </label>
-        <label className="text-[10px] font-mono text-muted-foreground flex flex-col gap-0.5">
+        <label className="text-type-xs font-mono text-muted-foreground flex flex-col gap-0.5">
           Expiry
           <select className="bg-background border border-border rounded px-1 py-0.5 text-xs font-mono" value={expiryIdx} onChange={e => setExpiryIdx(+e.target.value)}>
             {snapshot.expiries.map((e, i) => (
@@ -466,7 +466,7 @@ function SimTool() {
   return (
     <ToolChrome>
       <div className="flex flex-wrap gap-3 px-2 py-1 border border-border bg-card/50 rounded items-end">
-        <label className="text-[10px] font-mono text-muted-foreground flex flex-col gap-0.5">
+        <label className="text-type-xs font-mono text-muted-foreground flex flex-col gap-0.5">
           Structure
           <select className="bg-background border border-border rounded px-1 py-0.5 text-xs font-mono" value={template} onChange={e => setTemplate(e.target.value as typeof template)}>
             <option value="short_straddle">Short straddle</option>
@@ -474,15 +474,15 @@ function SimTool() {
             <option value="long_call">Long call</option>
           </select>
         </label>
-        <label className="text-[10px] font-mono text-muted-foreground flex flex-col gap-0.5">
+        <label className="text-type-xs font-mono text-muted-foreground flex flex-col gap-0.5">
           Drift μ
           <input type="number" step={0.01} value={drift} onChange={e => setDrift(+e.target.value)} className="w-16 bg-background border border-border rounded px-1 py-0.5 text-xs font-mono" />
         </label>
-        <label className="text-[10px] font-mono text-muted-foreground flex flex-col gap-0.5">
+        <label className="text-type-xs font-mono text-muted-foreground flex flex-col gap-0.5">
           Realized σ
           <input type="number" step={0.01} value={vol} onChange={e => setVol(+e.target.value)} className="w-16 bg-background border border-border rounded px-1 py-0.5 text-xs font-mono" />
         </label>
-        <label className="text-[10px] font-mono text-muted-foreground flex flex-col gap-0.5">
+        <label className="text-type-xs font-mono text-muted-foreground flex flex-col gap-0.5">
           Horizon d
           <input type="number" step={1} value={days} onChange={e => setDays(+e.target.value)} className="w-16 bg-background border border-border rounded px-1 py-0.5 text-xs font-mono" />
         </label>
@@ -523,7 +523,7 @@ function BreakEvenTool() {
   return (
     <ToolChrome>
       <div className="flex flex-wrap gap-3 px-2 py-1 border border-border bg-card/50 rounded items-end">
-        <label className="text-[10px] font-mono text-muted-foreground flex flex-col gap-0.5">
+        <label className="text-type-xs font-mono text-muted-foreground flex flex-col gap-0.5">
           Expiry
           <select className="bg-background border border-border rounded px-1 py-0.5 text-xs font-mono" value={expiryIdx} onChange={e => setExpiryIdx(+e.target.value)}>
             {snapshot.expiries.map((e, i) => (
@@ -531,7 +531,7 @@ function BreakEvenTool() {
             ))}
           </select>
         </label>
-        <label className="text-[10px] font-mono text-muted-foreground flex flex-col gap-0.5">
+        <label className="text-type-xs font-mono text-muted-foreground flex flex-col gap-0.5">
           Type
           <select className="bg-background border border-border rounded px-1 py-0.5 text-xs font-mono" value={type} onChange={e => setType(e.target.value as typeof type)}>
             <option value="call">Calls</option>
@@ -543,7 +543,7 @@ function BreakEvenTool() {
         <Stat label="Rows" value={String(near.length)} />
       </div>
       <Panel title="Break-evens · N(d2)" subtitle="Near-money contracts" className="flex-1 min-h-0 overflow-auto">
-        <table className="w-full text-[11px] font-mono">
+        <table className="w-full text-type-sm font-mono">
           <thead className="sticky top-0 bg-card text-muted-foreground border-b border-border">
             <tr>
               <th className="text-left px-2 py-1">K</th>
@@ -600,7 +600,7 @@ function SubjectiveTool() {
   return (
     <ToolChrome>
       <div className="flex flex-wrap gap-3 px-2 py-1 border border-border bg-card/50 rounded items-end">
-        <label className="text-[10px] font-mono text-muted-foreground flex flex-col gap-0.5">
+        <label className="text-type-xs font-mono text-muted-foreground flex flex-col gap-0.5">
           Expiry
           <select className="bg-background border border-border rounded px-1 py-0.5 text-xs font-mono" value={expiryIdx} onChange={e => setExpiryIdx(+e.target.value)}>
             {snapshot.expiries.map((e, i) => (
@@ -608,11 +608,11 @@ function SubjectiveTool() {
             ))}
           </select>
         </label>
-        <label className="text-[10px] font-mono text-muted-foreground flex flex-col gap-0.5">
+        <label className="text-type-xs font-mono text-muted-foreground flex flex-col gap-0.5">
           Drift μ
           <input type="number" step={0.01} value={drift} onChange={e => setDrift(+e.target.value)} className="w-16 bg-background border border-border rounded px-1 py-0.5 text-xs font-mono" />
         </label>
-        <label className="text-[10px] font-mono text-muted-foreground flex flex-col gap-0.5">
+        <label className="text-type-xs font-mono text-muted-foreground flex flex-col gap-0.5">
           VRP
           <input type="number" step={0.005} value={vrp} onChange={e => setVrp(+e.target.value)} className="w-16 bg-background border border-border rounded px-1 py-0.5 text-xs font-mono" />
         </label>
@@ -658,14 +658,14 @@ function GridTool() {
   return (
     <ToolChrome>
       <div className="flex flex-wrap gap-3 px-2 py-1 border border-border bg-card/50 rounded items-end">
-        <label className="text-[10px] font-mono text-muted-foreground flex flex-col gap-0.5">
+        <label className="text-type-xs font-mono text-muted-foreground flex flex-col gap-0.5">
           Type
           <select className="bg-background border border-border rounded px-1 py-0.5 text-xs font-mono" value={type} onChange={e => setType(e.target.value as typeof type)}>
             <option value="call">Calls</option>
             <option value="put">Puts</option>
           </select>
         </label>
-        <label className="text-[10px] font-mono text-muted-foreground flex flex-col gap-0.5">
+        <label className="text-type-xs font-mono text-muted-foreground flex flex-col gap-0.5">
           Metric
           <select className="bg-background border border-border rounded px-1 py-0.5 text-xs font-mono" value={metric} onChange={e => setMetric(e.target.value as typeof metric)}>
             <option value="omega">Ω leverage</option>
@@ -678,7 +678,7 @@ function GridTool() {
       </div>
       <Panel title="Option Grid" subtitle={metric === 'omega' ? 'ω = Δ·S/V' : metric} className="flex-1 min-h-0 overflow-auto">
         <div className="overflow-auto h-full">
-          <table className="text-[10px] font-mono border-collapse">
+          <table className="text-type-xs font-mono border-collapse">
             <thead className="sticky top-0 bg-card z-10">
               <tr>
                 <th className="px-1 py-1 text-left text-muted-foreground sticky left-0 bg-card">K \\ T</th>
@@ -756,15 +756,15 @@ function DFollowTool() {
   return (
     <ToolChrome>
       <div className="flex flex-wrap gap-3 px-2 py-1 border border-border bg-card/50 rounded items-end">
-        <label className="text-[10px] font-mono text-muted-foreground flex flex-col gap-0.5">
+        <label className="text-type-xs font-mono text-muted-foreground flex flex-col gap-0.5">
           Band
           <input type="number" step={0.01} value={band} onChange={e => setBand(+e.target.value)} className="w-16 bg-background border border-border rounded px-1 py-0.5 text-xs font-mono" />
         </label>
-        <label className="text-[10px] font-mono text-muted-foreground flex flex-col gap-0.5">
+        <label className="text-type-xs font-mono text-muted-foreground flex flex-col gap-0.5">
           Option qty
           <input type="number" step={1} value={qty} onChange={e => setQty(+e.target.value)} className="w-16 bg-background border border-border rounded px-1 py-0.5 text-xs font-mono" />
         </label>
-        <label className="text-[10px] font-mono text-muted-foreground flex flex-col gap-0.5">
+        <label className="text-type-xs font-mono text-muted-foreground flex flex-col gap-0.5">
           Realized σ
           <input type="number" step={0.01} value={rv} onChange={e => setRv(+e.target.value)} className="w-16 bg-background border border-border rounded px-1 py-0.5 text-xs font-mono" />
         </label>
@@ -816,7 +816,7 @@ function ComboPnlTool() {
   return (
     <ToolChrome>
       <div className="flex flex-wrap gap-3 px-2 py-1 border border-border bg-card/50 rounded items-end">
-        <label className="text-[10px] font-mono text-muted-foreground flex flex-col gap-0.5">
+        <label className="text-type-xs font-mono text-muted-foreground flex flex-col gap-0.5">
           Structure
           <select className="bg-background border border-border rounded px-1 py-0.5 text-xs font-mono" value={template} onChange={e => setTemplate(e.target.value as typeof template)}>
             <option value="short_straddle">Short straddle</option>
@@ -826,7 +826,7 @@ function ComboPnlTool() {
             <option value="long_call">Long call</option>
           </select>
         </label>
-        <label className="text-[10px] font-mono text-muted-foreground flex flex-col gap-0.5">
+        <label className="text-type-xs font-mono text-muted-foreground flex flex-col gap-0.5">
           Expiry
           <select className="bg-background border border-border rounded px-1 py-0.5 text-xs font-mono" value={expiryIdx} onChange={e => setExpiryIdx(+e.target.value)}>
             {snapshot.expiries.map((e, i) => (
@@ -909,7 +909,7 @@ function OptionPnlTool() {
   return (
     <ToolChrome>
       <div className="flex flex-wrap gap-3 px-2 py-1 border border-border bg-card/50 rounded items-end">
-        <label className="text-[10px] font-mono text-muted-foreground flex flex-col gap-0.5">
+        <label className="text-type-xs font-mono text-muted-foreground flex flex-col gap-0.5">
           Expiry
           <select className="bg-background border border-border rounded px-1 py-0.5 text-xs font-mono" value={expiryIdx} onChange={e => setExpiryIdx(+e.target.value)}>
             {snapshot.expiries.map((e, i) => (
@@ -917,14 +917,14 @@ function OptionPnlTool() {
             ))}
           </select>
         </label>
-        <label className="text-[10px] font-mono text-muted-foreground flex flex-col gap-0.5">
+        <label className="text-type-xs font-mono text-muted-foreground flex flex-col gap-0.5">
           Type
           <select className="bg-background border border-border rounded px-1 py-0.5 text-xs font-mono" value={type} onChange={e => setType(e.target.value as 'call' | 'put')}>
             <option value="call">Call</option>
             <option value="put">Put</option>
           </select>
         </label>
-        <label className="text-[10px] font-mono text-muted-foreground flex flex-col gap-0.5">
+        <label className="text-type-xs font-mono text-muted-foreground flex flex-col gap-0.5">
           Strike
           <select className="bg-background border border-border rounded px-1 py-0.5 text-xs font-mono" value={strike} onChange={e => setStrike(+e.target.value)}>
             {strikes.map(k => (
@@ -932,7 +932,7 @@ function OptionPnlTool() {
             ))}
           </select>
         </label>
-        <label className="text-[10px] font-mono text-muted-foreground flex flex-col gap-0.5">
+        <label className="text-type-xs font-mono text-muted-foreground flex flex-col gap-0.5">
           Side
           <select className="bg-background border border-border rounded px-1 py-0.5 text-xs font-mono" value={side} onChange={e => setSide(e.target.value as 'long' | 'short')}>
             <option value="long">Long</option>
@@ -996,21 +996,21 @@ function StraddleTool() {
   return (
     <ToolChrome>
       <div className="flex flex-wrap gap-3 px-2 py-1 border border-border bg-card/50 rounded items-end">
-        <label className="text-[10px] font-mono text-muted-foreground flex flex-col gap-0.5">
+        <label className="text-type-xs font-mono text-muted-foreground flex flex-col gap-0.5">
           Mode
           <select className="bg-background border border-border rounded px-1 py-0.5 text-xs font-mono" value={mode} onChange={e => setMode(e.target.value as typeof mode)}>
             <option value="breakeven">Break-even</option>
             <option value="pnl">Historical PnL</option>
           </select>
         </label>
-        <label className="text-[10px] font-mono text-muted-foreground flex flex-col gap-0.5">
+        <label className="text-type-xs font-mono text-muted-foreground flex flex-col gap-0.5">
           Side
           <select className="bg-background border border-border rounded px-1 py-0.5 text-xs font-mono" value={side} onChange={e => setSide(e.target.value as typeof side)}>
             <option value="long">Long straddle</option>
             <option value="short">Short straddle</option>
           </select>
         </label>
-        <label className="text-[10px] font-mono text-muted-foreground flex flex-col gap-0.5">
+        <label className="text-type-xs font-mono text-muted-foreground flex flex-col gap-0.5">
           Expiry
           <select className="bg-background border border-border rounded px-1 py-0.5 text-xs font-mono" value={expiryIdx} onChange={e => setExpiryIdx(+e.target.value)}>
             {snapshot.expiries.map((e, i) => (
@@ -1096,7 +1096,7 @@ function BasisTool() {
         )}
         <Stat label="Front basis" value={chart[0] ? `${chart[0].basisPct.toFixed(3)}%` : '—'} />
         <Stat label="Marks" value={curve.hasMarketMarks ? `mkt ${mktN}` : 'theo'} />
-        <span className="text-[9px] font-mono text-muted-foreground self-center">
+        <span className="text-type-2xs font-mono text-muted-foreground self-center">
           {curve.hasMarketMarks
             ? 'Live futures marks when matched · else F=S·e⁽ʳ⁻ᵠ⁾ᵀ'
             : <>F = S·e<sup>(r−q)T</sup>{isCryptoSymbol(snapshot.symbol) ? ' · crypto q≈−funding' : ''}</>}
@@ -1164,13 +1164,13 @@ function RollTool() {
           value={fmtPct(liveFunding ?? (snapshot.riskFreeRate - snapshot.dividendYield))}
         />
         <Stat label="Notional" value={fmtPrice(snapshot.spot, snapshot.spot > 1000 ? 0 : 2)} />
-        <span className="text-[9px] font-mono text-muted-foreground self-center">
+        <span className="text-type-2xs font-mono text-muted-foreground self-center">
           PnL ≈ S·(1+shock) · carry · days/365
           {liveFunding != null ? ' · Deribit funding' : ' · r−q equity carry'}
         </span>
       </div>
       <Panel title="Roll / funding PnL heatmap" subtitle="Spot shock × hold horizon" className="flex-1 min-h-0 overflow-auto">
-        <table className="text-[10px] font-mono border-collapse w-full">
+        <table className="text-type-xs font-mono border-collapse w-full">
           <thead className="sticky top-0 bg-card">
             <tr>
               <th className="px-2 py-1 text-left text-muted-foreground">Shock \ Days</th>

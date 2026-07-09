@@ -1,17 +1,12 @@
 /**
  * DataProvider — single seam for swapping the volatility data source.
  *
- * DemoProvider generates a realistic synthetic SVI surface (offline).
- * LiveProvider fetches real quotes from Financial Modeling Prep (FMP) and,
- * optionally, a real option chain from FMP (paid) or yfinance (Python proxy).
+ * DemoProvider generates a realistic synthetic SVI surface (offline / explicit DEMO).
+ * LiveProvider fetches real quotes from FMP, yfinance proxy, and/or Deribit.
  *
- * FMP enrichment (quotes, treasury rates, price history, profile, news) is
- * intentionally NOT part of this interface — it is cross-cutting market data
- * layered on top by the store. This seam only owns the volatility surface.
- *
- * On FMP Free/Starter the option chain is unavailable, so the live surface
- * gracefully falls back to the synthetic surface while still using the REAL
- * spot price from FMP — the app stays in "live" mode with a real underlying.
+ * LIVE is fail-closed: if no real option chain is available, getSnapshot returns
+ * null (it does NOT inject synthetic IVs/OI). The store shows an empty/error
+ * state so traders never mistake demo smiles for market data.
  */
 
 import type { VolSnapshot, SurfaceGrid } from '../options/types';
@@ -305,35 +300,21 @@ export class LiveProvider implements DataProvider {
     this.lastChainSource = chainUsed;
     this.lastFundingAnn = null;
 
-    let result: VolSnapshot;
-    if (snap && chainOk) {
-      // Patch spot from FMP/YF quote so surface aligns with the live print,
-      // but keep the chain IVs from the options feed.
-      result = {
-        ...snap,
-        spot: spot != null && !crypto ? spot : snap.spot,
-        surfaceSource: 'live',
-      };
-    } else {
-      // Fallback: synthetic surface seeded by the real spot (if we have one).
-      const synth = buildSnapshot(
-        symbol,
-        Date.now(),
-        spot ?? presetFor(symbol)?.spot ?? DATA_CONFIG.SYMBOL_PRESETS.SPY.spot,
-        0,
-        0,
-      );
-      result = {
-        ...synth,
-        riskFreeRate: r,
-        dividendYield: crypto || deribitCcy ? 0 : q,
-        spot: spot ?? synth.spot,
-        surfaceSource: 'synthetic',
-      };
-      chainUsed = 'synthetic';
-      this.lastChainSource = 'synthetic';
+    // Fail-closed: never inject a synthetic smile under LIVE.
+    if (!(snap && chainOk)) {
       this.lastChainAvailable = false;
+      this.lastChainSource = 'synthetic';
+      this.lastFundingAnn = null;
+      return null;
     }
+
+    // Patch spot from FMP/YF quote so surface aligns with the live print,
+    // but keep the chain IVs from the options feed.
+    let result: VolSnapshot = {
+      ...snap,
+      spot: spot != null && !crypto ? spot : snap.spot,
+      surfaceSource: 'live',
+    };
 
     if (crypto || deribitCcy) {
       result = { ...result, symbol: symbol.toUpperCase() };

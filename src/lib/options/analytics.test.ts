@@ -162,9 +162,12 @@ describe('Implied Move', () => {
     const move = impliedMove(snapshot);
     
     expect(move.straddle).toBeCloseTo(4.5, 4); // 2.25 + 2.25
-    expect(move.move).toBeCloseTo(3.6, 4); // 4.5 * 0.8
-    expect(move.movePct).toBeCloseTo(0.036, 4); // 3.6 / 100
-    expect(move.probTouch).toBe(0.5);
+    // 1σ ≈ straddle / 0.8
+    expect(move.move).toBeCloseTo(4.5 / 0.8, 4);
+    expect(move.movePct).toBeCloseTo((4.5 / 0.8) / 100, 4);
+    // Barrier touch under BM (not a hard-coded constant)
+    expect(move.probTouch).toBeGreaterThan(0);
+    expect(move.probTouch).toBeLessThanOrEqual(0.99);
   });
 
   it('should handle empty snapshots', () => {

@@ -276,7 +276,7 @@ function SurfaceAtmLine({ atmPx }: { atmPx: number }) {
 }
 
 function SurfaceAxes({ info }: { info: GeometryInfo }) {
-  const labelCls = 'text-[9px] font-mono whitespace-nowrap';
+  const labelCls = 'text-type-2xs font-mono whitespace-nowrap';
 
   const yTicks = useMemo(() => computeIVTicks(info.minIV, info.maxIV), [info.minIV, info.maxIV]);
 
@@ -344,7 +344,7 @@ function SurfaceLegend({ minIV, maxIV }: { minIV: number; maxIV: number }) {
   }).join(', ');
 
   return (
-    <div className="absolute bottom-3 right-3 flex flex-col gap-1 text-[10px] font-mono">
+    <div className="absolute bottom-3 right-3 flex flex-col gap-1 text-type-xs font-mono">
         <div className="flex justify-between text-muted-foreground">
           <span>{(minIV * 100).toFixed(1)}%</span>
           <span className="uppercase tracking-wider"><Explain term="iv">IV</Explain></span>
@@ -435,12 +435,12 @@ export function SurfaceView() {
       <div className="absolute top-3 left-3 flex flex-col gap-2">
         <button
           onClick={() => setWireframe(w => !w)}
-          className="px-2 py-1 text-[10px] font-mono bg-card border border-border rounded hover:bg-muted text-muted-foreground"
+          className="px-2 py-1 text-type-xs font-mono bg-card border border-border rounded hover:bg-muted text-muted-foreground"
         >
           {wireframe ? 'Solid' : 'Wireframe'}
         </button>
         {info && (
-          <div className="px-2 py-1 text-[9px] font-mono bg-card/80 border border-border rounded text-muted-foreground">
+          <div className="px-2 py-1 text-type-2xs font-mono bg-card/80 border border-border rounded text-muted-foreground">
             <div><Explain term="spot">Spot</Explain> <span className="text-foreground tabular-nums">{spot.toFixed(2)}</span></div>
             <div><Explain term="iv">IV</Explain> <span className="text-cyan tabular-nums">{(info.minIV * 100).toFixed(1)}–{(info.maxIV * 100).toFixed(1)}%</span></div>
           </div>

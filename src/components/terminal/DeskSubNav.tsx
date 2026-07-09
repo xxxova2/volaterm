@@ -88,7 +88,7 @@ export function DeskSubNav({
       )}
       aria-label={`${label} sections`}
     >
-      <span className="mr-1 hidden shrink-0 font-mono text-[9px] uppercase tracking-wider text-muted-foreground/70 sm:inline">
+      <span className="mr-1 hidden shrink-0 font-mono text-type-2xs uppercase tracking-wider text-muted-foreground/70 sm:inline">
         {label}
       </span>
       <div className="flex min-w-0 flex-1 gap-0.5 overflow-x-auto scrollbar-none">
@@ -98,7 +98,7 @@ export function DeskSubNav({
             type="button"
             onClick={() => scrollTo(it.id)}
             className={cn(
-              'shrink-0 rounded px-2 py-0.5 font-mono text-[10px] transition-colors',
+              'shrink-0 rounded px-2 py-0.5 font-mono text-type-xs transition-colors',
               active === it.id
                 ? 'bg-primary/20 text-primary'
                 : 'text-muted-foreground hover:bg-muted hover:text-foreground',
@@ -109,7 +109,7 @@ export function DeskSubNav({
           </button>
         ))}
       </div>
-      <span className="hidden shrink-0 font-mono text-[9px] text-muted-foreground/50 lg:inline" title="Keyboard">
+      <span className="hidden shrink-0 font-mono text-type-2xs text-muted-foreground/50 lg:inline" title="Keyboard">
         [ ]
       </span>
     </nav>

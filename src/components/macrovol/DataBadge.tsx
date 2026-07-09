@@ -36,7 +36,7 @@ export function DataBadge({
 
   return (
     <div
-      className={`flex flex-wrap items-center gap-2 text-[10px] font-mono text-muted-foreground ${className}`}
+      className={`flex flex-wrap items-center gap-2 text-type-xs font-mono text-muted-foreground ${className}`}
       title={note || (asOf ? `As of: ${new Date(asOf).toLocaleString()}` : undefined)}
       data-freshness={kind}
     >

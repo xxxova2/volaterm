@@ -16,7 +16,7 @@ export function SidePanel() {
   const spot = snapshot?.spot ?? 0;
 
   const sourceLabel = source === 'live' && liveAvailable ? 'Live' : 'Demo';
-  const sourceDotClass = sourceLabel === 'Live' ? 'bg-emerald-400' : 'bg-amber';
+  const sourceDotClass = sourceLabel === 'Live' ? 'bg-up' : 'bg-amber';
 
   const modes: { key: DisplayMode; label: string }[] = [
     { key: 'strike', label: 'Strike' },
@@ -31,7 +31,7 @@ export function SidePanel() {
         role="region"
         aria-label="Display and data sources"
       >
-        <div className="animate-pulse font-mono text-[10px] text-muted-foreground">Loading controls…</div>
+        <div className="font-mono text-type-xs text-muted-foreground">Waiting for surface…</div>
       </div>
     );
   }
@@ -47,14 +47,14 @@ export function SidePanel() {
       <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
         {/* Display mode */}
         <div className="flex items-center gap-1">
-          <span className="text-[9px] uppercase tracking-wider text-muted-foreground">Display</span>
+          <span className="text-type-2xs uppercase tracking-wider text-muted-foreground">Display</span>
           <div className="flex gap-0.5">
             {modes.map((m) => (
               <button
                 key={m.key}
                 onClick={() => setDisplayMode(m.key)}
                 className={cn(
-                  'rounded px-1.5 py-0.5 text-[10px]',
+                  'rounded px-1.5 py-0.5 text-type-xs',
                   displayMode === m.key
                     ? 'bg-primary/20 text-primary'
                     : 'text-muted-foreground hover:text-foreground',
@@ -70,7 +70,7 @@ export function SidePanel() {
 
         {/* Expiries — horizontal scroll chips */}
         <div className="flex min-w-0 flex-1 items-center gap-1">
-          <span className="shrink-0 text-[9px] uppercase tracking-wider text-muted-foreground">Exp</span>
+          <span className="shrink-0 text-type-2xs uppercase tracking-wider text-muted-foreground">Exp</span>
           <div className="flex max-w-full gap-0.5 overflow-x-auto scrollbar-none">
             {snapshot.expiries.map((slice) => (
               <button
@@ -78,7 +78,7 @@ export function SidePanel() {
                 onClick={() => setSelectedExpiry(slice.expiry)}
                 title={`${slice.expiry} · ATM IV ${slice.atmIV > 0 ? fmtPct(slice.atmIV, 1) : '—'}`}
                 className={cn(
-                  'shrink-0 rounded px-1.5 py-0.5 text-[10px] tabular-nums transition-colors',
+                  'shrink-0 rounded px-1.5 py-0.5 text-type-xs tabular-nums transition-colors',
                   selectedExpiry === slice.expiry
                     ? 'bg-primary/15 text-primary'
                     : 'text-muted-foreground hover:bg-muted hover:text-foreground',
@@ -97,7 +97,7 @@ export function SidePanel() {
         <span className="hidden h-3 w-px bg-border md:block" aria-hidden />
 
         {/* Snapshot metrics */}
-        <div className="flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-2 text-type-xs text-muted-foreground">
           <span>
             Spot <span className="tabular-nums text-foreground">{fmtPrice(spot)}</span>
           </span>
@@ -120,8 +120,8 @@ export function SidePanel() {
         <span className="hidden h-3 w-px bg-border lg:block" aria-hidden />
 
         {/* Source / chain API */}
-        <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
-          <span className="text-[9px] uppercase tracking-wider text-muted-foreground">Source</span>
+        <div className="flex flex-wrap items-center gap-1.5 text-type-xs">
+          <span className="text-type-2xs uppercase tracking-wider text-muted-foreground">Source</span>
           <span className="flex items-center gap-1" data-testid="source-badge">
             <span className={cn('inline-block h-1.5 w-1.5 rounded-full', sourceDotClass)} />
             {sourceLabel}
@@ -142,7 +142,7 @@ export function SidePanel() {
                           : 'BTC/ETH only — Deribit public options'
                   }
                   className={cn(
-                    'rounded px-1.5 py-0.5 text-[10px]',
+                    'rounded px-1.5 py-0.5 text-type-xs',
                     chainMode === mode
                       ? 'bg-primary/20 text-primary'
                       : 'text-muted-foreground hover:text-foreground',
@@ -157,7 +157,7 @@ export function SidePanel() {
                 title="Resolved from the last successful fetch"
               >
                 chain:
-                <span className={cn('ml-0.5 tabular-nums', chainAvailable ? 'text-emerald-400' : 'text-amber')}>
+                <span className={cn('ml-0.5 tabular-nums', chainAvailable ? 'text-up' : 'text-amber')}>
                   {chainAvailable ? chainUsed : 'synthetic'}
                 </span>
                 <span className="ml-1.5">spot:{spotSource}</span>
@@ -171,7 +171,7 @@ export function SidePanel() {
           onClick={toggleExplainHovers}
           data-testid="toggle-hints"
           className={cn(
-            'ml-auto shrink-0 rounded px-1.5 py-0.5 text-[10px]',
+            'ml-auto shrink-0 rounded px-1.5 py-0.5 text-type-xs',
             explainHovers
               ? 'bg-primary/20 text-primary'
               : 'text-muted-foreground hover:text-foreground',

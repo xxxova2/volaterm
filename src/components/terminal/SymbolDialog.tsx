@@ -51,10 +51,10 @@ export function SymbolDialog({ onSelect, onClose }: SymbolDialogProps) {
             autoComplete="off"
             spellCheck={false}
           />
-          <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">↵</kbd>
+          <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-type-xs text-muted-foreground">↵</kbd>
         </form>
         <div className="p-2">
-          <div className="px-2 py-1 text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Quick symbols</div>
+          <div className="px-2 py-1 text-type-xs font-mono uppercase tracking-widest text-muted-foreground">Quick symbols</div>
           <div className="grid grid-cols-3 gap-1">
             {SUGGESTIONS.map(s => (
               <button

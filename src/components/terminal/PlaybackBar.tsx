@@ -67,12 +67,12 @@ export function PlaybackBar() {
         {frameIndex + 1}/{historicalFrames.length}
       </span>
 
-      {isPlaying && <span className="text-primary text-[10px]" aria-live="polite">LIVE EDGE</span>}
+      {isPlaying && <span className="text-primary text-type-xs" aria-live="polite">LIVE EDGE</span>}
 
       <select
         value={speed}
         onChange={e => setSpeed(Number(e.target.value))}
-        className="bg-transparent border border-border rounded px-1 text-[10px] text-muted-foreground"
+        className="bg-transparent border border-border rounded px-1 text-type-xs text-muted-foreground"
         aria-label="Playback speed"
       >
         <option value={0.5}>0.5x</option>

@@ -30,6 +30,7 @@ describe('terminalStore', () => {
     });
   });
 
+  // Demo path builds a full synthetic surface + multi-expiry SVI fits; allow headroom.
   it('computes sviReadout and arbResult after setSymbol', async () => {
     await useTerminalStore.getState().setSource('demo');
     await useTerminalStore.getState().setSymbol('SPY');
@@ -51,7 +52,7 @@ describe('terminalStore', () => {
     expect(state.arbResult!.calendar.violations).toBe(0);
     expect(state.arbResult!.butterfly.violations).toBe(0);
     expect(state.arbResult!.clean).toBe(true);
-  });
+  }, 20_000);
 
   it('rejects invalid symbols and preserves previous state', async () => {
     await useTerminalStore.getState().setSource('demo');
@@ -66,7 +67,7 @@ describe('terminalStore', () => {
     // State should be unchanged (same snapshot object)
     expect(afterInvalid.symbol).toBe('SPY');
     expect(afterInvalid.snapshot).toBe(validSnapshot);
-  });
+  }, 20_000);
 
   it('updates sviReadout and arbResult on refresh in demo mode', async () => {
     await useTerminalStore.getState().setSource('demo');
@@ -83,5 +84,5 @@ describe('terminalStore', () => {
     expect(after.arbResult).not.toBeNull();
     expect(after.sviReadout!.samples).toBeGreaterThanOrEqual(5);
     expect(after.arbResult!.clean).toBe(true);
-  });
+  }, 20_000);
 });

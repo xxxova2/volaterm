@@ -28,7 +28,7 @@ export function SurfaceInspect({
   return (
     <>
       {hover && (
-        <div className="pointer-events-none absolute bottom-3 left-3 z-10 bg-card/90 border border-border rounded px-2 py-1 text-[9px] font-mono text-muted-foreground">
+        <div className="pointer-events-none absolute bottom-3 left-3 z-10 bg-card/90 border border-border rounded px-2 py-1 text-type-2xs font-mono text-muted-foreground">
           <div className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5">
             <span><Explain term="strike">Strike</Explain></span>
             <span className="tabular-nums text-foreground text-right">{fmtNum(hover.strike)}</span>
@@ -43,7 +43,7 @@ export function SurfaceInspect({
       )}
 
       {selected && (
-        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10 bg-card border border-border rounded px-3 py-2 text-[10px] font-mono text-muted-foreground">
+        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10 bg-card border border-border rounded px-3 py-2 text-type-xs font-mono text-muted-foreground">
           <div className="text-muted-foreground uppercase tracking-wider mb-1">Selected Point</div>
           <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
             <span><Explain term="strike">Strike</Explain></span>

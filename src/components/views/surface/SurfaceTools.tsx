@@ -56,10 +56,10 @@ export function SurfaceTools({
   // live snapshot has actually been received. Otherwise treat as Demo data
   // (synthetic or fallback).
   const sourceLabel = source === 'live' && liveAvailable ? 'Live' : 'Demo';
-  const sourceDotClass = sourceLabel === 'Live' ? 'bg-emerald-400' : 'bg-amber';
+  const sourceDotClass = sourceLabel === 'Live' ? 'bg-up' : 'bg-amber';
 
   return (
-    <div className="absolute top-3 right-3 flex flex-col gap-2 w-56 text-[10px] font-mono">
+    <div className="absolute top-3 right-3 flex flex-col gap-2 w-56 text-type-xs font-mono">
       <div className="bg-card border border-border rounded p-2 flex flex-col gap-1">
         <div className="text-muted-foreground uppercase tracking-wider">Source</div>
         <div className="flex items-center gap-1" data-testid="source-badge">
@@ -98,19 +98,19 @@ export function SurfaceTools({
           <div className="flex flex-col gap-1">
             <div className="flex justify-between">
               <span className="text-muted-foreground">Calendar</span>
-              <span className={arbResult.calendar.violations ? 'text-red-400' : 'text-green-400'}>
+              <span className={arbResult.calendar.violations ? 'text-down' : 'text-up'}>
                 {arbResult.calendar.violations}
               </span>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Butterfly</span>
-              <span className={arbResult.butterfly.violations ? 'text-red-400' : 'text-green-400'}>
+              <span className={arbResult.butterfly.violations ? 'text-down' : 'text-up'}>
                 {arbResult.butterfly.violations}
               </span>
             </div>
             <div className="flex justify-between mt-1">
               <span className="text-muted-foreground">Status</span>
-              <span className={arbResult.clean ? 'text-green-400' : 'text-red-400'}>
+              <span className={arbResult.clean ? 'text-up' : 'text-down'}>
                 {arbResult.clean ? 'Clean' : 'Arb'}
               </span>
             </div>
@@ -127,7 +127,7 @@ export function SurfaceTools({
             <button
               key={mode}
               onClick={() => onSliceMode(mode)}
-              className={`flex-1 px-1 py-0.5 rounded border border-border text-[9px] uppercase ${
+              className={`flex-1 px-1 py-0.5 rounded border border-border text-type-2xs uppercase ${
                 sliceMode === mode ? 'bg-muted text-foreground' : 'text-muted-foreground hover:bg-muted'
               }`}
             >
@@ -190,7 +190,7 @@ function SliceOverlay({
     return termSlice(surface, strike);
   }, [surface, mode, selectedExpiry, selectedStrike]);
 
-  if (!data || data.ivs.length < 2) return <div className="text-muted-foreground text-[9px]">No slice data</div>;
+  if (!data || data.ivs.length < 2) return <div className="text-muted-foreground text-type-2xs">No slice data</div>;
 
   const xs: number[] = mode === 'smile' ? (data as SmileSlice).strikes : (data as TermSlice).dtes;
   const label = mode === 'smile' ? 'Strike' : 'DTE';
@@ -220,11 +220,11 @@ function SliceOverlay({
           <line key={t} x1={t} y1={50} x2={t} y2="52" stroke="var(--muted-foreground)" strokeWidth="0.5" />
         ))}
       </svg>
-      <div className="flex justify-between text-[9px] text-muted-foreground">
+      <div className="flex justify-between text-type-2xs text-muted-foreground">
         <span>{mode === 'smile' ? label : `${label} ${min}`}</span>
         <span>{mode === 'smile' ? `${max}` : `${max}`}</span>
       </div>
-      <div className="text-[9px] text-muted-foreground text-center">
+      <div className="text-type-2xs text-muted-foreground text-center">
         IV {(ivMin * 100).toFixed(1)}% – {(ivMax * 100).toFixed(1)}%
       </div>
     </div>

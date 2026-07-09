@@ -42,7 +42,7 @@ export function Dv01Book({
           ['10Y $mm', n10, setN10],
           ['30Y $mm', n30, setN30],
         ] as const).map(([lab, val, set]) => (
-          <label key={lab} className="flex flex-col gap-0.5 text-[10px] text-muted-foreground">
+          <label key={lab} className="flex flex-col gap-0.5 text-type-xs text-muted-foreground">
             {lab}
             <input
               type="number"
@@ -61,7 +61,7 @@ export function Dv01Book({
           ['10Y shock bp', sh10, setSh10],
           ['30Y shock bp', sh30, setSh30],
         ] as const).map(([lab, val, set]) => (
-          <label key={lab} className="flex flex-col gap-0.5 text-[10px] text-muted-foreground">
+          <label key={lab} className="flex flex-col gap-0.5 text-type-xs text-muted-foreground">
             {lab}
             <input
               type="number"
@@ -77,7 +77,7 @@ export function Dv01Book({
         <button
           type="button"
           onClick={() => reloadDv01()}
-          className="rounded bg-primary px-3 py-1.5 text-[10px] font-bold text-primary-foreground"
+          className="rounded bg-primary px-3 py-1.5 text-type-xs font-bold text-primary-foreground"
         >
           {dv01Loading ? 'Computing…' : 'Recompute DV01'}
         </button>
@@ -92,7 +92,7 @@ export function Dv01Book({
               }));
             } finally { setDv01Loading(false); }
           }}
-          className="rounded border border-border px-2 py-1.5 text-[10px] text-muted-foreground hover:border-primary"
+          className="rounded border border-border px-2 py-1.5 text-type-xs text-muted-foreground hover:border-primary"
         >
           +1bp parallel
         </button>
@@ -107,7 +107,7 @@ export function Dv01Book({
               }));
             } finally { setDv01Loading(false); }
           }}
-          className="rounded border border-border px-2 py-1.5 text-[10px] text-muted-foreground hover:border-primary"
+          className="rounded border border-border px-2 py-1.5 text-type-xs text-muted-foreground hover:border-primary"
         >
           Steepener −1/+1 2s10s
         </button>
@@ -122,7 +122,7 @@ export function Dv01Book({
               }));
             } finally { setDv01Loading(false); }
           }}
-          className="rounded border border-border px-2 py-1.5 text-[10px] text-muted-foreground"
+          className="rounded border border-border px-2 py-1.5 text-type-xs text-muted-foreground"
         >
           Clear shocks
         </button>
@@ -132,34 +132,34 @@ export function Dv01Book({
         <>
           <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-4">
             <div className="rounded-lg border border-border bg-background/50 p-3">
-              <div className="text-[10px] text-muted-foreground">PARALLEL DV01</div>
+              <div className="text-type-xs text-muted-foreground">PARALLEL DV01</div>
               <div className="text-lg font-bold text-foreground">
                 ${dv01.parallel_dv01_usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}
               </div>
-              <div className="text-[9px] text-muted-foreground">USD / 1bp</div>
+              <div className="text-type-2xs text-muted-foreground">USD / 1bp</div>
             </div>
             <div className="rounded-lg border border-border bg-background/50 p-3">
-              <div className="text-[10px] text-muted-foreground">P&amp;L IF +1bp</div>
-              <div className={`text-lg font-bold ${(dv01.pnl_if_parallel_up_1bp_usd ?? 0) < 0 ? 'text-red-400' : 'text-emerald-400'}`}>
+              <div className="text-type-xs text-muted-foreground">P&amp;L IF +1bp</div>
+              <div className={`text-lg font-bold ${(dv01.pnl_if_parallel_up_1bp_usd ?? 0) < 0 ? 'text-down' : 'text-up'}`}>
                 ${(dv01.pnl_if_parallel_up_1bp_usd ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
               </div>
             </div>
             <div className="rounded-lg border border-border bg-background/50 p-3">
-              <div className="text-[10px] text-muted-foreground">P&amp;L IF −1bp</div>
-              <div className={`text-lg font-bold ${(dv01.pnl_if_parallel_down_1bp_usd ?? 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+              <div className="text-type-xs text-muted-foreground">P&amp;L IF −1bp</div>
+              <div className={`text-lg font-bold ${(dv01.pnl_if_parallel_down_1bp_usd ?? 0) >= 0 ? 'text-up' : 'text-down'}`}>
                 ${(dv01.pnl_if_parallel_down_1bp_usd ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
               </div>
             </div>
             <div className="rounded-lg border border-border bg-background/50 p-3">
-              <div className="text-[10px] text-muted-foreground">SCENARIO P&amp;L</div>
-              <div className={`text-lg font-bold ${(dv01.scenario?.total_pnl_usd ?? 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+              <div className="text-type-xs text-muted-foreground">SCENARIO P&amp;L</div>
+              <div className={`text-lg font-bold ${(dv01.scenario?.total_pnl_usd ?? 0) >= 0 ? 'text-up' : 'text-down'}`}>
                 ${(dv01.scenario?.total_pnl_usd ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
               </div>
-              <div className="text-[9px] text-muted-foreground">from key-rate shocks</div>
+              <div className="text-type-2xs text-muted-foreground">from key-rate shocks</div>
             </div>
           </div>
           <div className="mt-3 overflow-x-auto">
-            <table className="w-full border-collapse text-[10px]">
+            <table className="w-full border-collapse text-type-xs">
               <thead>
                 <tr className="text-muted-foreground">
                   <th className="p-1.5 text-left font-normal">Tenor</th>
@@ -191,7 +191,7 @@ export function Dv01Book({
                       </td>
                       <td className="p-1.5 text-right">{scen?.shock_bp ?? 0}</td>
                       <td className={`p-1.5 text-right font-bold ${
-                        (scen?.pnl_usd ?? 0) >= 0 ? 'text-emerald-400' : 'text-red-400'
+                        (scen?.pnl_usd ?? 0) >= 0 ? 'text-up' : 'text-down'
                       }`}>
                         {scen?.pnl_usd != null
                           ? `$${scen.pnl_usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
@@ -203,7 +203,7 @@ export function Dv01Book({
               </tbody>
             </table>
           </div>
-          {dv01.note && <p className="mt-2 text-[9px] text-muted-foreground">{dv01.note}</p>}
+          {dv01.note && <p className="mt-2 text-type-2xs text-muted-foreground">{dv01.note}</p>}
           <DataBadge asOf={dv01.as_of} source={dv01.source || 'FRED'} className="mt-2" />
         </>
       )}

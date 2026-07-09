@@ -45,7 +45,7 @@ export function SerffBoard({
 
   return (
     <div className="mt-3 overflow-hidden rounded border border-border">
-      <div className="flex items-center justify-between border-b border-border bg-background/50 px-2 py-1 text-[10px] font-semibold text-foreground">
+      <div className="flex items-center justify-between border-b border-border bg-background/50 px-2 py-1 text-type-xs font-semibold text-foreground">
         <span>
           SERFF / SOFR−EFFR INTERMARKET · CME ICS style
           <span className="ml-2 font-normal text-muted-foreground">
@@ -58,7 +58,7 @@ export function SerffBoard({
           rows={data.map((s) => [s.cc, s.name, s.description, s.last_bps, s.price_spread])}
         />
       </div>
-      <div className="grid grid-cols-[48px_1fr_2fr_72px_72px_100px] gap-0 border-b border-border/60 px-1.5 py-1 text-[9px] text-muted-foreground">
+      <div className="grid grid-cols-[48px_1fr_2fr_72px_72px_100px] gap-0 border-b border-border/60 px-1.5 py-1 text-type-2xs text-muted-foreground">
         <span>CC</span>
         <span>Spread</span>
         <span>Description</span>
@@ -80,24 +80,24 @@ export function SerffBoard({
               role="row"
               aria-selected={isFocused}
               onClick={() => focusRow(index, 'name')}
-              className={`grid grid-cols-[48px_1fr_2fr_72px_72px_100px] items-center gap-0 border-t border-border/40 px-1.5 text-[10px] cursor-default hover:bg-muted/20 ${
-                isFocused ? 'ring-1 ring-inset ring-primary/70 bg-primary/10' : ''
+              className={`grid grid-cols-[48px_1fr_2fr_72px_72px_100px] items-center gap-0 border-t border-border/40 px-1.5 text-type-xs cursor-default hover:bg-muted/20 ${
+                isFocused ? 'focus-ring-term-inset bg-primary/10' : ''
               } ${
                 !isFocused && bps != null && bps < 0
-                  ? 'bg-red-950/20'
+                  ? 'bg-down/15'
                   : !isFocused && bps != null && bps > 0
-                    ? 'bg-blue-950/15'
+                    ? 'bg-info/10'
                     : ''
               }`}
             >
               <span className="font-mono text-muted-foreground">{s.cc}</span>
               <span className="truncate font-mono font-bold text-foreground">{s.name}</span>
-              <span className="truncate text-[9px] text-muted-foreground" title={s.description}>
+              <span className="truncate text-type-2xs text-muted-foreground" title={s.description}>
                 {s.description}
               </span>
               <span
                 className={`text-right font-mono font-semibold tabular-nums ${
-                  bps == null ? 'text-muted-foreground' : bps < 0 ? 'text-red-400' : 'text-emerald-400'
+                  bps == null ? 'text-muted-foreground' : bps < 0 ? 'text-down' : 'text-up'
                 }`}
               >
                 {bps != null ? `${bps >= 0 ? '+' : ''}${bps.toFixed(1)}` : '—'}

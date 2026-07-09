@@ -29,7 +29,7 @@ export const VOL_SECTIONS: DeskNavItem[] = [
   { id: 'vol-sub-surface', label: 'Surface', short: 'Surf' },
   { id: 'vol-sub-smile', label: 'Smile', short: 'Smile' },
   { id: 'vol-sub-term', label: 'Term', short: 'Term' },
-  { id: 'vol-sub-quality', label: 'Quality', short: 'Qual' },
+  { id: 'vol-sub-quality', label: 'Surface Fit', short: 'Fit' },
 ];
 
 export const GREEKS_SECTIONS: DeskNavItem[] = [

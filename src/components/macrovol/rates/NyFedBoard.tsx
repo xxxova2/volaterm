@@ -17,11 +17,11 @@ export function NyFedBoard({ nyfed }: { nyfed: NonNullable<StirStripData['nyfed'
       subtitle="Official overnight prints with percentiles + volume — same fields traders read on NYFed / CME STIR desks"
       badge={
         <>
-          <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[9px] font-bold text-emerald-400">
+          <span className="rounded bg-up/15 px-1.5 py-0.5 text-type-2xs font-bold text-up">
             FREE API · NO KEY
           </span>
           {nyfed.target && (
-            <span className="text-[10px] text-muted-foreground">
+            <span className="text-type-xs text-muted-foreground">
               FOMC target {nyfed.target.from?.toFixed(2)}–{nyfed.target.to?.toFixed(2)}%
               {nyfed.target.mid != null ? ` · mid ${nyfed.target.mid.toFixed(2)}%` : ''}
             </span>
@@ -30,7 +30,7 @@ export function NyFedBoard({ nyfed }: { nyfed: NonNullable<StirStripData['nyfed'
       }
     >
       <StickyTable className="mt-3" maxHeight="min(40vh, 280px)">
-        <table className="w-full border-collapse text-[10px]">
+        <table className="w-full border-collapse text-type-xs">
           <thead>
             <tr className="bg-card text-muted-foreground">
               <th className="p-1.5 text-left font-normal">Rate</th>
@@ -72,7 +72,7 @@ export function NyFedBoard({ nyfed }: { nyfed: NonNullable<StirStripData['nyfed'
         </table>
       </StickyTable>
       {nyfed.sofr_avg && (
-        <div className="mt-2 flex flex-wrap gap-3 text-[10px]">
+        <div className="mt-2 flex flex-wrap gap-3 text-type-xs">
           <span className="text-muted-foreground">SOFR averages</span>
           <span>30d <b>{nyfed.sofr_avg.avg_30d?.toFixed(3) ?? '—'}%</b></span>
           <span>90d <b>{nyfed.sofr_avg.avg_90d?.toFixed(3) ?? '—'}%</b></span>

@@ -30,12 +30,12 @@ export function ApiSources({
       title={`Data sources: ${apis.join(' · ')}`}
       data-testid="api-sources"
     >
-      <span className="text-[8px] uppercase tracking-wider text-muted-foreground/70">API</span>
+      <span className="text-type-2xs uppercase tracking-wider text-muted-foreground/70">API</span>
       {apis.map((a) => (
         <span
           key={a}
           title={API_LEGEND[a] ?? a}
-          className="rounded border border-border/80 bg-background/70 px-1.5 py-0.5 font-mono text-[9px] font-medium text-muted-foreground"
+          className="rounded border border-border/80 bg-background/70 px-1.5 py-0.5 font-mono text-type-2xs font-medium text-muted-foreground"
         >
           {a}
         </span>

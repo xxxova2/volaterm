@@ -12,7 +12,6 @@ import { perfMark } from '../../config/perfBudget';
 import { TerminalHeader } from '../terminal/TerminalHeader';
 import { TabNav } from '../terminal/TabNav';
 import { DeskContextBar } from '../terminal/DeskContextBar';
-import { PlaybackBar } from '../terminal/PlaybackBar';
 import { StatusBar } from '../terminal/StatusBar';
 import { ShortcutsOverlay } from '../terminal/ShortcutsOverlay';
 import { SidePanel } from './SidePanel';
@@ -27,6 +26,7 @@ import { TABS } from '../terminal/tabs';
 import { findSectionMeta, jumpDeskSection } from '../../config/deskNav';
 import type { ActiveTab } from '../../lib/options/types';
 import { cn } from '../../lib/utils';
+import { DeskLoading } from '../common/Skeleton';
 
 // Heavy 3D / Plotly views are code-split so the initial bundle stays lean.
 const GreeksView = lazy(() =>
@@ -159,18 +159,8 @@ export function TerminalLayout() {
       || activeTab === 'desk';
 
     if (loading && !independentTab) {
-      return (
-        <div className="flex h-full items-center justify-center">
-          <div className="animate-pulse font-mono text-xs text-muted-foreground">LOADING SURFACE DATA...</div>
-        </div>
-      );
+      return <DeskLoading message="Building chain surface…" />;
     }
-
-    const viewFallback = (
-      <div className="flex h-full items-center justify-center">
-        <div className="animate-pulse font-mono text-xs text-muted-foreground">LOADING VIEW...</div>
-      </div>
-    );
 
     const view = (() => {
       switch (activeTab) {
@@ -193,7 +183,11 @@ export function TerminalLayout() {
       }
     })();
 
-    return <Suspense fallback={viewFallback}>{view}</Suspense>;
+    return (
+      <div key={activeTab} className="h-full term-crossfade">
+        <Suspense fallback={<DeskLoading message="Loading view…" />}>{view}</Suspense>
+      </div>
+    );
   };
 
   return (
@@ -216,7 +210,6 @@ export function TerminalLayout() {
       </main>
       {/* Bottom control strip — display / expiries / sources (was left rail) */}
       <SidePanel />
-      <PlaybackBar />
       <StatusBar />
       {shortcutsOpen && <ShortcutsOverlay onClose={() => setShortcutsOpen(false)} />}
     </div>

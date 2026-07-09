@@ -34,24 +34,29 @@ export interface BSResult {
   delta: number;
   /** Second-order Greek: sensitivity of delta to underlying price changes */
   gamma: number;
-  /** First-order Greek: sensitivity to time decay (per day) */
+  /**
+   * Raw θ = ∂V/∂T with T in years (NOT per calendar day).
+   * Divide by 365 for market “theta per day”. See computeGreeks for scaled form.
+   */
   theta: number;
-  /** First-order Greek: sensitivity to volatility changes (per 1% change) */
+  /**
+   * Raw ν = ∂V/∂σ with σ as a decimal (e.g. 0.20).
+   * Divide by 100 for P&L per 1 volatility point. See computeGreeks for scaled form.
+   */
   vega: number;
-  /** First-order Greek: sensitivity to interest rate changes */
+  /** First-order Greek: ∂V/∂r with r as a decimal (not per bp). */
   rho: number;
 }
 
 /**
- * Calculates option price and first-order Greeks using the Black-Scholes model
- * @param type - Option type ('call' or 'put')
- * @param S - Current spot price of the underlying asset
- * @param K - Strike price of the option
- * @param T - Time to expiration in years
- * @param r - Risk-free interest rate (as decimal, e.g., 0.05 for 5%)
- * @param q - Dividend yield (as decimal, e.g., 0.01 for 1%)
- * @param vol - Implied volatility (as decimal, e.g., 0.2 for 20%)
- * @returns Object containing option price and Greeks
+ * Black–Scholes–Merton price and first-order Greeks.
+ *
+ * Units (raw mathematical — NOT market display conventions):
+ *   - theta: ∂V/∂T with T in years (divide by 365 for P&L per calendar day)
+ *   - vega:  ∂V/∂σ with σ as a decimal (divide by 100 for P&L per 1 vol point)
+ *   - rho:   ∂V/∂r with r as a decimal (divide by 100 for P&L per 1% rate)
+ *
+ * For market-scaled θ/ν and higher-order greeks, use `computeGreeks` in greeks.ts.
  */
 export function blackScholes(
   type: 'call' | 'put',
@@ -62,10 +67,27 @@ export function blackScholes(
   q: number,
   vol: number,
 ): BSResult {
-  // Handle expiration edge case: options are worth intrinsic value, Greeks are zero
+  // At/after expiry: intrinsic only. Digital-like delta at the strike.
   if (T <= 0) {
     const price = type === 'call' ? Math.max(0, S - K) : Math.max(0, K - S);
-    return { price, delta: 0, gamma: 0, theta: 0, vega: 0, rho: 0 };
+    let delta = 0;
+    if (type === 'call') delta = S > K ? 1 : S < K ? 0 : 0.5;
+    else delta = S < K ? -1 : S > K ? 0 : -0.5;
+    return { price, delta, gamma: 0, theta: 0, vega: 0, rho: 0 };
+  }
+
+  // Zero vol → discounted intrinsic (forward intrinsic under continuous rates).
+  if (!(vol > 0) || !isFinite(vol)) {
+    const dfS = Math.exp(-q * T);
+    const dfK = Math.exp(-r * T);
+    if (type === 'call') {
+      const price = Math.max(0, S * dfS - K * dfK);
+      const delta = S * dfS > K * dfK ? dfS : 0;
+      return { price, delta, gamma: 0, theta: 0, vega: 0, rho: 0 };
+    }
+    const price = Math.max(0, K * dfK - S * dfS);
+    const delta = K * dfK > S * dfS ? -dfS : 0;
+    return { price, delta, gamma: 0, theta: 0, vega: 0, rho: 0 };
   }
 
   const sqrtT = Math.sqrt(T);

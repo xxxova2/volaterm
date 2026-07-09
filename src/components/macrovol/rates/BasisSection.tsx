@@ -51,12 +51,12 @@ export function BasisSection({
       subtitle={basis.regime_note}
       badge={
         <span
-          className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${
+          className={`rounded px-1.5 py-0.5 text-type-2xs font-bold ${
             basis.regime === 'corridor_normal'
-              ? 'bg-emerald-500/15 text-emerald-400'
+              ? 'bg-up/15 text-up'
               : basis.regime === 'above_floor'
                 ? 'bg-amber-500/15 text-amber-400'
-                : 'bg-red-500/15 text-red-400'
+                : 'bg-down/15 text-down'
           }`}
         >
           {(basis.regime || 'unknown').replace(/_/g, ' ').toUpperCase()}
@@ -67,7 +67,7 @@ export function BasisSection({
         {spreads.map((s) => (
           <div
             key={s.label}
-            className="rounded border border-border px-2 py-1.5 text-[10px]"
+            className="rounded border border-border px-2 py-1.5 text-type-xs"
             title={'hint' in s ? s.hint : undefined}
           >
             <span className="text-muted-foreground">{s.label}</span>
@@ -78,7 +78,7 @@ export function BasisSection({
         ))}
       </div>
       {basisHist?.zscore && (
-        <div className="mt-2 flex flex-wrap gap-3 text-[10px]">
+        <div className="mt-2 flex flex-wrap gap-3 text-type-xs">
           <span className="text-muted-foreground">Z-score ({basisHist.zscore.window}d)</span>
           <span>
             SOFR−EFFR{' '}
@@ -102,7 +102,7 @@ export function BasisSection({
       )}
       {basisChart.length > 5 && (
         <div className="mt-3">
-          <div className="mb-1 text-[10px] text-muted-foreground">SPREAD HISTORY (bps)</div>
+          <div className="mb-1 text-type-xs text-muted-foreground">SPREAD HISTORY (bps)</div>
           <ResponsiveContainer width="100%" height={160}>
             <LineChart data={basisChart} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
               <CartesianGrid stroke="#1f1f1f" strokeDasharray="2 2" />

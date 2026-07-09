@@ -35,13 +35,13 @@ function Stat({
 }) {
   return (
     <div className="flex flex-col min-w-[72px]">
-      <span className="text-[10px] text-muted-foreground font-mono">
+      <span className="text-type-xs text-muted-foreground font-mono">
         {term ? <Explain term={term}>{label}</Explain> : label}
       </span>
       <span className="text-sm font-semibold font-mono tabular-nums" style={{ color: color ?? 'var(--foreground)' }}>
         {value}
       </span>
-      {sub && <span className="text-[9px] text-muted-foreground font-mono">{sub}</span>}
+      {sub && <span className="text-type-2xs text-muted-foreground font-mono">{sub}</span>}
     </div>
   );
 }
@@ -95,16 +95,16 @@ function ThinBookPane({
       )}
     >
       <div className="flex items-center gap-1.5 px-0.5">
-        <span className="font-mono text-[10px] font-bold text-primary">{ccy}</span>
+        <span className="font-mono text-type-xs font-bold text-primary">{ccy}</span>
         <FreshnessChip kind={kind} />
-        {active && <span className="text-[8px] text-primary">ACTIVE</span>}
-        <span className="ml-auto font-mono text-[9px] tabular-nums text-muted-foreground">
+        {active && <span className="text-type-2xs text-primary">ACTIVE</span>}
+        <span className="ml-auto font-mono text-type-2xs tabular-nums text-muted-foreground">
           {snap ? `ATM ${fmtPct(frontAtm)} · n=${snap.expiries.length}` : 'no book'}
         </span>
       </div>
       <div className="grid min-h-0 flex-1 grid-cols-3 gap-1" style={{ height: 112 }}>
         <div className="min-h-0">
-          <div className="mb-0.5 font-mono text-[8px] text-muted-foreground">Term</div>
+          <div className="mb-0.5 font-mono text-type-2xs text-muted-foreground">Term</div>
           {termData.length ? (
             <ResponsiveContainer width="100%" height="90%">
               <ComposedChart data={termData} margin={{ top: 2, right: 2, bottom: 0, left: 0 }}>
@@ -112,11 +112,11 @@ function ThinBookPane({
               </ComposedChart>
             </ResponsiveContainer>
           ) : (
-            <div className="flex h-[90%] items-center justify-center font-mono text-[9px] text-muted-foreground">—</div>
+            <div className="flex h-[90%] items-center justify-center font-mono text-type-2xs text-muted-foreground">—</div>
           )}
         </div>
         <div className="min-h-0">
-          <div className="mb-0.5 font-mono text-[8px] text-muted-foreground">
+          <div className="mb-0.5 font-mono text-type-2xs text-muted-foreground">
             Fund {fundAnn != null ? fmtPct(fundAnn) : '—'}
           </div>
           <ResponsiveContainer width="100%" height="90%">
@@ -126,7 +126,7 @@ function ThinBookPane({
           </ResponsiveContainer>
         </div>
         <div className="min-h-0">
-          <div className="mb-0.5 font-mono text-[8px] text-muted-foreground">GEX</div>
+          <div className="mb-0.5 font-mono text-type-2xs text-muted-foreground">GEX</div>
           {gexMini.length ? (
             <ResponsiveContainer width="100%" height="90%">
               <BarChart data={gexMini} margin={{ top: 2, right: 2, bottom: 0, left: 0 }}>
@@ -135,7 +135,7 @@ function ThinBookPane({
               </BarChart>
             </ResponsiveContainer>
           ) : (
-            <div className="flex h-[90%] items-center justify-center font-mono text-[9px] text-muted-foreground">—</div>
+            <div className="flex h-[90%] items-center justify-center font-mono text-type-2xs text-muted-foreground">—</div>
           )}
         </div>
       </div>
@@ -154,8 +154,8 @@ function DualCol({
 }) {
   if (!d) {
     return (
-      <div className="flex-1 animate-pulse rounded border border-border bg-muted/20 p-2 font-mono text-[10px] text-muted-foreground">
-        Loading…
+      <div className="flex-1 skeleton rounded border border-border p-2 font-mono text-type-xs text-muted-foreground">
+        Fetching book…
       </div>
     );
   }
@@ -174,11 +174,11 @@ function DualCol({
       )}
     >
       <div className="flex items-center gap-1.5">
-        <span className="text-[11px] font-bold text-primary">{d.ccy}</span>
+        <span className="text-type-sm font-bold text-primary">{d.ccy}</span>
         <FreshnessChip kind={kind} />
-        {active && <span className="text-[8px] text-primary">ACTIVE</span>}
+        {active && <span className="text-type-2xs text-primary">ACTIVE</span>}
       </div>
-      <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[10px]">
+      <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-type-xs">
         <span>
           <span className="text-muted-foreground">Spot </span>
           <span className="font-semibold tabular-nums text-amber">
@@ -342,8 +342,8 @@ export function BtcView() {
       {/* Dual BTC | ETH columns (Phase F) */}
       <div className="flex flex-col gap-1 rounded border border-border bg-card px-2 py-1.5 sm:flex-row sm:items-stretch">
         <div className="flex shrink-0 flex-col justify-center px-1">
-          <span className="font-mono text-[10px] font-bold tracking-wider text-primary">CRYPTO</span>
-          <span className="font-mono text-[8px] text-muted-foreground">BTC · ETH dual tape</span>
+          <span className="font-mono text-type-xs font-bold tracking-wider text-primary">CRYPTO</span>
+          <span className="font-mono text-type-2xs text-muted-foreground">BTC · ETH dual tape</span>
         </div>
         <DualCol d={dual.btc} active={symbol === 'BTC'} onSelect={selectCcy} />
         <DualCol d={dual.eth} active={symbol === 'ETH'} onSelect={selectCcy} />
@@ -354,7 +354,7 @@ export function BtcView() {
               type="button"
               onClick={() => { setProxy(p); setSymbol(p); }}
               className={cn(
-                'rounded border px-1.5 py-0.5 font-mono text-[9px]',
+                'rounded border px-1.5 py-0.5 font-mono text-type-2xs',
                 symbol === p
                   ? 'border-primary text-primary'
                   : 'border-border text-muted-foreground hover:text-foreground',
@@ -367,7 +367,7 @@ export function BtcView() {
             type="button"
             onClick={() => setCryptoDualCharts(!cryptoDualCharts)}
             className={cn(
-              'rounded border px-1.5 py-0.5 font-mono text-[9px]',
+              'rounded border px-1.5 py-0.5 font-mono text-type-2xs',
               cryptoDualCharts
                 ? 'border-primary text-primary'
                 : 'border-border text-muted-foreground hover:text-foreground',
@@ -391,7 +391,7 @@ export function BtcView() {
       <div className="flex flex-wrap items-center gap-4 px-3 py-2 border border-border bg-card rounded">
         <div className="flex items-center gap-2">
           <span className="text-primary font-mono font-bold text-sm tracking-wider">{deskLabel}</span>
-          <span className="text-[10px] font-mono text-muted-foreground px-1.5 py-0.5 border border-border rounded">
+          <span className="text-type-xs font-mono text-muted-foreground px-1.5 py-0.5 border border-border rounded">
             {source === 'live'
               ? (chainUsed === 'deribit'
                 ? 'DERIBIT LIVE'
@@ -401,7 +401,7 @@ export function BtcView() {
               : 'DEMO'}
           </span>
           <FreshnessChip kind={source === 'live' ? (chainUsed === 'deribit' ? 'live' : 'delayed') : 'demo'} />
-          <span className="text-[9px] font-mono text-muted-foreground hidden lg:inline">
+          <span className="text-type-2xs font-mono text-muted-foreground hidden lg:inline">
             {cryptoDualCharts
               ? '2× charts on · click pane or tape to switch active book'
               : 'Click dual tape to switch · charts = active book'}
@@ -437,7 +437,7 @@ export function BtcView() {
             <Stat label="Γ Flip" term="gammaFlip" value={gex?.gammaFlip != null ? fmtPrice(gex.gammaFlip, 0) : '—'} />
           </>
         ) : (
-          <span className="font-mono text-[10px] text-muted-foreground">
+          <span className="font-mono text-type-xs text-muted-foreground">
             Tape live · waiting on full chain snapshot for active book…
           </span>
         )}
@@ -445,7 +445,7 @@ export function BtcView() {
           <button
             type="button"
             onClick={() => setActiveTab('desk')}
-            className="ml-2 px-2 py-0.5 text-[10px] font-mono rounded border border-amber/40 text-amber hover:bg-amber/10"
+            className="ml-2 px-2 py-0.5 text-type-xs font-mono rounded border border-amber/40 text-amber hover:bg-amber/10"
           >
             MM DESK →
           </button>
@@ -572,7 +572,7 @@ export function BtcView() {
             </div>
             {roll && (
               <div className="flex-1 min-h-0">
-                <div className="text-[10px] text-muted-foreground font-mono mb-1">
+                <div className="text-type-xs text-muted-foreground font-mono mb-1">
                   <Explain term="rollPnl">Roll / funding PnL</Explain> heatmap (notional × carry × T)
                 </div>
                 <div className="grid gap-px" style={{ gridTemplateColumns: `repeat(${roll.horizons.length}, minmax(0, 1fr))` }}>
@@ -586,7 +586,7 @@ export function BtcView() {
                         <div
                           key={`${si}-${hi}`}
                           title={`shock ${(roll.shocks[si]! * 100).toFixed(0)}% · ${roll.horizons[hi]}d → ${v.toFixed(2)}`}
-                          className="h-4 text-[8px] font-mono flex items-center justify-center text-foreground/80"
+                          className="h-4 text-type-2xs font-mono flex items-center justify-center text-foreground/80"
                           style={{ background: bg }}
                         >
                           {hi === 0 ? `${(roll.shocks[si]! * 100).toFixed(0)}%` : ''}
@@ -595,12 +595,12 @@ export function BtcView() {
                     }),
                   )}
                 </div>
-                <div className="flex justify-between text-[8px] font-mono text-muted-foreground mt-0.5">
+                <div className="flex justify-between text-type-2xs font-mono text-muted-foreground mt-0.5">
                   {roll.horizons.map(h => <span key={h}>{h}d</span>)}
                 </div>
               </div>
             )}
-            <p className="text-[9px] text-muted-foreground font-mono leading-snug">
+            <p className="text-type-2xs text-muted-foreground font-mono leading-snug">
               {chainUsed === 'deribit'
                 ? `Live Deribit options + ${basis?.hasMarketMarks ? 'futures marks' : 'theo basis'} · funding ${isEth ? 'ETH' : 'BTC'}-PERPETUAL.`
                 : `Deribit unavailable — synth smile on live spot. Retry LIVE or check /api/deribit/market/${proxy === 'ETH' ? 'ETH' : 'BTC'}.`}

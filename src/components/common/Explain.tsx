@@ -59,7 +59,7 @@ export function Explain({ term, children, className, title, body }: ExplainProps
       {rect &&
         createPortal(
           <div className="pointer-events-none fixed z-[1000] max-w-[16rem]" style={style}>
-            <div className="rounded-md border border-border bg-popover px-2.5 py-2 text-[10px] leading-snug text-popover-foreground shadow-xl">
+            <div className="rounded-md border border-border bg-popover px-2.5 py-2 text-type-xs leading-snug text-popover-foreground shadow-xl">
               <div className="mb-1 font-semibold text-foreground">{entry.title}</div>
               <div>{entry.body}</div>
             </div>

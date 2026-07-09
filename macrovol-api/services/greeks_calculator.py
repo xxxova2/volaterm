@@ -72,8 +72,10 @@ def compute_greeks(S, K, T, r, q, sigma, option_type="call"):
 def compute_iv(market_price, S, K, T, r, q, option_type="call"):
     if T <= 0 or market_price <= 0:
         return None
-    intrinsic = max(0, S - K) if option_type == "call" else max(0, K - S)
-    if market_price <= intrinsic:
+    disc_s = S * math.exp(-q * T)
+    disc_k = K * math.exp(-r * T)
+    intrinsic = max(0.0, disc_s - disc_k) if option_type == "call" else max(0.0, disc_k - disc_s)
+    if market_price < intrinsic * 0.99:
         return None
     lo, hi = 0.001, 5.0
     for _ in range(200):
@@ -176,7 +178,8 @@ def _point_from_row(row, spot, T, r, q, option_type: str):
     else:
         return None
     iv = compute_iv(mid, spot, K, T, r, q, option_type)
-    if not iv or iv < 0.01 or iv > 5:
+    # Keep in sync with VALIDATION_CONFIG.ranges (TS) and iv_calculator (Python).
+    if not iv or iv < 0.01 or iv > 3.0:
         return None
     greeks = compute_greeks(spot, K, T, r, q, iv, option_type)
     if not greeks:

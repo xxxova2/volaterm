@@ -41,18 +41,18 @@ export function ShapeSection({
       badge={
         <>
           <span
-            className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${
+            className={`rounded px-1.5 py-0.5 text-type-2xs font-bold ${
               shape.regime === 'steep'
-                ? 'bg-emerald-500/15 text-emerald-400'
+                ? 'bg-up/15 text-up'
                 : shape.regime === 'inverted'
-                  ? 'bg-red-500/15 text-red-400'
+                  ? 'bg-down/15 text-down'
                   : 'bg-amber-500/15 text-amber-400'
             }`}
           >
             {shape.regime.toUpperCase()}
           </span>
           {shape.imply && <ImplyChip imply={shape.imply} onOpen={onOpenImply} />}
-          <span className="hidden text-[10px] text-muted-foreground xl:inline">{shape.regime_note}</span>
+          <span className="hidden text-type-xs text-muted-foreground xl:inline">{shape.regime_note}</span>
         </>
       }
     >
@@ -62,12 +62,12 @@ export function ShapeSection({
           const bps = sp?.bps;
           return (
             <div key={sc.key} className="rounded-lg border border-border bg-background/50 p-3">
-              <div className="text-[10px] text-muted-foreground">{sc.label}</div>
-              <div className={`text-lg font-bold ${bps != null && bps < 0 ? 'text-red-400' : 'text-foreground'}`}>
+              <div className="text-type-xs text-muted-foreground">{sc.label}</div>
+              <div className={`text-lg font-bold ${bps != null && bps < 0 ? 'text-down' : 'text-foreground'}`}>
                 {bps != null ? `${bps >= 0 ? '+' : ''}${bps.toFixed(0)}` : '—'}
-                <span className="ml-0.5 text-[10px] font-normal text-muted-foreground">bps</span>
+                <span className="ml-0.5 text-type-xs font-normal text-muted-foreground">bps</span>
               </div>
-              <div className="mt-1 text-[9px] text-muted-foreground/80">{sp?.formula}</div>
+              <div className="mt-1 text-type-2xs text-muted-foreground/80">{sp?.formula}</div>
               {sp?.imply && (
                 <div className="mt-1">
                   <ImplyChip imply={sp.imply} compact onOpen={onOpenImply} />
@@ -89,7 +89,7 @@ export function ShapeSection({
           { title: '2s5s10s fly', data: shapeHistoryCharts.fly, color: '#a78bfa' },
         ].map((ch) => (
           <div key={ch.title}>
-            <div className="mb-1 text-[10px] text-muted-foreground">{ch.title} (bps)</div>
+            <div className="mb-1 text-type-xs text-muted-foreground">{ch.title} (bps)</div>
             {ch.data.length > 0 ? (
               <ResponsiveContainer width="100%" height={110}>
                 <AreaChart data={ch.data}>
@@ -102,7 +102,7 @@ export function ShapeSection({
                 </AreaChart>
               </ResponsiveContainer>
             ) : (
-              <div className="py-6 text-center text-[10px] text-muted-foreground">No aligned history</div>
+              <div className="py-6 text-center text-type-xs text-muted-foreground">No aligned history</div>
             )}
           </div>
         ))}

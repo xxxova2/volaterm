@@ -60,7 +60,7 @@ export function CollapsibleSection({
         onClick={() => setOpen((o) => !o)}
         className={cn(
           'flex w-full items-center gap-2 px-3 py-2 text-left font-mono transition-colors',
-          'hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring',
+          'hover:bg-muted/40 focus-visible:outline-none',
           open && 'border-b border-border/60',
         )}
         aria-expanded={open}
@@ -86,14 +86,14 @@ export function CollapsibleSection({
             {badge}
           </span>
         )}
-        <span className="ml-auto shrink-0 text-[9px] uppercase tracking-wider text-muted-foreground/60">
+        <span className="ml-auto shrink-0 text-type-2xs uppercase tracking-wider text-muted-foreground/60">
           {open ? 'hide' : 'show'}
         </span>
       </button>
       {open && (
         <div id={`${id}-body`} className="px-3 pb-3 pt-2 font-mono">
           {subtitle && (
-            <p className="mb-2 text-[10px] text-muted-foreground">{subtitle}</p>
+            <p className="mb-2 text-type-xs text-muted-foreground">{subtitle}</p>
           )}
           {children}
         </div>

@@ -38,7 +38,7 @@ export function PlumbingSection({ plumbing }: { plumbing: PlumbingData | null })
       <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
         {rateCards.map((c) => (
           <div key={c.key} className="rounded-lg border border-border bg-background/50 p-3">
-            <div className="text-[10px] text-muted-foreground">{c.label}</div>
+            <div className="text-type-xs text-muted-foreground">{c.label}</div>
             <div className="text-xl font-bold text-foreground">
               {c.val != null ? `${c.val.toFixed(2)}%` : '—'}
             </div>
@@ -46,13 +46,13 @@ export function PlumbingSection({ plumbing }: { plumbing: PlumbingData | null })
         ))}
       </div>
       {plumbing?.rrp_rate_note && (
-        <p className="mt-2 text-[9px] text-muted-foreground">* {plumbing.rrp_rate_note}</p>
+        <p className="mt-2 text-type-2xs text-muted-foreground">* {plumbing.rrp_rate_note}</p>
       )}
       {(rrpHist.length > 0 || resHist.length > 0) && (
         <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
           {rrpHist.length > 0 && (
             <div>
-              <div className="mb-1 text-[10px] text-muted-foreground">
+              <div className="mb-1 text-type-xs text-muted-foreground">
                 RRP VOLUME ($B) · latest {plumbing?.rrp_volume_latest != null ? `$${plumbing.rrp_volume_latest}B` : '—'}
               </div>
               <ResponsiveContainer width="100%" height={140}>
@@ -68,7 +68,7 @@ export function PlumbingSection({ plumbing }: { plumbing: PlumbingData | null })
           )}
           {resHist.length > 0 && (
             <div>
-              <div className="mb-1 text-[10px] text-muted-foreground">RESERVE BALANCES ($T)</div>
+              <div className="mb-1 text-type-xs text-muted-foreground">RESERVE BALANCES ($T)</div>
               <ResponsiveContainer width="100%" height={140}>
                 <LineChart data={resHist}>
                   <CartesianGrid stroke="#1f1f1f" strokeDasharray="2 2" />

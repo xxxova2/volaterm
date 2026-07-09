@@ -226,7 +226,7 @@ export function ArbitrageView() {
           <button
             key={m.id}
             onClick={() => { setMode(m.id); setSelectedCell(null); }}
-            className={cn('px-2 py-0.5 text-[10px] font-mono rounded bg-card/80 backdrop-blur-sm border border-border',
+            className={cn('px-2 py-0.5 text-type-xs font-mono rounded bg-card/80 backdrop-blur-sm border border-border',
               mode === m.id ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:text-foreground'
             )}
           >
@@ -237,14 +237,14 @@ export function ArbitrageView() {
 
       {/* Hover tooltip */}
       {hoverCell && (
-        <div className="absolute bottom-1 left-2 text-[10px] font-mono text-muted-foreground z-10 bg-card/80 backdrop-blur-sm px-2 py-1 rounded border border-border">
+        <div className="absolute bottom-1 left-2 text-type-xs font-mono text-muted-foreground z-10 bg-card/80 backdrop-blur-sm px-2 py-1 rounded border border-border">
           K {fmtPrice(hoverCell.strike, 0)} · {hoverCell.dte}d
         </div>
       )}
 
       {/* Inspector */}
       {selectedCell && (
-        <div data-arb-inspector="" className="absolute bottom-1 left-1/2 -translate-x-1/2 flex items-center gap-x-4 gap-y-1 rounded border border-amber/40 bg-card/95 backdrop-blur-sm px-3 py-2 text-[11px] font-mono shadow-sm z-20">
+        <div data-arb-inspector="" className="absolute bottom-1 left-1/2 -translate-x-1/2 flex items-center gap-x-4 gap-y-1 rounded border border-amber/40 bg-card/95 backdrop-blur-sm px-3 py-2 text-type-sm font-mono shadow-sm z-20">
           <span className="flex items-center gap-1.5">
             <span className="text-muted-foreground">K</span>
             <span className="text-amber font-semibold tabular-nums">{fmtPrice(selectedCell.strike, 0)}</span>
@@ -259,11 +259,11 @@ export function ArbitrageView() {
             const fly = arbResult.butterfly.flags[ri]?.[ci] ?? false;
             return (
               <>
-                <span className={cn('flex items-center gap-1.5', cal ? 'text-red-400' : 'text-green-400')}>
+                <span className={cn('flex items-center gap-1.5', cal ? 'text-down' : 'text-up')}>
                   <span className="text-muted-foreground"><Explain term="calendarArb">Calendar</Explain></span>
                   {cal ? '✗' : '✓'}
                 </span>
-                <span className={cn('flex items-center gap-1.5', fly ? 'text-red-400' : 'text-green-400')}>
+                <span className={cn('flex items-center gap-1.5', fly ? 'text-down' : 'text-up')}>
                   <span className="text-muted-foreground"><Explain term="butterflyArb">Butterfly</Explain></span>
                   {fly ? '✗' : '✓'}
                 </span>

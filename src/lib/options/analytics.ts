@@ -1,5 +1,6 @@
 import type { VolSnapshot, GreeksProfile, SensitivityMatrix } from './types';
 import { computeGreeks } from './greeks';
+import { normCdf } from './black-scholes';
 
 /**
  * Generates a Greeks profile for a specific expiry
@@ -121,10 +122,16 @@ export function netByExpiry(snap: VolSnapshot) {
 }
 
 /**
- * Calculates the expected move based on the front-month ATM straddle
- * Uses the 0.8x straddle rule of thumb for expected move
- * @param snap - Volatility snapshot containing option data
- * @returns Object containing expected move in dollars and percentage
+ * Front-month expected move from the ATM straddle.
+ *
+ * Near-term ATM straddle ≈ 0.8 · S · σ · √T  (BS ATM approx),
+ * while 1σ move = S · σ · √T, so:
+ *   1σ ≈ straddle / 0.8
+ *
+ * Fallback when no liquid straddle: S · atmIV · √(dte/365).
+ *
+ * probTouch ≈ one-sided barrier touch of the +move level under zero-drift BM
+ * (reflection): 2 · N(−d) with d = move / (S σ √T). Not a two-sided finish prob.
  */
 export function impliedMove(snap: VolSnapshot) {
   if (snap.expiries.length === 0) return { move: 0, movePct: 0, probTouch: 0, straddle: 0 };
@@ -146,10 +153,16 @@ export function impliedMove(snap: VolSnapshot) {
     }
   }
 
-  // 1σ approx: straddle ≈ 0.8 * expected move for near-term (rule of thumb).
-  const move = straddle > 0 ? straddle * 0.8 : snap.spot * front.atmIV * Math.sqrt(front.dte / 365);
-  const movePct = move / snap.spot;
-  const probTouch = 0.5;
+  // 1σ: straddle ≈ 0.8 × 1σ  ⇒  1σ ≈ straddle / 0.8
+  const T = Math.max(front.dte / 365, 1e-8);
+  const move = straddle > 0
+    ? straddle / 0.8
+    : snap.spot * front.atmIV * Math.sqrt(T);
+  const movePct = snap.spot > 0 ? move / snap.spot : 0;
+  const sig = Math.max(front.atmIV > 0 ? front.atmIV : 0.2, 0.01);
+  const d = move / (snap.spot * sig * Math.sqrt(T) + 1e-12);
+  // Reflection principle: P(touch upper barrier at +move) for driftless BM.
+  const probTouch = Math.min(0.99, Math.max(0, 2 * (1 - normCdf(Math.abs(d)))));
 
   return { move, movePct, probTouch, straddle };
 }
@@ -308,12 +321,14 @@ function flipFromSeries(points: { strike: number; net: number }[]): number | nul
 /**
  * Full dealer stack: GEX / DEX / VEX / Charm by strike.
  *
- * Convention (customer long listed OI → dealers short):
- *   call GEX = +γ·S·w·mult, put GEX = −γ·S·w·mult
- *   DEX = δ·S·w·mult (δ already signed)
- *   VEX = vanna·S·w·mult
- *   Charm = (charm/365)·S·w·mult  ($ delta change per calendar day)
+ * SpotGamma-style convention (customer long listed OI → dealers short):
+ *   call GEX = +γ · S² · 0.01 · w · mult   ($ gamma for a 1% spot move)
+ *   put  GEX = −γ · S² · 0.01 · w · mult
+ *   DEX = δ · S · w · mult
+ *   VEX = vanna · S · w · mult
+ *   Charm = (charm/365) · S · w · mult   ($ delta change per calendar day)
  *
+ * Matches macrovol-api `greeks_calculator._gex_unit`.
  * weight 'oi' = open interest (default); 'unit' = 1 per listed contract with OI>0.
  */
 export function dealerExposure(
@@ -344,7 +359,9 @@ export function dealerExposure(
         callVEX: 0, putVEX: 0,
         callCharm: 0, putCharm: 0,
       };
-      const scale = S * w * mult;
+      // 1% dollar-gamma (SpotGamma): γ · S² · 0.01 · OI · mult
+      const gexScale = S * S * 0.01 * w * mult;
+      const notionalScale = S * w * mult;
       const gamma = q.gamma ?? 0;
       const delta = q.delta ?? 0;
       const vanna = q.vanna ?? 0;
@@ -352,15 +369,15 @@ export function dealerExposure(
       const charmDay = (q.charm ?? 0) / 365;
 
       if (q.type === 'call') {
-        acc.callGEX += gamma * scale;
-        acc.callDEX += delta * scale;
-        acc.callVEX += vanna * scale;
-        acc.callCharm += charmDay * scale;
+        acc.callGEX += gamma * gexScale;
+        acc.callDEX += delta * notionalScale;
+        acc.callVEX += vanna * notionalScale;
+        acc.callCharm += charmDay * notionalScale;
       } else {
-        acc.putGEX -= gamma * scale; // dealer-style put GEX negative
-        acc.putDEX += delta * scale; // put δ already ≤ 0
-        acc.putVEX += vanna * scale;
-        acc.putCharm += charmDay * scale;
+        acc.putGEX -= gamma * gexScale; // dealer-style put GEX negative
+        acc.putDEX += delta * notionalScale; // put δ already ≤ 0
+        acc.putVEX += vanna * notionalScale;
+        acc.putCharm += charmDay * notionalScale;
       }
       map.set(q.strike, acc);
     }
@@ -410,7 +427,7 @@ export function dealerExposure(
     putWall,
     weight,
     unitNote: weight === 'oi'
-      ? 'OI-weighted · $ notional (greek × S × OI × mult)'
+      ? 'OI-weighted · GEX = γ·S²·0.01·OI·mult (1% $gamma) · DEX/VEX use ×S'
       : 'Unit weight (1 per listed OI>0) · compare structure not size',
   };
 }

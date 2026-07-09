@@ -105,32 +105,32 @@ export function JapanCarryPanel() {
       subtitle="US−JP 10Y yield gap + USDJPY spot — structural carry context, not a rec. Funding / FX vol / BoJ dominate P&L."
     >
       {state?.error && (
-        <div className="text-[10px] text-red-400">{state.error}</div>
+        <div className="text-type-xs text-down">{state.error}</div>
       )}
       <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
         <div className="rounded border border-border px-2 py-1.5">
-          <div className="text-[9px] text-muted-foreground">USDJPY</div>
+          <div className="text-type-2xs text-muted-foreground">USDJPY</div>
           <div className="text-sm font-bold tabular-nums">{state?.usdjpy != null ? state.usdjpy.toFixed(2) : '—'}</div>
         </div>
         <div className="rounded border border-border px-2 py-1.5">
-          <div className="text-[9px] text-muted-foreground">US 10Y</div>
+          <div className="text-type-2xs text-muted-foreground">US 10Y</div>
           <div className="text-sm font-bold tabular-nums">{state?.us10 != null ? `${state.us10.toFixed(2)}%` : '—'}</div>
         </div>
         <div className="rounded border border-border px-2 py-1.5">
-          <div className="text-[9px] text-muted-foreground">JP 10Y</div>
+          <div className="text-type-2xs text-muted-foreground">JP 10Y</div>
           <div className="text-sm font-bold tabular-nums">{state?.jp10 != null ? `${state.jp10.toFixed(2)}%` : '—'}</div>
         </div>
         <div className="rounded border border-border px-2 py-1.5">
-          <div className="text-[9px] text-muted-foreground">US−JP 10Y</div>
+          <div className="text-type-2xs text-muted-foreground">US−JP 10Y</div>
           <div className={`text-sm font-bold tabular-nums ${spread10 != null && spread10 > 2 ? 'text-amber-400' : 'text-foreground'}`}>
             {spread10 != null ? `${spread10 >= 0 ? '+' : ''}${spread10.toFixed(2)} pp` : '—'}
           </div>
         </div>
       </div>
-      <p className="mt-2 text-[10px] leading-snug text-muted-foreground">{premiumNote}</p>
+      <p className="mt-2 text-type-xs leading-snug text-muted-foreground">{premiumNote}</p>
       {state?.hist && state.hist.length > 2 && (
         <div className="mt-3">
-          <div className="mb-1 text-[10px] text-muted-foreground">US−JP 10Y spread history (pp)</div>
+          <div className="mb-1 text-type-xs text-muted-foreground">US−JP 10Y spread history (pp)</div>
           <ResponsiveContainer width="100%" height={120}>
             <AreaChart data={state.hist}>
               <CartesianGrid stroke="#1f1f1f" strokeDasharray="2 2" />

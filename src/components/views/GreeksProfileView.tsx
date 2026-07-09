@@ -56,7 +56,7 @@ export function GreeksProfileView() {
             <button
               key={g.key}
               onClick={() => setGreek(g.key)}
-              className={`px-2 py-0.5 text-[10px] font-mono rounded transition-colors ${
+              className={`px-2 py-0.5 text-type-xs font-mono rounded transition-colors ${
                 greek === g.key ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
               }`}
             >
@@ -66,7 +66,7 @@ export function GreeksProfileView() {
           <select
             value={expiryIdx}
             onChange={e => setExpiryIdx(Number(e.target.value))}
-            className="rounded border border-border bg-background px-2 py-0.5 text-[10px] font-mono text-foreground"
+            className="rounded border border-border bg-background px-2 py-0.5 text-type-xs font-mono text-foreground"
           >
             {snapshot.expiries.map((e, i) => (
               <option key={e.dte} value={i}>{e.dte}d</option>
@@ -98,7 +98,7 @@ export function GreeksProfileView() {
                 if (!active || !payload?.length) return null;
                 const d = payload[0]!.payload as { strike: number; value: number };
                 return (
-                  <div className="rounded border border-border bg-popover/95 p-2 font-mono text-[10px] shadow backdrop-blur">
+                  <div className="rounded border border-border bg-popover/95 p-2 font-mono text-type-xs shadow backdrop-blur">
                     <div className="mb-1 text-muted-foreground">K {fmtPrice(d.strike, 0)}</div>
                     <div className="text-foreground">{d.value.toFixed(4)}</div>
                   </div>

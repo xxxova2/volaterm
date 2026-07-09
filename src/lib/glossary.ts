@@ -181,15 +181,15 @@ export const GLOSSARY: Record<string, GlossaryEntry> = {
   // ---- Expected move --------------------------------------------------------
   expectedMove: {
     title: 'Expected Move',
-    body: 'The market-implied 1-standard-deviation move by the nearest expiration, from the ATM straddle. Think of it as the "cone" the stock is expected to stay inside ~68% of the time.',
+    body: 'Market-implied ~1σ move to the front expiry: ATM straddle / 0.8 (near-term BS ATM rule of thumb). Fallback S·ATM IV·√T when no liquid straddle.',
   },
   impliedMove: {
     title: 'Implied Move',
-    body: 'The dollar/% move the options market implies for the upcoming event (often earnings), from the straddle price.',
+    body: 'Dollar/% 1σ move implied by the front ATM straddle (straddle ≈ 0.8 × 1σ).',
   },
   probTouch: {
     title: 'Prob Touch',
-    body: 'Estimated chance the stock touches the expected-move band at least once by expiration (higher than the chance it finishes outside it).',
+    body: 'Approx. probability of touching the +expected-move level before expiry under zero-drift BM (reflection: 2·N(−d)). One-sided; not a two-barrier finish probability.',
   },
 
   // ---- Surface / model health ----------------------------------------------

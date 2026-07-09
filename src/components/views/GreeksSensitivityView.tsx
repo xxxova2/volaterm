@@ -49,7 +49,7 @@ export function GreeksSensitivityView() {
                 content={({ active, payload, label }) => {
                   if (!active || !payload?.length) return null;
                   return (
-                    <div className="rounded border border-border bg-popover/95 p-2 font-mono text-[10px] shadow backdrop-blur">
+                    <div className="rounded border border-border bg-popover/95 p-2 font-mono text-type-xs shadow backdrop-blur">
                       <div className="mb-1 font-semibold text-foreground">{label}</div>
                       {payload.map(p => (
                         <div key={p.name} className="flex items-center justify-between gap-3">
@@ -80,7 +80,7 @@ export function GreeksSensitivityView() {
                 content={({ active, payload, label }) => {
                   if (!active || !payload?.length) return null;
                   return (
-                    <div className="rounded border border-border bg-popover/95 p-2 font-mono text-[10px] shadow backdrop-blur">
+                    <div className="rounded border border-border bg-popover/95 p-2 font-mono text-type-xs shadow backdrop-blur">
                       <div className="mb-1 font-semibold text-foreground">{label}</div>
                       {payload.map(p => (
                         <div key={p.name} className="flex items-center justify-between gap-3">

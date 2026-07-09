@@ -37,7 +37,7 @@ export class SectionErrorBoundary extends Component<Props, State> {
           action={
             <button
               type="button"
-              className="rounded border border-border px-2 py-1 font-mono text-[10px] text-muted-foreground hover:border-primary hover:text-primary"
+              className="rounded border border-border px-2 py-1 font-mono text-type-xs text-muted-foreground hover:border-primary hover:text-primary"
               onClick={() => this.setState({ hasError: false, message: '' })}
             >
               Retry section

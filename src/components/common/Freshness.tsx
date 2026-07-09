@@ -24,12 +24,12 @@ export function classifyFreshness(
 }
 
 const STYLE: Record<FreshnessKind, { label: string; className: string; dot: string }> = {
-  live: { label: 'LIVE', className: 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10', dot: 'bg-emerald-400' },
+  live: { label: 'LIVE', className: 'text-up border-up/30 bg-up/10', dot: 'bg-up' },
   delayed: { label: 'DELAYED', className: 'text-cyan-400 border-cyan-500/30 bg-cyan-500/10', dot: 'bg-cyan-400' },
   stale: { label: 'STALE', className: 'text-amber border-amber/40 bg-amber/10', dot: 'bg-amber' },
-  expired: { label: 'EXPIRED', className: 'text-red-400 border-red-500/30 bg-red-500/10', dot: 'bg-red-400' },
+  expired: { label: 'EXPIRED', className: 'text-down border-down/30 bg-down/10', dot: 'bg-down' },
   demo: { label: 'DEMO', className: 'text-amber border-amber/40 bg-amber/10', dot: 'bg-amber' },
-  down: { label: 'API DOWN', className: 'text-red-400 border-red-500/30 bg-red-500/10', dot: 'bg-red-400' },
+  down: { label: 'API DOWN', className: 'text-down border-down/30 bg-down/10', dot: 'bg-down' },
   unknown: { label: '—', className: 'text-muted-foreground border-border bg-muted/40', dot: 'bg-muted-foreground' },
 };
 
@@ -55,7 +55,7 @@ export function FreshnessChip({
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-mono text-[9px] font-bold uppercase tracking-wider',
+        'inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-mono text-type-2xs font-bold uppercase tracking-wider',
         s.className,
         className,
       )}

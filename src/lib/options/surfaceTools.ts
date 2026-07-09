@@ -79,8 +79,11 @@ export function termSlice(grid: SurfaceGrid, strike: number): TermSlice | null {
 export function sviReadout(grid: SurfaceGrid, spot: number): SVIReadout | null {
   let best: SVIFit & { expiry: string } | null = null;
   for (let r = 0; r < grid.iv.length; r++) {
-    const fit = fitSVI(grid.strikes, grid.iv[r]!, spot);
-    if (fit && (!best || fit.rmse < best.rmse)) {
+    const dte = grid.dtes?.[r] ?? dteFromExpiry(grid.expiries[r]!);
+    const T = Math.max(dte / 365, 1e-8);
+    // RMSE is in total-variance units; prefer denser near-term smiles by sample count then RMSE.
+    const fit = fitSVI(grid.strikes, grid.iv[r]!, spot, T);
+    if (fit && (!best || fit.samples > best.samples || (fit.samples === best.samples && fit.rmse < best.rmse))) {
       best = { ...fit, expiry: grid.expiries[r]! };
     }
   }

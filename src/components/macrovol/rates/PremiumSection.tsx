@@ -62,7 +62,9 @@ export function PremiumSection({
             title: 'STIR path premium',
             body: 'Futures-implied path vs SOFR = priced cuts/hikes. Positive “cuts priced” is not a free long — risk is re-pricing of terminal rate / path volatility.',
             signal: stir?.path?.approx_25bp_cuts_priced != null
-              ? `${stir.path.approx_25bp_cuts_priced.toFixed(2)}× 25bp cuts`
+              ? `${Math.abs(stir.path.approx_25bp_cuts_priced).toFixed(2)}× 25bp ${
+                  stir.path.approx_25bp_cuts_priced > 0 ? 'cuts' : stir.path.approx_25bp_cuts_priced < 0 ? 'hikes' : 'flat'
+                }`
               : 'load STIR',
           },
           {
@@ -73,10 +75,10 @@ export function PremiumSection({
         ].map((card) => (
           <div key={card.title} className="rounded-lg border border-border bg-background/40 p-3">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-[11px] font-semibold text-foreground">{card.title}</span>
-              <span className="text-[10px] font-bold text-primary">{card.signal}</span>
+              <span className="text-type-sm font-semibold text-foreground">{card.title}</span>
+              <span className="text-type-xs font-bold text-primary">{card.signal}</span>
             </div>
-            <p className="mt-1 text-[10px] leading-snug text-muted-foreground">{card.body}</p>
+            <p className="mt-1 text-type-xs leading-snug text-muted-foreground">{card.body}</p>
           </div>
         ))}
       </div>

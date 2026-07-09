@@ -12,9 +12,9 @@ import { Explain } from '../common/Explain';
 function Stat({ label, value, color, sub, term }: { label: string; value: string; color?: string; sub?: string; term?: string }) {
   return (
     <div className="flex flex-col">
-      <span className="text-[10px] text-muted-foreground font-mono">{term ? <Explain term={term}>{label}</Explain> : label}</span>
+      <span className="text-type-xs text-muted-foreground font-mono">{term ? <Explain term={term}>{label}</Explain> : label}</span>
       <span className="text-sm font-semibold font-mono tabular-nums" style={{ color: color ?? 'var(--foreground)' }}>{value}</span>
-      {sub && <span className="text-[10px] text-muted-foreground">{sub}</span>}
+      {sub && <span className="text-type-xs text-muted-foreground">{sub}</span>}
     </div>
   );
 }

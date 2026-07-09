@@ -131,14 +131,15 @@ export function SmileView() {
     const expiryIdx = selectedExpiryIdx;
     const row = surface.iv[expiryIdx];
     if (!row) return null;
-    const fit = fitSVI(surface.strikes, row, snapshot.spot);
+    const dte = surface.dtes[expiryIdx] ?? 30;
+    const T = Math.max(dte / 365, 1e-8);
+    // Fit SVI on total variance w = IV²·T for this expiry.
+    const fit = fitSVI(surface.strikes, row, snapshot.spot, T);
     if (!fit) return null;
 
     const kStrikes = surface.strikes.map(s => Math.log(s / snapshot.spot));
     const minK = Math.min(...kStrikes);
     const maxK = Math.max(...kStrikes);
-    const dte = surface.dtes[expiryIdx] ?? 30;
-    const T = dte / 365;
     const points: SVICurvePoint[] = [];
     const n = 50;
     for (let i = 0; i <= n; i++) {
@@ -186,34 +187,34 @@ export function SmileView() {
         <div className="flex items-center gap-2 px-2 py-1 border-b border-border">
           <button
             onClick={() => setXMode('moneyness')}
-            className={cn('px-2 py-0.5 text-[10px] font-mono rounded', xMode === 'moneyness' ? 'bg-primary/20 text-primary' : 'text-muted-foreground')}
+            className={cn('px-2 py-0.5 text-type-xs font-mono rounded', xMode === 'moneyness' ? 'bg-primary/20 text-primary' : 'text-muted-foreground')}
           >
             Moneyness
           </button>
           <button
             onClick={() => setXMode('strike')}
-            className={cn('px-2 py-0.5 text-[10px] font-mono rounded', xMode === 'strike' ? 'bg-primary/20 text-primary' : 'text-muted-foreground')}
+            className={cn('px-2 py-0.5 text-type-xs font-mono rounded', xMode === 'strike' ? 'bg-primary/20 text-primary' : 'text-muted-foreground')}
           >
             Strike
           </button>
           <button
             onClick={() => setXMode('delta')}
-            className={cn('px-2 py-0.5 text-[10px] font-mono rounded', xMode === 'delta' ? 'bg-primary/20 text-primary' : 'text-muted-foreground')}
+            className={cn('px-2 py-0.5 text-type-xs font-mono rounded', xMode === 'delta' ? 'bg-primary/20 text-primary' : 'text-muted-foreground')}
           >
             Delta
           </button>
           <button
             onClick={() => setShowBidAsk(s => !s)}
-            className={cn('px-2 py-0.5 text-[10px] font-mono rounded', showBidAsk ? 'bg-primary/20 text-primary' : 'text-muted-foreground')}
+            className={cn('px-2 py-0.5 text-type-xs font-mono rounded', showBidAsk ? 'bg-primary/20 text-primary' : 'text-muted-foreground')}
           >
             Bid-Ask
           </button>
           <div className="flex-1" />
-          <span className="text-[10px] text-muted-foreground font-mono"><Explain term="atmIV">ATM IV</Explain>: {fmtPct(snapshot.expiries[selectedExpiryIdx]?.atmIV ?? 0)}</span>
+          <span className="text-type-xs text-muted-foreground font-mono"><Explain term="atmIV">ATM IV</Explain>: {fmtPct(snapshot.expiries[selectedExpiryIdx]?.atmIV ?? 0)}</span>
         </div>
 
         {skewMetrics && (
-          <div className="flex gap-3 px-3 py-1 border-b border-border text-[10px] font-mono items-center">
+          <div className="flex gap-3 px-3 py-1 border-b border-border text-type-xs font-mono items-center">
             <span className="text-muted-foreground"><Explain term="atmIV">ATM</Explain>: <span className="text-foreground">{(skewMetrics.atmIV * 100).toFixed(1)}%</span></span>
             <span className="text-border">|</span>
             <span className="text-muted-foreground" title="RR = IV(25Δ put) − IV(25Δ call); + = put wing richer">
@@ -313,7 +314,7 @@ export function SmileView() {
         </div>
 
         {sviCurve && (
-          <div className="flex gap-3 px-3 py-0.5 border-t border-border text-[9px] font-mono text-muted-foreground">
+          <div className="flex gap-3 px-3 py-0.5 border-t border-border text-type-2xs font-mono text-muted-foreground">
             <span>SVI: a={sviCurve.params.a.toFixed(4)} b={sviCurve.params.b.toFixed(4)} ρ={sviCurve.params.rho.toFixed(3)} m={sviCurve.params.m.toFixed(4)} σ={sviCurve.params.sigma.toFixed(4)}</span>
             <span className="text-purple"><Explain term="sviRmse">RMSE</Explain> {(sviCurve.rmse * 100).toFixed(3)}%</span>
           </div>
@@ -324,7 +325,7 @@ export function SmileView() {
             <button
               key={slice.expiry}
               onClick={() => setSelectedExpiryIdx(i)}
-              className={cn('px-1.5 py-0.5 text-[10px] font-mono rounded transition-colors',
+              className={cn('px-1.5 py-0.5 text-type-xs font-mono rounded transition-colors',
                 i === selectedExpiryIdx ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground hover:text-foreground'
               )}
               style={{ borderLeft: `2px solid ${colors[i % colors.length]}` }}

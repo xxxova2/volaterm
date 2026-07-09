@@ -36,7 +36,7 @@ const { ROW_HEIGHT, ATM_THRESHOLD } = VISUAL_CONFIG.optionChain;
 
 function HeaderRow() {
   return (
-    <div className="flex text-[10px] font-mono text-muted-foreground border-b border-border bg-card sticky top-0 z-10 h-6 items-center">
+    <div className="flex text-type-xs font-mono text-muted-foreground border-b border-border bg-card sticky top-0 z-10 h-6 items-center">
       <div className="flex-[4] flex">
         <Explain term="impliedVol" className={`${COL_WIDTHS.sm} text-right px-1`}>IV%</Explain>
         <Explain term="delta" className={`${COL_WIDTHS.sm} text-right px-1`}>Δ</Explain>
@@ -152,9 +152,9 @@ export function OptionChain() {
               aria-selected={focused && index === rowIndex}
               onClick={() => onRowClick(index)}
               className={cn(
-                'flex text-[10px] font-mono items-center border-b border-border/30 hover:bg-muted/20 cursor-default',
+                'flex text-type-xs font-mono items-center border-b border-border/30 hover:bg-muted/20 cursor-default',
                 r.atm && 'bg-primary/5',
-                focused && index === rowIndex && 'ring-1 ring-inset ring-primary/70 bg-primary/10',
+                focused && index === rowIndex && 'focus-ring-term-inset bg-primary/10',
               )}
             >
               <div className="flex-[4] flex text-up">

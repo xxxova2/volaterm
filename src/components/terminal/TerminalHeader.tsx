@@ -27,7 +27,7 @@ export function TerminalHeader() {
 
   return (
     <>
-      <header className="flex h-9 shrink-0 items-center justify-between border-b border-border bg-card px-2 text-[11px] font-mono sm:px-3">
+      <header className="flex h-9 shrink-0 items-center justify-between border-b border-border bg-card px-2 text-type-sm font-mono sm:px-3">
         <div className="flex min-w-0 items-center gap-2 sm:gap-3">
           <span className="shrink-0 text-primary font-bold text-xs tracking-wider sm:text-sm">VOLATERM</span>
           <button
@@ -35,13 +35,13 @@ export function TerminalHeader() {
             className="flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 font-semibold transition-colors hover:bg-secondary"
           >
             <span className="text-amber">{symbol}</span>
-            <span className="text-muted-foreground text-[9px]">▼</span>
+            <span className="text-muted-foreground text-type-2xs">▼</span>
           </button>
           {fmpQuote?.name && (
             <span className="hidden max-w-36 truncate text-muted-foreground lg:inline">{fmpQuote.name}</span>
           )}
           <span className="tabular-nums text-foreground">{fmtPrice(spot)}</span>
-          {loading && <span className="animate-pulse text-muted-foreground">⟳</span>}
+          {loading && <span className="text-muted-foreground" title="Refreshing">⟳</span>}
           {atmIV != null && (
             <span className="hidden text-muted-foreground sm:inline">
               IV30: <span className="text-cyan">{fmtPrice(atmIV * 100, 1)}%</span>
@@ -49,7 +49,7 @@ export function TerminalHeader() {
           )}
           {liveRFR != null && (
             <span className="hidden text-muted-foreground md:inline">
-              RFR: <span className="text-violet-400">{fmtPrice(liveRFR * 100, 2)}%</span>
+              RFR: <span className="text-rate">{fmtPrice(liveRFR * 100, 2)}%</span>
             </span>
           )}
           {termSlope != null && (

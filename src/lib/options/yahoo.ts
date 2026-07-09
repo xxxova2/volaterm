@@ -1,7 +1,7 @@
 import type { VolSnapshot, ExpirySlice, OptionQuote } from './types';
 import { computeGreeks } from './greeks';
 import { impliedVol } from './ivSolver';
-import { fitSVI, svi } from './svi';
+import { fitSVI, sviIv } from './svi';
 import { VALIDATION_CONFIG } from '../../config/constants';
 import { yearFractionToExpiry, calendarDte } from './time';
 import { estimateParityDividend, blendDividendYield } from './parity';
@@ -236,7 +236,8 @@ function smoothWings(
 
   const strikes = quotes.map((q) => q.strike);
   const ivs = quotes.map((q) => q.iv);
-  const fit = fitSVI(strikes, ivs, spot);
+  // Fit SVI on total variance w = IV²·T for this expiry.
+  const fit = fitSVI(strikes, ivs, spot, T);
 
   const out: OptionQuote[] = [];
   for (const raw of quotes) {
@@ -244,7 +245,7 @@ function smoothWings(
     const k = Math.abs(Math.log(raw.strike / spot));
     const isWing = k > 0.15;
     if (fit && isWing) {
-      const fitted = svi(fit.params, Math.log(raw.strike / spot));
+      const fitted = sviIv(fit.params, Math.log(raw.strike / spot), T);
       if (isFinite(fitted) && fitted > 0) {
         const lo = Math.max(MIN_IV, fitted * 0.5);
         const hi = Math.min(MAX_IV, Math.max(fitted * 2, fitted + 0.15));

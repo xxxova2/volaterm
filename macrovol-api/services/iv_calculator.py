@@ -18,8 +18,11 @@ def black_scholes_price(S, K, T, r, q, sigma, option_type="call"):
 def implied_volatility(market_price, S, K, T, r, q, option_type="call"):
     if T <= 0 or market_price <= 0:
         return None
-    intrinsic = max(0, S - K) if option_type == "call" else max(0, K - S)
-    if market_price <= intrinsic:
+    # European discounted intrinsic (matches TS ivSolver / yahoo pipeline).
+    disc_s = S * math.exp(-q * T)
+    disc_k = K * math.exp(-r * T)
+    intrinsic = max(0.0, disc_s - disc_k) if option_type == "call" else max(0.0, disc_k - disc_s)
+    if market_price < intrinsic * 0.99:
         return None
     lo, hi = 0.001, 5.0
     for _ in range(200):
@@ -89,6 +92,7 @@ def build_iv_surface(
                     continue
                 mid = (bid + ask) / 2
                 iv = implied_volatility(mid, spot, K, T, r_t, q, opt_type)
+                # Keep in sync with VALIDATION_CONFIG.ranges (TS) and greeks_calculator.
                 if iv and 0.01 < iv < 3.0:
                     raw_points.append((T, K, iv * 100))
 

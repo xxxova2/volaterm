@@ -65,7 +65,7 @@ describe('LiveProvider auto chain source', () => {
     yahoo.invalidateYahooChainCache();
   });
 
-  it('auto mode prefers yfinance chain, falls back to synthetic when both absent', async () => {
+  it('auto mode prefers yfinance chain when available', async () => {
     // FMP quote ok (spot), yfinance /api/options returns a chain, FMP options 403.
     mockFetch
       .mockResolvedValueOnce(quote(500)) // FMP quote
@@ -91,18 +91,17 @@ describe('LiveProvider auto chain source', () => {
     expect(provider.lastChainAvailable).toBe(true);
   });
 
-  it('auto mode yields synthetic when neither chain source is available', async () => {
+  it('auto mode fails closed (null) when neither chain source is available', async () => {
     mockFetch
       .mockResolvedValueOnce(quote(500)) // FMP quote
       .mockRejectedValueOnce(new Error('yfinance unavailable'))
       .mockResolvedValueOnce(res({ 'Error Message': 'Subscription does not include this endpoint' }, false)); // FMP options
 
     const snap = await provider.getSnapshot('SPY', { chainMode: 'auto' });
-    // Synthetic surface over the real spot.
-    expect(snap).not.toBeNull();
+    // LIVE is fail-closed: no synthetic smile under live mode.
+    expect(snap).toBeNull();
     expect(provider.lastChainSource).toBe('synthetic');
     expect(provider.lastChainAvailable).toBe(false);
-    expect(snap!.spot).toBe(500);
   });
 
   it('explicit fmp mode only uses FMP options', async () => {

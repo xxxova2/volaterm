@@ -13,6 +13,7 @@ import {
   realizedVolCloseToClose, volRiskPremium, scanParityEdges,
 } from '../../lib/options/analytics';
 import { Explain } from '../common/Explain';
+import { DeskLoading } from '../common/Skeleton';
 import { macrovolApi, type RatesSummary, type StirStripData, type MacroSummary } from '../../lib/macrovol/api';
 import type { ActiveTab } from '../../lib/options/types';
 
@@ -33,6 +34,7 @@ export function DashboardView() {
   const [stir, setStir] = useState<StirStripData | null>(null);
   const [macro, setMacro] = useState<MacroSummary | null>(null);
   const [macroHealth, setMacroHealth] = useState<'ok' | 'down' | 'pending'>('pending');
+  const [macroRetry, setMacroRetry] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -54,7 +56,7 @@ export function DashboardView() {
       if (m.status === 'fulfilled' && m.value) setMacro(m.value as MacroSummary);
     });
     return () => { cancelled = true; };
-  }, []);
+  }, [macroRetry]);
 
   const firstFrame = historicalFrames[0];
   const change = snapshot ? snapshot.spot - (firstFrame?.snapshot.spot ?? snapshot.spot) : 0;
@@ -172,22 +174,28 @@ export function DashboardView() {
   const gexSign = (gex?.totalGEX ?? 0) >= 0 ? 'GEX+' : 'GEX−';
   const ivrLabel = ivData.percentile >= 70 ? 'IV RICH' : ivData.percentile <= 30 ? 'IV CHEAP' : 'IV MID';
   const cuts = stir?.path?.approx_25bp_cuts_priced;
-  const qualityLabel = arbClean ? 'FIT CLEAN' : 'FIT FLAGS';
+  const fitLabel = arbClean ? 'FIT OK' : 'FIT FLAGS';
 
   const actionChips = useMemo(() => {
-    const chips: { label: string; tab: ActiveTab; section?: string; tone: 'up' | 'down' | 'amber' | 'neutral' }[] = [];
+    const chips: { label: string; tab: ActiveTab; section?: string; tone: 'up' | 'down' | 'warn' | 'neutral' }[] = [];
     if (ivData.percentile >= 70) chips.push({ label: 'IV rich vs history → Vol', tab: 'vol', tone: 'down' });
     if (ivData.percentile <= 30) chips.push({ label: 'IV cheap vs history → Vol', tab: 'vol', tone: 'up' });
-    if (termSlope < -0.015) chips.push({ label: 'Backwardation stress → Term', tab: 'vol', tone: 'amber' });
+    if (termSlope < -0.015) chips.push({ label: 'Backwardation stress → Term', tab: 'vol', tone: 'warn' });
     if ((gex?.totalGEX ?? 0) < 0) chips.push({ label: 'Short-γ zone → Positioning', tab: 'positioning', tone: 'down' });
     if ((gex?.totalGEX ?? 0) > 0) chips.push({ label: 'Long-γ dampen → Levels', tab: 'positioning', tone: 'up' });
-    if (pcSkew > 0.03) chips.push({ label: 'Put skew steep → Smile', tab: 'vol', tone: 'amber' });
+    if (pcSkew > 0.03) chips.push({ label: 'Put skew steep → Smile', tab: 'vol', tone: 'warn' });
     if (vrp != null && vrp > 0.04) chips.push({ label: 'VRP rich (IV≫RV) → MM Desk', tab: 'desk', tone: 'down' });
     if (vrp != null && vrp < -0.02) chips.push({ label: 'IV cheap vs RV → Desk', tab: 'desk', tone: 'up' });
-    if (!arbClean) chips.push({ label: 'Surface quality flags → Quality', tab: 'vol', tone: 'amber' });
-    if (parityFlags > 0) chips.push({ label: `${parityFlags} parity edge? → Edge`, tab: 'positioning', tone: 'amber' });
-    if (cuts != null && cuts > 1) {
-      chips.push({ label: `${cuts.toFixed(1)}× cuts priced → STIR`, tab: 'rates', section: 'sec-stir', tone: 'up' });
+    if (!arbClean) chips.push({ label: 'Surface fit flags → Fit', tab: 'vol', tone: 'warn' });
+    if (parityFlags > 0) chips.push({ label: `${parityFlags} parity edge? → Edge`, tab: 'positioning', tone: 'warn' });
+    if (cuts != null && Math.abs(cuts) > 1) {
+      const kind = cuts > 0 ? 'cuts' : 'hikes';
+      chips.push({
+        label: `${Math.abs(cuts).toFixed(1)}× ${kind} priced → STIR`,
+        tab: 'rates',
+        section: 'sec-stir',
+        tone: cuts > 0 ? 'up' : 'down',
+      });
     }
     if (rates?.spread_2s10s != null && rates.spread_2s10s < 0) {
       chips.push({ label: '2s10s inverted → Curve', tab: 'rates', section: 'sec-shape', tone: 'down' });
@@ -205,24 +213,23 @@ export function DashboardView() {
           macroHealth={macroHealth}
           hasQuote={!!fmpQuote}
           hasHistory={(fmpHistory?.length ?? 0) > 0}
+          onRetryMacro={() => setMacroRetry((n) => n + 1)}
         />
         <RatesStrip rates={rates} stir={stir} onOpen={() => go('rates')} />
-        <div className="flex flex-1 items-center justify-center font-mono text-xs text-muted-foreground">
-          Loading surface… rates strip still live when MacroVol is up.
-        </div>
+        <DeskLoading message="Fitting surface… rates strip still live when MacroVol is up." className="flex-1 min-h-[12rem]" />
       </div>
     );
   }
 
   return (
     <div className="h-full overflow-y-auto p-1">
-      {/* Regime banner — single glance */}
-      <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 rounded border border-primary/30 bg-primary/5 px-3 py-2 font-mono text-[11px]">
+      {/* Regime banner — persistent top band (gaze anchor) */}
+      <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 rounded border border-border border-l-2 border-l-primary bg-card/80 px-3 py-2 font-mono text-type-sm">
         <span className="font-bold tracking-wider text-primary">{symbol}</span>
         <span className="text-foreground font-semibold tabular-nums">{fmtPrice(snapshot.spot)}</span>
         <span className={dayChg >= 0 ? 'text-up' : 'text-down'}>{fmtSignedPct(dayChgPct)}</span>
         <Sep />
-        <span className="text-cyan font-semibold">{termLabel}</span>
+        <span className="text-info font-semibold">{termLabel}</span>
         <Sep />
         <span className={ivData.percentile >= 70 ? 'text-down' : ivData.percentile <= 30 ? 'text-up' : 'text-foreground'}>
           {ivrLabel} {ivData.percentile.toFixed(0)}%
@@ -235,13 +242,13 @@ export function DashboardView() {
         <Sep />
         {cuts != null && (
           <>
-            <span className="text-amber">
+            <span className="text-info">
               STIR {cuts >= 0 ? `${cuts.toFixed(1)}× cuts` : `${Math.abs(cuts).toFixed(1)}× hikes`}
             </span>
             <Sep />
           </>
         )}
-        <span className={arbClean ? 'text-up' : 'text-down'}>{qualityLabel}</span>
+        <span className={arbClean ? 'text-up' : 'text-warn'}>{fitLabel}</span>
         {vrp != null && (
           <>
             <Sep />
@@ -258,6 +265,7 @@ export function DashboardView() {
         macroHealth={macroHealth}
         hasQuote={!!fmpQuote}
         hasHistory={(fmpHistory?.length ?? 0) > 0}
+        onRetryMacro={() => setMacroRetry((n) => n + 1)}
       />
 
       <RatesStrip rates={rates} stir={stir} macro={macro} onOpen={() => go('rates')} />
@@ -269,17 +277,17 @@ export function DashboardView() {
             key={c.label}
             type="button"
             onClick={() => go(c.tab, c.section)}
-            className={`rounded border px-2 py-0.5 font-mono text-[10px] transition-colors hover:border-primary ${
+            className={`rounded border px-2 py-0.5 font-mono text-type-xs transition-colors hover:border-border ${
               c.tone === 'up' ? 'border-up/40 text-up'
                 : c.tone === 'down' ? 'border-down/40 text-down'
-                  : c.tone === 'amber' ? 'border-amber/40 text-amber'
+                  : c.tone === 'warn' ? 'border-warn/40 text-warn'
                     : 'border-border text-muted-foreground'
             }`}
           >
             {c.label}
           </button>
         ))}
-        <span className="ml-auto hidden font-mono text-[9px] text-muted-foreground sm:inline">
+        <span className="ml-auto hidden font-mono text-type-2xs text-muted-foreground sm:inline">
           Deep-link chips · not trade advice
         </span>
       </div>
@@ -298,51 +306,22 @@ export function DashboardView() {
             key={id}
             type="button"
             onClick={() => go(id)}
-            className="rounded border border-border bg-card px-2 py-0.5 font-mono text-[10px] text-muted-foreground hover:border-primary hover:text-primary"
+            className="rounded border border-border bg-card px-2 py-0.5 font-mono text-type-xs text-muted-foreground hover:border-primary hover:text-primary"
           >
             {label} →
           </button>
         ))}
       </div>
 
-      <div className="grid grid-cols-2 gap-2 lg:grid-cols-3">
-        <Panel title={<Explain term="spot">Spot &amp; Session</Explain>}>
-          <div className="p-3">
-            <div className="font-mono text-2xl font-bold tabular-nums">{fmtPrice(snapshot.spot)}</div>
-            <div className={`mt-1 font-mono text-sm tabular-nums ${dayChg >= 0 ? 'text-up' : 'text-down'}`}>
-              {fmtSigned(dayChg)} ({fmtSignedPct(dayChgPct)})
-            </div>
-            {quotePath.length > 1 ? (
-              <div className="mt-2 h-16">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={quotePath} margin={{ top: 2, right: 0, bottom: 0, left: 0 }}>
-                    <defs>
-                      <linearGradient id="homeQuoteFill" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="var(--primary)" stopOpacity={0.35} />
-                        <stop offset="100%" stopColor="var(--primary)" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <Area type="monotone" dataKey="close" stroke="var(--primary)" fill="url(#homeQuoteFill)" strokeWidth={1.5} dot={false} />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-            ) : (
-              <div className="mt-3 h-1.5 rounded-full bg-muted">
-                <div
-                  className="h-full rounded-full bg-primary"
-                  style={{ width: `${Math.min(100, Math.max(5, ((snapshot.spot - snapshot.spot * 0.9) / (snapshot.spot * 0.2)) * 100))}%` }}
-                />
-              </div>
-            )}
-            <div className="mt-1 text-[9px] font-mono text-muted-foreground">
-              {quotePath.length > 1 ? '60d close path' : 'Enable LIVE for price history'}
-            </div>
-          </div>
-        </Panel>
-
-        <Panel title={<Explain term="volRegime">Volatility Regime</Explain>}>
-          <div className="grid grid-cols-2 gap-3 p-3">
-            <MiniStat label="ATM IV front" term="atmIV" value={fmtPct(volRegime)} color="text-primary" />
+      {/*
+        Home hierarchy (D-PR-6): Vol regime spotlight (~2-col), then 1 / 2 / 3 grid.
+        Top 3 on squint: regime banner, vol regime, key levels.
+      */}
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        {/* Spotlight — Vol Structure metrics */}
+        <Panel title={<Explain term="volRegime">Vol Structure · Regime</Explain>} className="sm:col-span-2">
+          <div className="grid grid-cols-2 gap-3 p-3 md:grid-cols-4">
+            <MiniStat label="ATM IV front" term="atmIV" value={fmtPct(volRegime)} />
             <MiniStat label="IV Rank" term="ivRank" value={`${(ivData.percentile).toFixed(0)}%`} />
             <MiniStat label="IV High" value={fmtPct(ivHighLow.ivHigh)} color="text-up" />
             <MiniStat label="IV Low" value={fmtPct(ivHighLow.ivLow)} color="text-down" />
@@ -358,16 +337,47 @@ export function DashboardView() {
           <button
             type="button"
             onClick={() => go('vol')}
-            className="w-full border-t border-border px-3 py-1.5 text-left font-mono text-[9px] text-primary hover:bg-muted/40"
+            className="w-full border-t border-border px-3 py-1.5 text-left font-mono text-type-2xs text-primary hover:bg-muted/40"
           >
-            Open Vol Structure (surface · smile · term · quality) →
+            Open Vol Structure (surface · smile · term · surface fit) →
           </button>
+        </Panel>
+
+        <Panel title={<Explain term="spot">Spot &amp; Session</Explain>}>
+          <div className="p-3">
+            <div className="font-mono text-type-2xl font-bold tabular-nums">{fmtPrice(snapshot.spot)}</div>
+            <div className={`mt-1 font-mono text-type-md tabular-nums ${dayChg >= 0 ? 'text-up' : 'text-down'}`}>
+              {fmtSigned(dayChg)} ({fmtSignedPct(dayChgPct)})
+            </div>
+            {quotePath.length > 1 ? (
+              <div className="mt-2 h-16">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={quotePath} margin={{ top: 2, right: 0, bottom: 0, left: 0 }}>
+                    <defs>
+                      <linearGradient id="homeQuoteFill" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="var(--info)" stopOpacity={0.35} />
+                        <stop offset="100%" stopColor="var(--info)" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <Area type="monotone" dataKey="close" stroke="var(--info)" fill="url(#homeQuoteFill)" strokeWidth={1.5} dot={false} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <p className="mt-3 font-mono text-type-xs text-muted-foreground">
+                Enable LIVE for 60d close path
+              </p>
+            )}
+            <div className="mt-1 text-type-2xs font-mono text-muted-foreground">
+              {quotePath.length > 1 ? '60d close path' : 'No synthetic progress bar'}
+            </div>
+          </div>
         </Panel>
 
         <Panel title={<Explain term="keyLevels">Key Levels</Explain>}>
           <div className="grid grid-cols-2 gap-3 p-3">
-            <MiniStat label="Max Pain" term="maxPain" value={maxPain ? fmtPrice(maxPain, 0) : '—'} color="text-primary" />
-            <MiniStat label="Gamma Flip" term="gammaFlip" value={gex?.gammaFlip ? fmtPrice(gex.gammaFlip, 0) : '—'} color="text-amber" />
+            <MiniStat label="Max Pain" term="maxPain" value={maxPain ? fmtPrice(maxPain, 0) : '—'} />
+            <MiniStat label="Gamma Flip" term="gammaFlip" value={gex?.gammaFlip ? fmtPrice(gex.gammaFlip, 0) : '—'} color="text-warn" />
             <MiniStat label="Call Wall" term="callWall" value={largestPos ? fmtPrice(largestPos.strike, 0) : '—'} color="text-up" />
             <MiniStat label="Put Wall" term="putWall" value={largestNeg ? fmtPrice(largestNeg.strike, 0) : '—'} color="text-down" />
             <MiniStat label="Total GEX" term="gex" value={fmtCompact(gex?.totalGEX ?? 0)} color={gex && gex.totalGEX >= 0 ? 'text-up' : 'text-down'} />
@@ -376,7 +386,7 @@ export function DashboardView() {
           <button
             type="button"
             onClick={() => go('positioning')}
-            className="w-full border-t border-border px-3 py-1.5 text-left font-mono text-[9px] text-primary hover:bg-muted/40"
+            className="w-full border-t border-border px-3 py-1.5 text-left font-mono text-type-2xs text-primary hover:bg-muted/40"
           >
             Open Positioning (chain · dealer · edge) →
           </button>
@@ -386,10 +396,10 @@ export function DashboardView() {
           <div className="grid grid-cols-2 gap-3 p-3">
             <MiniStat label="Σ Delta" term="netDelta" value={portGreeks?.delta.toFixed(2) ?? '—'} color={portGreeks && portGreeks.delta >= 0 ? 'text-up' : 'text-down'} />
             <MiniStat label="Σ Gamma" term="netGamma" value={portGreeks?.gamma.toFixed(4) ?? '—'} color="text-up" />
-            <MiniStat label="Σ Vega" term="netVega" value={portGreeks?.vega.toFixed(2) ?? '—'} color="text-amber" />
+            <MiniStat label="Σ Vega" term="netVega" value={portGreeks?.vega.toFixed(2) ?? '—'} color="text-info" />
             <MiniStat label="Σ Theta" term="netTheta" value={portGreeks?.theta.toFixed(2) ?? '—'} color={portGreeks && portGreeks.theta >= 0 ? 'text-up' : 'text-down'} />
           </div>
-          <div className="px-3 pb-2 text-[9px] font-mono text-muted-foreground">
+          <div className="px-3 pb-2 text-type-2xs font-mono text-muted-foreground">
             Sum of listed contract greeks — not a position book. Use MM Desk for book risk.
           </div>
         </Panel>
@@ -399,43 +409,46 @@ export function DashboardView() {
             {move ? (
               <div className="space-y-3">
                 <div>
-                  <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">Dollar Move</div>
-                  <div className="font-mono text-xl font-bold tabular-nums text-primary">±{fmtPrice(move.move)}</div>
+                  <div className="text-type-xs font-mono uppercase tracking-wider text-muted-foreground">Dollar Move</div>
+                  <div className="font-mono text-type-xl font-bold tabular-nums text-foreground">±{fmtPrice(move.move)}</div>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
-                  <MiniStat label="% Move" term="expectedMove" value={fmtPct(move.movePct)} color="text-primary" />
-                  <MiniStat label="Prob Touch" term="probTouch" value={fmtPct(move.probTouch)} color="text-cyan" />
+                  <MiniStat label="% Move" term="expectedMove" value={fmtPct(move.movePct)} />
+                  <MiniStat label="Prob Touch" term="probTouch" value={fmtPct(move.probTouch)} color="text-info" />
                 </div>
-                <div className="text-[10px] font-mono text-muted-foreground">Front ATM straddle (0.8× convention)</div>
+                <div className="text-type-xs font-mono text-muted-foreground">Front ATM straddle (0.8× convention)</div>
               </div>
             ) : (
-              <div className="font-mono text-sm text-muted-foreground">No data</div>
+              <div className="font-mono text-type-sm text-muted-foreground">No data</div>
             )}
           </div>
         </Panel>
 
-        <Panel title={<Explain term="surface">Surface Quality</Explain>}>
+        <Panel title={<Explain term="surface">Surface Fit / Model Convergence</Explain>}>
           <div className="space-y-3 p-3" data-testid="diagnostics-card">
+            <p className="text-type-2xs font-mono text-muted-foreground">
+              Validates SVI fit, not raw feed
+            </p>
             <div className="flex items-center justify-between">
-              <span className="text-[9px] font-mono uppercase tracking-wider text-muted-foreground">
+              <span className="text-type-2xs font-mono uppercase tracking-wider text-muted-foreground">
                 <Explain term="sviRmse">SVI RMSE</Explain>
               </span>
-              <span className="font-mono text-sm font-semibold tabular-nums text-primary" data-testid="svi-rmse">
+              <span className="font-mono text-type-md font-semibold tabular-nums text-foreground" data-testid="svi-rmse">
                 {fmtPct(sviRmse)}
               </span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-[9px] font-mono uppercase tracking-wider text-muted-foreground">SVI Samples</span>
-              <span className="font-mono text-sm font-semibold tabular-nums text-foreground">
+              <span className="text-type-2xs font-mono uppercase tracking-wider text-muted-foreground">SVI Samples</span>
+              <span className="font-mono text-type-md font-semibold tabular-nums text-foreground">
                 {String(sviSamples)}
               </span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-[9px] font-mono uppercase tracking-wider text-muted-foreground">
+              <span className="text-type-2xs font-mono uppercase tracking-wider text-muted-foreground">
                 <Explain term="arbitrage">Calendar / Butterfly</Explain>
               </span>
               <span
-                className={`rounded px-2 py-0.5 text-[10px] font-mono uppercase tracking-wider ${
+                className={`rounded px-2 py-0.5 text-type-xs font-mono uppercase tracking-wider ${
                   arbClean ? 'bg-up/15 text-up' : 'bg-down/15 text-down'
                 }`}
                 data-testid="arb-badge"
@@ -449,7 +462,7 @@ export function DashboardView() {
               <MiniStat label="Butterfly" term="butterflyArb" value={String(butterflyCount)} color={butterflyCount === 0 ? 'text-up' : 'text-down'} />
             </div>
             {parityFlags > 0 && (
-              <div className="text-[10px] font-mono text-amber">
+              <div className="text-type-xs font-mono text-warn">
                 {parityFlags} parity residual(s) past half-spread → Positioning Edge
               </div>
             )}
@@ -457,13 +470,13 @@ export function DashboardView() {
           <button
             type="button"
             onClick={() => go('vol')}
-            className="w-full border-t border-border px-3 py-1.5 text-left font-mono text-[9px] text-primary hover:bg-muted/40"
+            className="w-full border-t border-border px-3 py-1.5 text-left font-mono text-type-2xs text-primary hover:bg-muted/40"
           >
-            Inspect quality map under Vol Structure → Quality
+            Inspect under Vol Structure → Surface Fit
           </button>
         </Panel>
 
-        <Panel title="Open Interest by Expiry" className="lg:col-span-2">
+        <Panel title="Open Interest by Expiry" className="sm:col-span-2 below-fold">
           <div className="h-48 p-2">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={expiryOI} margin={{ top: 4, right: 8, bottom: 18, left: 0 }}>
@@ -474,24 +487,24 @@ export function DashboardView() {
                   content={({ active, payload, label }) => {
                     if (!active || !payload?.length) return null;
                     return (
-                      <div className="rounded border border-border bg-popover/95 p-2 font-mono text-[10px] shadow backdrop-blur">
+                      <div className="rounded border border-border bg-popover/95 p-2 font-mono text-type-xs shadow backdrop-blur">
                         <div className="mb-1 font-semibold text-foreground">{label}</div>
                         <div className="text-foreground">OI: {(payload[0]!.value as number).toLocaleString()}</div>
                       </div>
                     );
                   }}
                 />
-                <Bar dataKey="oi" fill="var(--primary)" radius={[2, 2, 0, 0]} />
+                <Bar dataKey="oi" fill="var(--info)" radius={[2, 2, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
         </Panel>
 
-        <Panel title="Quant notes">
-          <ul className="space-y-1.5 p-3 font-mono text-[10px] text-muted-foreground leading-snug">
+        <Panel title="Quant notes" className="below-fold">
+          <ul className="space-y-1.5 p-3 font-mono text-type-xs text-muted-foreground leading-snug">
             <li>· <span className="text-foreground">Home</span> = regime tape + chips before trading.</li>
             <li>· <span className="text-foreground">Dealer stack</span> = GEX/DEX/VEX/Charm under Positioning.</li>
-            <li>· <span className="text-foreground">Parity edge</span> = residual vs costs, not free lunch.</li>
+            <li>· <span className="text-foreground">Surface Fit</span> = SVI / model, not raw feed arb.</li>
             <li>· <span className="text-foreground">VRP</span> needs LIVE price history (close-to-close RV).</li>
             <li>· <span className="text-foreground">Greeks 1.0</span> preferred (live SOFR r) over raw 3D mesh.</li>
           </ul>
@@ -511,16 +524,18 @@ function FeedHealth({
   macroHealth,
   hasQuote,
   hasHistory,
+  onRetryMacro,
 }: {
   source: string;
   chainUsed: string;
   macroHealth: 'ok' | 'down' | 'pending';
   hasQuote: boolean;
   hasHistory: boolean;
+  onRetryMacro?: () => void;
 }) {
   const pill = (label: string, ok: boolean | 'pending') => (
     <span
-      className={`rounded px-1.5 py-0.5 text-[9px] font-mono border ${
+      className={`rounded px-1.5 py-0.5 text-type-2xs font-mono border ${
         ok === 'pending'
           ? 'border-border text-muted-foreground'
           : ok
@@ -533,13 +548,24 @@ function FeedHealth({
   );
   return (
     <div className="mb-2 flex flex-wrap items-center gap-1.5 px-1">
-      <span className="font-mono text-[9px] text-muted-foreground uppercase tracking-wider">Feeds</span>
+      <span className="font-mono text-type-2xs text-muted-foreground uppercase tracking-wider">Feeds</span>
       {pill(source === 'live' ? `CHAIN ${chainUsed || 'live'}` : 'DEMO SURFACE', source === 'live')}
       {pill('QUOTE', hasQuote)}
       {pill('HIST', hasHistory)}
-      {pill(
-        macroHealth === 'ok' ? 'MACROVOL' : macroHealth === 'pending' ? 'MACRO…' : 'MACRO DOWN',
-        macroHealth === 'pending' ? 'pending' : macroHealth === 'ok',
+      {macroHealth === 'down' ? (
+        <button
+          type="button"
+          onClick={onRetryMacro}
+          className="rounded border border-warn/50 px-1.5 py-0.5 text-type-2xs font-mono text-warn hover:bg-warn/10"
+          title="Retry MacroVol"
+        >
+          MACRO DOWN · retry
+        </button>
+      ) : (
+        pill(
+          macroHealth === 'ok' ? 'MACROVOL' : 'MACRO…',
+          macroHealth === 'pending' ? 'pending' : true,
+        )
       )}
     </div>
   );
@@ -587,18 +613,22 @@ function RatesStrip({
     <button
       type="button"
       onClick={onOpen}
-      className="mb-2 flex w-full flex-wrap items-center gap-x-4 gap-y-1 rounded border border-border bg-card/60 px-3 py-1.5 text-left hover:border-primary/50"
+      className="mb-2 grid w-full grid-cols-2 items-center gap-x-4 gap-y-1 rounded border border-border bg-card/60 px-3 py-1.5 text-left hover:border-primary/50 md:flex md:flex-wrap"
     >
-      <span className="font-mono text-[10px] font-bold tracking-wider text-primary">RATES · MACRO</span>
+      <span className="col-span-2 font-mono text-type-xs font-bold tracking-wider text-primary md:col-span-1">
+        RATES · MACRO
+      </span>
       {items ? items.map((it) => (
-        <span key={it.label} className="font-mono text-[10px]">
+        <span key={it.label} className="font-mono text-type-xs">
           <span className="text-muted-foreground">{it.label} </span>
-          <span className={it.alert ? 'font-bold text-red-400' : 'font-semibold text-foreground'}>{it.value}</span>
+          <span className={it.alert ? 'font-bold text-warn' : 'font-semibold text-foreground'}>{it.value}</span>
         </span>
       )) : (
-        <span className="font-mono text-[10px] text-muted-foreground">MacroVol offline — start :8765 for SOFR strip</span>
+        <span className="col-span-2 font-mono text-type-xs text-muted-foreground md:col-span-1">
+          MacroVol offline — start :8765 for SOFR strip
+        </span>
       )}
-      <span className="ml-auto font-mono text-[9px] text-primary">Rates desk →</span>
+      <span className="col-span-2 ml-auto font-mono text-type-2xs text-primary md:col-span-1">Rates desk →</span>
     </button>
   );
 }
@@ -606,10 +636,10 @@ function RatesStrip({
 function MiniStat({ label, value, color = 'text-foreground', term }: { label: string; value: string; color?: string; term?: string }) {
   return (
     <div>
-      <div className="text-[9px] font-mono uppercase tracking-wider text-muted-foreground">
+      <div className="text-type-2xs font-mono uppercase tracking-wider text-muted-foreground">
         {term ? <Explain term={term}>{label}</Explain> : label}
       </div>
-      <div className={`font-mono text-sm font-semibold tabular-nums ${color}`}>{value}</div>
+      <div className={`font-mono text-type-md font-semibold tabular-nums ${color}`}>{value}</div>
     </div>
   );
 }

@@ -89,8 +89,13 @@ async def fetch_series(series_id: str, limit: int = 500) -> list:
     return result
 
 
-async def get_latest(series_id: str, allow_fallback: bool = True) -> float | None:
-    """Return latest observation value. Records provenance in _last_meta."""
+async def get_latest(series_id: str, allow_fallback: bool = False) -> float | None:
+    """
+    Return latest FRED observation value. Records provenance in _last_meta.
+
+    Fail-closed by default: never inject hardcoded FALLBACK_DATA unless the
+    caller explicitly passes allow_fallback=True (debug/emergency only).
+    """
     data = await fetch_series(series_id, limit=500)
     if data:
         _last_meta[series_id] = {

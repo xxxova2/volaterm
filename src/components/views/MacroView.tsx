@@ -22,7 +22,7 @@ export function MacroView() {
     <div className="flex h-full flex-col overflow-hidden">
       <div className="flex flex-wrap items-center gap-2 border-b border-border bg-card/40 px-3 py-2">
         <span className="font-mono text-xs font-bold tracking-wider text-primary">MACRO DESK</span>
-        <span className="font-mono text-[10px] text-muted-foreground">
+        <span className="font-mono text-type-xs text-muted-foreground">
           Inflation · labor · activity · Fed balance sheet · asset correlations
         </span>
       </div>
@@ -32,12 +32,12 @@ export function MacroView() {
           <div className="mx-auto max-w-5xl px-3 pb-6 font-mono">
             <div className="rounded-xl border border-border bg-card p-4">
               <h3 className="text-xs font-semibold text-foreground">ASSET CORRELATIONS (30d)</h3>
-              <p className="mt-0.5 text-[10px] text-muted-foreground">
+              <p className="mt-0.5 text-type-xs text-muted-foreground">
                 Rolling returns corr — for macro risk context, not a trading signal.
               </p>
               <div className="mt-3 overflow-x-auto">
                 {corr.instruments?.length && corr.matrix?.length ? (
-                  <table className="w-full border-collapse text-[10px]">
+                  <table className="w-full border-collapse text-type-xs">
                     <thead>
                       <tr>
                         <th className="p-1 text-left font-normal text-muted-foreground" />
@@ -55,8 +55,8 @@ export function MacroView() {
                               key={`${i}-${j}`}
                               className={`p-1 text-right tabular-nums ${
                                 i === j ? 'text-muted-foreground'
-                                  : v != null && v > 0.5 ? 'text-emerald-400'
-                                    : v != null && v < -0.3 ? 'text-red-400'
+                                  : v != null && v > 0.5 ? 'text-up'
+                                    : v != null && v < -0.3 ? 'text-down'
                                       : 'text-foreground'
                               }`}
                             >
@@ -68,7 +68,7 @@ export function MacroView() {
                     </tbody>
                   </table>
                 ) : (
-                  <div className="text-[10px] text-muted-foreground">
+                  <div className="text-type-xs text-muted-foreground">
                     Correlation matrix unavailable{corr.error ? `: ${corr.error}` : ''}.
                   </div>
                 )}

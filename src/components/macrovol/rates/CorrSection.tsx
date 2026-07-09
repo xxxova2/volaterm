@@ -17,7 +17,7 @@ export function CorrSection({ corr }: { corr: CorrelationData }) {
       subtitle="Pearson on daily % changes · 30D window · 1Y lookback"
     >
       <div className="overflow-auto">
-        <table className="border-collapse text-[10px]">
+        <table className="border-collapse text-type-xs">
           <thead>
             <tr>
               <th className="p-1" />

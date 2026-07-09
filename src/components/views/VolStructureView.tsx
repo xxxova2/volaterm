@@ -8,6 +8,7 @@ import { TermView } from './TermView';
 import { ArbitrageView } from './ArbitrageView';
 import { cn } from '../../lib/utils';
 import { useTerminalStore } from '../../store/terminalStore';
+import { DeskLoading } from '../common/Skeleton';
 
 const SurfaceView = lazy(() =>
   import('./surface/SurfaceView').then((m) => ({ default: m.SurfaceView })),
@@ -19,7 +20,12 @@ const SUBS: { id: Sub; label: string; blurb: string; domId: string }[] = [
   { id: 'surface', label: 'Surface', blurb: '3D IV mesh', domId: 'vol-sub-surface' },
   { id: 'smile', label: 'Smile / Skew', blurb: 'RR · fly · SVI', domId: 'vol-sub-smile' },
   { id: 'term', label: 'Term', blurb: 'ATM IV vs √DTE', domId: 'vol-sub-term' },
-  { id: 'quality', label: 'Quality', blurb: 'Calendar / butterfly flags', domId: 'vol-sub-quality' },
+  {
+    id: 'quality',
+    label: 'Surface Fit',
+    blurb: 'Model convergence — validates SVI fit, not raw feed',
+    domId: 'vol-sub-quality',
+  },
 ];
 
 export function VolStructureView() {
@@ -35,7 +41,7 @@ export function VolStructureView() {
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <div className="sticky top-0 z-20 flex shrink-0 flex-wrap items-center gap-1 border-b border-border bg-background/95 px-2 py-1 backdrop-blur-sm">
-        <span className="mr-1 font-mono text-[10px] font-bold tracking-wider text-primary">
+        <span className="mr-1 font-mono text-type-xs font-bold tracking-wider text-primary">
           VOL STRUCTURE
         </span>
         {SUBS.map((s) => (
@@ -48,7 +54,7 @@ export function VolStructureView() {
             onClick={() => setSub(s.id)}
             title={s.blurb}
             className={cn(
-              'rounded px-2 py-0.5 font-mono text-[10px] transition-colors',
+              'rounded px-2 py-0.5 font-mono text-type-xs transition-colors',
               sub === s.id
                 ? 'bg-primary text-primary-foreground'
                 : 'text-muted-foreground hover:bg-muted hover:text-foreground',
@@ -57,18 +63,16 @@ export function VolStructureView() {
             {s.label}
           </button>
         ))}
-        <span className="ml-auto hidden font-mono text-[9px] text-muted-foreground xl:inline">
-          Quality = diagnostics · [ ] cycle · parity under Positioning
+        <span className="ml-auto hidden font-mono text-type-2xs text-muted-foreground xl:inline">
+          Fit = SVI / model · not feed arb · [ ] cycle · parity under Positioning
         </span>
       </div>
 
-      <div className="min-h-0 flex-1">
+      <div className="min-h-0 flex-1 term-crossfade" key={sub}>
         {sub === 'surface' && (
           <Suspense
             fallback={
-              <div className="flex h-full items-center justify-center font-mono text-xs text-muted-foreground animate-pulse">
-                LOADING SURFACE…
-              </div>
+              <DeskLoading message="Fitting surface…" />
             }
           >
             <SurfaceView />
@@ -78,7 +82,10 @@ export function VolStructureView() {
         {sub === 'term' && <TermView />}
         {sub === 'quality' && (
           <div className="flex h-full flex-col">
-            <div className="border-b border-border px-3 py-1.5 font-mono text-[10px] text-muted-foreground">
+            <p className="shrink-0 border-b border-border px-3 py-1.5 font-mono text-type-2xs text-muted-foreground">
+              Surface Fit / Model Convergence — validates SVI fit, not raw feed
+            </p>
+            <div className="border-b border-border px-3 py-1.5 font-mono text-type-xs text-muted-foreground">
               Calendar: total variance w=σ²T non-decreasing in T · Butterfly: discrete convexity of w in log-moneyness.
               Red cells = model inconsistency / noisy grid — not a free lunch without bid/ask and transaction costs.
             </div>

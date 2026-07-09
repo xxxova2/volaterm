@@ -1,12 +1,13 @@
 import type { ReactNode } from 'react';
 import { cn } from '../../lib/utils';
+import { SectionSkeleton } from './Skeleton';
 
 export type EmptyKind = 'loading' | 'no-data' | 'api-down' | 'demo' | 'error';
 
 const COPY: Record<EmptyKind, { title: string; body: string }> = {
   loading: {
-    title: 'Loading…',
-    body: 'Fetching data — not silent zeros.',
+    title: 'Working…',
+    body: 'Named work in progress — not silent zeros.',
   },
   'no-data': {
     title: 'No live data',
@@ -44,11 +45,26 @@ export function EmptyState({
   className?: string;
   compact?: boolean;
 }) {
+  if (kind === 'loading') {
+    return (
+      <div className={cn('w-full', className)} role="status">
+        <SectionSkeleton rows={compact ? 2 : 3} label={title ?? 'Loading…'} />
+        {(title || body) && (
+          <p className="mt-2 text-center font-mono text-type-xs text-muted-foreground">
+            {title ?? COPY.loading.title}
+            {body ? ` — ${body}` : ''}
+          </p>
+        )}
+        {action && <div className="mt-2 flex justify-center">{action}</div>}
+      </div>
+    );
+  }
+
   const c = COPY[kind];
   return (
     <div
       className={cn(
-        'flex flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-border bg-muted/20 font-mono text-center',
+        'flex flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-border bg-muted/20 font-mono text-center term-fade-in',
         compact ? 'px-3 py-4' : 'px-4 py-8',
         className,
       )}
@@ -57,13 +73,13 @@ export function EmptyState({
       <div
         className={cn(
           'font-semibold',
-          kind === 'api-down' || kind === 'error' ? 'text-red-400' : 'text-muted-foreground',
-          compact ? 'text-[11px]' : 'text-xs',
+          kind === 'api-down' || kind === 'error' ? 'text-down' : 'text-muted-foreground',
+          compact ? 'text-type-sm' : 'text-type-base',
         )}
       >
         {title ?? c.title}
       </div>
-      <p className={cn('max-w-sm text-muted-foreground/80', compact ? 'text-[10px]' : 'text-[11px]')}>
+      <p className={cn('max-w-sm text-muted-foreground/80', compact ? 'text-type-xs' : 'text-type-sm')}>
         {body ?? c.body}
       </p>
       {action && <div className="mt-2">{action}</div>}
@@ -71,17 +87,5 @@ export function EmptyState({
   );
 }
 
-/** Pulse skeleton for a desk section while loading */
-export function SectionSkeleton({ rows = 3, className }: { rows?: number; className?: string }) {
-  return (
-    <div className={cn('flex flex-col gap-2 p-2', className)} aria-busy="true" aria-label="Loading section">
-      {Array.from({ length: rows }).map((_, i) => (
-        <div
-          key={i}
-          className="h-16 animate-pulse rounded-lg border border-border bg-card"
-          style={{ opacity: 1 - i * 0.15 }}
-        />
-      ))}
-    </div>
-  );
-}
+/** @deprecated use SectionSkeleton from Skeleton.tsx */
+export { SectionSkeleton } from './Skeleton';

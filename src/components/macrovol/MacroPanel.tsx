@@ -95,18 +95,27 @@ export function MacroPanel() {
 
   if (error) {
     return (
-      <div className="p-4 font-mono text-xs text-red-400">
+      <div className="p-4 font-mono text-type-sm text-down">
         Failed to load macro data: {error}
-        <div className="mt-1 text-muted-foreground">Ensure MacroVol API is running (port 8765) and FRED_API_KEY is set for live data.</div>
+        <div className="mt-1 text-muted-foreground">
+          Ensure MacroVol API is running (port 8765) and FRED_API_KEY is set for live data.
+        </div>
+        <button
+          type="button"
+          onClick={() => window.location.reload()}
+          className="mt-2 rounded border border-warn/50 px-2 py-1 text-type-xs text-warn hover:bg-warn/10"
+        >
+          Retry
+        </button>
       </div>
     );
   }
 
   if (!cards) {
     return (
-      <div className="grid grid-cols-2 gap-2 p-3 md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 p-3 md:grid-cols-4" aria-busy="true" aria-label="Loading macro indicators">
         {INDICATORS.map((i) => (
-          <div key={i.key} className="h-28 animate-pulse rounded-xl border border-border bg-card" />
+          <div key={i.key} className="h-28 skeleton rounded-xl border border-border" />
         ))}
       </div>
     );
@@ -119,7 +128,7 @@ export function MacroPanel() {
           <h2 className="text-sm font-bold text-foreground">MACRO DASHBOARD</h2>
           <ApiSources apis={['FRED']} />
         </div>
-        <p className="mt-0.5 text-[10px] text-muted-foreground">
+        <p className="mt-0.5 text-type-xs text-muted-foreground">
           CPI · Core CPI · Core PCE · NFP · labor · housing · Fed BS — top of desk
         </p>
       </div>
@@ -129,7 +138,7 @@ export function MacroPanel() {
           if (!e || e.value == null) {
             return (
               <div key={ind.key} className="rounded-xl border border-border bg-card p-3">
-                <div className="text-[10px] text-muted-foreground">{ind.label}</div>
+                <div className="text-type-xs text-muted-foreground">{ind.label}</div>
                 <div className="text-xl font-bold text-foreground">—</div>
               </div>
             );
@@ -140,16 +149,16 @@ export function MacroPanel() {
           return (
             <div
               key={ind.key}
-              className={`rounded-xl border p-3 ${isWarning ? 'border-red-500/50 bg-red-950/20' : 'border-border bg-card'}`}
+              className={`rounded-xl border p-3 ${isWarning ? 'border-down/50 bg-down/15' : 'border-border bg-card'}`}
             >
-              <div className="mb-0.5 text-[10px] text-muted-foreground">{ind.label}</div>
-              <div className={`flex items-center gap-1.5 text-xl font-bold ${isWarning ? 'text-red-400' : 'text-foreground'}`}>
+              <div className="mb-0.5 text-type-xs text-muted-foreground">{ind.label}</div>
+              <div className={`flex items-center gap-1.5 text-xl font-bold ${isWarning ? 'text-down' : 'text-foreground'}`}>
                 {e.value.toFixed(2)}
                 <span className="text-sm" style={{ color: arrowColor }}>
                   {e.trend === 'up' ? '↑' : e.trend === 'down' ? '↓' : '→'}
                 </span>
               </div>
-              <div className="mt-0.5 text-[10px] text-muted-foreground">
+              <div className="mt-0.5 text-type-xs text-muted-foreground">
                 {ind.sublabel}
                 {e.changeLabel && <span className="ml-1.5">{e.changeLabel}</span>}
               </div>
@@ -178,7 +187,7 @@ export function MacroPanel() {
         note="API: FRED via MacroVol · CPI/PCE/NFP lag release calendars — badge is request time"
         staleThresholdMin={120}
       />
-      <p className="text-[9px] text-muted-foreground">
+      <p className="text-type-2xs text-muted-foreground">
         Retail sales / Fed BS shown as FRED levels (not YoY). NFP is MoM change in thousands of jobs.
       </p>
     </div>

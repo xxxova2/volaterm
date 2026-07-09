@@ -25,7 +25,7 @@ export function TabNav() {
               aria-controls={`panel-${tab.id}`}
               aria-label={`${tab.label} (Press ${tab.hotkey})`}
               className={cn(
-                'flex items-center gap-1 rounded-t px-2 py-0.5 font-mono text-[11px] transition-colors sm:px-2.5',
+                'flex items-center gap-1 rounded-t px-2 py-0.5 font-mono text-type-sm transition-colors sm:px-2.5',
                 isActive
                   ? 'border-b-2 border-primary bg-card text-primary'
                   : 'text-muted-foreground hover:bg-muted hover:text-foreground',
@@ -33,7 +33,7 @@ export function TabNav() {
             >
               <Icon className="h-3 w-3 shrink-0 sm:h-3.5 sm:w-3.5" aria-hidden="true" />
               <span className="whitespace-nowrap">{tab.label}</span>
-              <span className="hidden text-[9px] text-muted-foreground/50 sm:inline" aria-hidden="true">{tab.hotkey}</span>
+              <span className="hidden text-type-2xs text-muted-foreground/50 sm:inline" aria-hidden="true">{tab.hotkey}</span>
             </button>
           );
         })}

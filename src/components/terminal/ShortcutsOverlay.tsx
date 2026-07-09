@@ -45,12 +45,12 @@ export function ShortcutsOverlay({ onClose }: ShortcutsOverlayProps) {
         <div className="grid grid-cols-2 gap-x-4 gap-y-2">
           {SHORTCUTS.map(s => (
             <div key={s.key} className="flex items-center justify-between text-xs font-mono">
-              <kbd className="px-1.5 py-0.5 bg-muted rounded text-foreground text-[10px]">{s.key}</kbd>
+              <kbd className="px-1.5 py-0.5 bg-muted rounded text-foreground text-type-xs">{s.key}</kbd>
               <span className="text-muted-foreground">{s.action}</span>
             </div>
           ))}
         </div>
-        <p className="text-[10px] text-muted-foreground mt-4 text-center">Press Esc or ? to close</p>
+        <p className="text-type-xs text-muted-foreground mt-4 text-center">Press Esc or ? to close</p>
       </div>
     </div>
   );
