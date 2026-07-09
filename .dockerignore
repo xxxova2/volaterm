@@ -10,3 +10,9 @@ __pycache__/
 .env
 .env.local
 .env.production
+**/.env
+**/.env.*
+venv/
+.vercel/
+coverage/
+shot-*.png

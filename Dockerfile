@@ -1,38 +1,39 @@
+# Full-stack image: SPA + Fastify API (yfinance) + MacroVol rates — one public URL.
 FROM node:22-slim
 
-# Install Python 3, pip, and build tools for yfinance data fetching
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     python3-pip \
+    python3-venv \
     build-essential \
+    gfortran \
+    libopenblas-dev \
+    curl \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Install yfinance Python package
-RUN pip3 install yfinance --break-system-packages 2>&1
-
-# Verify yfinance works
-RUN python3 -c "import yfinance; print('yfinance OK:', yfinance.__version__)"
-
-# Create app directory
 WORKDIR /app
 
-# Copy package files first for layer caching
-COPY package.json package-lock.json* ./
+# Python: yfinance (equity chains) + MacroVol (rates/FRED)
+COPY macrovol-api/requirements.txt /tmp/macrovol-requirements.txt
+RUN pip3 install --no-cache-dir --break-system-packages \
+    -r /tmp/macrovol-requirements.txt \
+    && python3 -c "import yfinance, fastapi, uvicorn; print('python ok')"
 
-# Install dependencies (using ci for reproducible builds when lockfile present)
+# Node deps (cached layer)
+COPY package.json package-lock.json* ./
 RUN npm install
 
-# Copy the rest of the application
+# App source + production build
 COPY . .
+RUN npm run build \
+    && chmod +x scripts/start-production.sh
 
-# Build the frontend (devDependencies still available)
-RUN npm run build
+ENV NODE_ENV=production \
+    MACROVOL_API_URL=http://127.0.0.1:8765 \
+    PORT=3001
 
-# Production mode for runtime
-ENV NODE_ENV=production
-
-# Expose the port Render will set via PORT env var
 EXPOSE 3001
 
-# Start the server
-CMD ["node", "server.js"]
+# Platforms (Render/Railway/Fly) inject PORT; start script honors it.
+CMD ["bash", "scripts/start-production.sh"]
