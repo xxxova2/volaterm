@@ -116,27 +116,74 @@ export function buildSpyHistory() {
 }
 
 /**
- * Prefer real FMP SPY daily closes when an API key is available.
- * Falls back to the deterministic synthetic series.
- * Returns { symbol, data, source: 'fmp' | 'synthetic' }.
+ * Build SPY daily history from real closes.
+ * Prefer FMP when an API key is set. Never inject synthetic demo series unless
+ * opts.allowSynthetic === true (offline/tests only).
+ * Returns { symbol, data, source: 'fmp' | 'yfinance' | 'none' | 'synthetic' }.
  */
-export async function buildSpyHistoryAsync(apiKey, base = FMP_BASE) {
+export function barsToSpyHistoryPayload(sorted, source) {
+  const data = [];
+  for (let i = 0; i < sorted.length; i++) {
+    const close = sorted[i].close;
+    const prev = i > 0 ? sorted[i - 1].close : close;
+    const ret = prev > 0 ? (close - prev) / prev : 0;
+    // Realized-vol proxy as a VIX-like stand-in (20d rolling, annualized).
+    let vix = 18;
+    if (i >= 20) {
+      let sum = 0;
+      let sum2 = 0;
+      for (let j = i - 19; j <= i; j++) {
+        const p0 = sorted[j - 1] ? sorted[j - 1].close : sorted[j].close;
+        const r = p0 > 0 ? Math.log(sorted[j].close / p0) : 0;
+        sum += r;
+        sum2 += r * r;
+      }
+      const n = 20;
+      const mean = sum / n;
+      const var_ = Math.max(0, sum2 / n - mean * mean);
+      vix = Math.min(80, Math.max(8, Math.sqrt(var_ * 252) * 100));
+    }
+    data.push({
+      date: sorted[i].date,
+      close: Math.round(close * 100) / 100,
+      return: Math.round(ret * 100000) / 100000,
+      logReturn: Math.round(Math.log(1 + ret) * 100000) / 100000,
+      vix: Math.round(vix * 10) / 10,
+    });
+  }
+  return { symbol: 'SPY', data, source };
+}
+
+export async function buildSpyHistoryAsync(apiKey, base = FMP_BASE, opts = {}) {
+  const allowSynthetic = opts.allowSynthetic === true;
   const now = Date.now();
   if (spyHistoryLiveCache && now - spyHistoryLiveAt < SPY_LIVE_TTL) {
     return spyHistoryLiveCache;
   }
-  if (!apiKey) return buildSpyHistorySynthetic();
+  if (!apiKey) {
+    return allowSynthetic
+      ? buildSpyHistorySynthetic()
+      : { symbol: 'SPY', data: [], source: 'none' };
+  }
 
   try {
     // FMP free tier supports historical-price-eod/light; pull a long window.
     const endpoint = 'historical-price-eod/light?symbol=SPY&limit=7500';
     const { status, body } = await proxyFmp(endpoint, apiKey, base);
-    if (status !== 200 || !body) return buildSpyHistorySynthetic();
+    if (status !== 200 || !body) {
+      return allowSynthetic
+        ? buildSpyHistorySynthetic()
+        : { symbol: 'SPY', data: [], source: 'none' };
+    }
 
     let bars = [];
     if (Array.isArray(body)) bars = body;
     else if (body && Array.isArray(body.historical)) bars = body.historical;
-    if (bars.length < 50) return buildSpyHistorySynthetic();
+    if (bars.length < 50) {
+      return allowSynthetic
+        ? buildSpyHistorySynthetic()
+        : { symbol: 'SPY', data: [], source: 'none' };
+    }
 
     // FMP typically returns newest-first; sort ascending by date.
     const sorted = bars
@@ -147,42 +194,18 @@ export async function buildSpyHistoryAsync(apiKey, base = FMP_BASE) {
       .filter((b) => b.date && isFinite(b.close) && b.close > 0)
       .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
 
-    if (sorted.length < 50) return buildSpyHistorySynthetic();
-
-    const data = [];
-    for (let i = 0; i < sorted.length; i++) {
-      const close = sorted[i].close;
-      const prev = i > 0 ? sorted[i - 1].close : close;
-      const ret = prev > 0 ? (close - prev) / prev : 0;
-      // Realized-vol proxy as a VIX-like stand-in (20d rolling, annualized).
-      let vix = 18;
-      if (i >= 20) {
-        let sum = 0;
-        let sum2 = 0;
-        for (let j = i - 19; j <= i; j++) {
-          const p0 = sorted[j - 1] ? sorted[j - 1].close : sorted[j].close;
-          const r = p0 > 0 ? Math.log(sorted[j].close / p0) : 0;
-          sum += r;
-          sum2 += r * r;
-        }
-        const n = 20;
-        const mean = sum / n;
-        const var_ = Math.max(0, sum2 / n - mean * mean);
-        vix = Math.min(80, Math.max(8, Math.sqrt(var_ * 252) * 100));
-      }
-      data.push({
-        date: sorted[i].date,
-        close: Math.round(close * 100) / 100,
-        return: Math.round(ret * 100000) / 100000,
-        logReturn: Math.round(Math.log(1 + ret) * 100000) / 100000,
-        vix: Math.round(vix * 10) / 10,
-      });
+    if (sorted.length < 50) {
+      return allowSynthetic
+        ? buildSpyHistorySynthetic()
+        : { symbol: 'SPY', data: [], source: 'none' };
     }
 
-    spyHistoryLiveCache = { symbol: 'SPY', data, source: 'fmp' };
+    spyHistoryLiveCache = barsToSpyHistoryPayload(sorted, 'fmp');
     spyHistoryLiveAt = now;
     return spyHistoryLiveCache;
   } catch {
-    return buildSpyHistorySynthetic();
+    return allowSynthetic
+      ? buildSpyHistorySynthetic()
+      : { symbol: 'SPY', data: [], source: 'none' };
   }
 }

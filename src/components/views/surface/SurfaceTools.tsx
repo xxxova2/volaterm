@@ -52,10 +52,8 @@ export function SurfaceTools({
   const exports = useSurfaceExport(surface);
   const { source, liveAvailable } = useTerminalStore();
 
-  // Mirror SidePanel: only show "Live" when the store is in live mode AND a
-  // live snapshot has actually been received. Otherwise treat as Demo data
-  // (synthetic or fallback).
-  const sourceLabel = source === 'live' && liveAvailable ? 'Live' : 'Demo';
+  // LIVE-only: Live when a real snapshot arrived, otherwise Waiting.
+  const sourceLabel = source === 'live' && liveAvailable ? 'Live' : 'Waiting';
   const sourceDotClass = sourceLabel === 'Live' ? 'bg-up' : 'bg-amber';
 
   return (

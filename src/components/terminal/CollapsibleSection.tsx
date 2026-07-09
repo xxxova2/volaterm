@@ -49,7 +49,7 @@ export function CollapsibleSection({
       id={id}
       data-desk-section="1"
       className={cn(
-        'scroll-mt-10 rounded-xl border border-border bg-card',
+        'scroll-mt-8 rounded border border-border bg-card',
         belowFold && 'below-fold',
         className,
       )}
@@ -59,7 +59,7 @@ export function CollapsibleSection({
         type="button"
         onClick={() => setOpen((o) => !o)}
         className={cn(
-          'flex w-full items-center gap-2 px-3 py-2 text-left font-mono transition-colors',
+          'flex w-full items-center gap-1.5 px-2 py-1 text-left font-mono transition-colors',
           'hover:bg-muted/40 focus-visible:outline-none',
           open && 'border-b border-border/60',
         )}
@@ -68,12 +68,12 @@ export function CollapsibleSection({
       >
         <ChevronDown
           className={cn(
-            'h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-150',
+            'h-3 w-3 shrink-0 text-muted-foreground transition-transform duration-150',
             !open && '-rotate-90',
           )}
           aria-hidden
         />
-        <h3 id={`${id}-title`} className="text-xs font-semibold text-foreground">
+        <h3 id={`${id}-title`} className="text-type-xs font-semibold text-foreground">
           {title}
         </h3>
         {apis && apis.length > 0 && (
@@ -91,9 +91,9 @@ export function CollapsibleSection({
         </span>
       </button>
       {open && (
-        <div id={`${id}-body`} className="px-3 pb-3 pt-2 font-mono">
+        <div id={`${id}-body`} className="px-2 pb-2 pt-1 font-mono">
           {subtitle && (
-            <p className="mb-2 text-type-xs text-muted-foreground">{subtitle}</p>
+            <p className="mb-1 text-type-2xs text-muted-foreground">{subtitle}</p>
           )}
           {children}
         </div>

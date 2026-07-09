@@ -1,11 +1,10 @@
 import { useCallback, useState, useEffect } from 'react';
 import { useTerminalStore } from '../../store/terminalStore';
 import { fmtPrice, fmtClock } from '../../lib/format';
-import { presetFor } from '../../lib/options/synthetic';
 import { SymbolDialog } from './SymbolDialog';
 
 export function TerminalHeader() {
-  const { symbol, snapshot, source, setSource, setSymbol, loading, fmpQuote, liveRFR } = useTerminalStore();
+  const { symbol, snapshot, setSymbol, loading, fmpQuote, liveRFR, chainUsed, chainAvailable } = useTerminalStore();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [clock, setClock] = useState(Date.now());
 
@@ -14,7 +13,8 @@ export function TerminalHeader() {
     return () => clearInterval(id);
   }, []);
 
-  const spot = fmpQuote?.price ?? snapshot?.spot ?? presetFor(symbol)?.spot ?? 548;
+  // Real prints only — never seed a demo/preset spot into the header.
+  const spot = fmpQuote?.price ?? (snapshot?.spot && snapshot.spot > 0 ? snapshot.spot : null);
   const atmIV = snapshot?.expiries[0]?.atmIV;
   const termSlope = snapshot && snapshot.expiries.length > 2
     ? ((snapshot.expiries[1]?.atmIV ?? 0) - (snapshot.expiries[0]?.atmIV ?? 0)) * 100
@@ -27,7 +27,7 @@ export function TerminalHeader() {
 
   return (
     <>
-      <header className="flex h-9 shrink-0 items-center justify-between border-b border-border bg-card px-2 text-type-sm font-mono sm:px-3">
+      <header className="flex h-7 shrink-0 items-center justify-between border-b border-border bg-card px-1.5 text-type-xs font-mono sm:px-2">
         <div className="flex min-w-0 items-center gap-2 sm:gap-3">
           <span className="shrink-0 text-primary font-bold text-xs tracking-wider sm:text-sm">VOLATERM</span>
           <button
@@ -40,7 +40,9 @@ export function TerminalHeader() {
           {fmpQuote?.name && (
             <span className="hidden max-w-36 truncate text-muted-foreground lg:inline">{fmpQuote.name}</span>
           )}
-          <span className="tabular-nums text-foreground">{fmtPrice(spot)}</span>
+          <span className="tabular-nums text-foreground">
+            {spot != null ? fmtPrice(spot) : '—'}
+          </span>
           {loading && <span className="text-muted-foreground" title="Refreshing">⟳</span>}
           {atmIV != null && (
             <span className="hidden text-muted-foreground sm:inline">
@@ -59,21 +61,18 @@ export function TerminalHeader() {
           )}
           <span className="hidden text-muted-foreground lg:inline">
             {snapshot?.expiries.length ?? 0} exp
+            {chainAvailable ? ` · ${chainUsed}` : ''}
           </span>
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
           <span className="hidden tabular-nums text-muted-foreground sm:inline">{fmtClock(clock)}</span>
-          <button
-            onClick={() => setSource(source === 'demo' ? 'live' : 'demo')}
-            className={`rounded px-2 py-0.5 text-xs font-medium ${
-              source === 'live'
-                ? 'bg-up/20 text-up'
-                : 'bg-amber/20 text-amber'
-            }`}
+          <span
+            className="rounded bg-up/20 px-2 py-0.5 text-xs font-medium text-up"
+            title="LIVE-only terminal — market feeds only, no DEMO/synthetic surfaces"
           >
-            {source === 'live' ? 'LIVE' : 'DEMO'}
-          </button>
+            LIVE
+          </span>
           <button
             onClick={() => useTerminalStore.getState().refresh()}
             className="text-muted-foreground hover:text-foreground transition-colors"

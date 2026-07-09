@@ -549,7 +549,7 @@ function FeedHealth({
   return (
     <div className="mb-2 flex flex-wrap items-center gap-1.5 px-1">
       <span className="font-mono text-type-2xs text-muted-foreground uppercase tracking-wider">Feeds</span>
-      {pill(source === 'live' ? `CHAIN ${chainUsed || 'live'}` : 'DEMO SURFACE', source === 'live')}
+      {pill(`CHAIN ${chainUsed && chainUsed !== 'none' ? chainUsed : '…'}`, chainUsed !== 'none')}
       {pill('QUOTE', hasQuote)}
       {pill('HIST', hasHistory)}
       {macroHealth === 'down' ? (

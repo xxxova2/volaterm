@@ -39,7 +39,7 @@ export const DATA_CONFIG = {
     AAPL: { spot: 220, iv30: 0.22 },
     NVDA: { spot: 125, iv30: 0.35 },
     TSLA: { spot: 350, iv30: 0.45 },
-    /** Crypto underlyings — high vol, no dividend; chain often synthetic */
+    /** Crypto underlyings — high vol, no dividend; LIVE chain from Deribit */
     BTC: { spot: 95_000, iv30: 0.55 },
     ETH: { spot: 3_400, iv30: 0.65 },
     IBIT: { spot: 55, iv30: 0.50 },

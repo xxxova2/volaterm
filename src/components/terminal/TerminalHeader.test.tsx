@@ -5,18 +5,21 @@ import { TerminalHeader } from './TerminalHeader';
 import { useTerminalStore } from '../../store/terminalStore';
 
 describe('TerminalHeader', () => {
-  it('renders symbol, spot price, and source toggle', () => {
+  it('renders symbol and LIVE badge (demo disabled)', () => {
     useTerminalStore.setState({
       symbol: 'SPY',
-      source: 'demo',
+      source: 'live',
       loading: false,
       fmpQuote: null,
       liveRFR: null,
       snapshot: null,
+      chainAvailable: false,
+      chainUsed: 'none',
     });
     render(<TerminalHeader />);
     expect(screen.getByText('SPY')).toBeTruthy();
-    expect(screen.getByText('DEMO')).toBeTruthy();
+    expect(screen.getByText('LIVE')).toBeTruthy();
+    expect(screen.queryByText('DEMO')).toBeNull();
   });
 
   it('shows FMP company name when available', () => {

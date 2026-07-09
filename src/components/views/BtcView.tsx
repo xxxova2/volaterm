@@ -18,7 +18,7 @@ import {
   gammaExposure, impliedMove, portfolioGreeks,
   realizedVolCloseToClose, volRiskPremium,
 } from '../../lib/options/analytics';
-import { buildBasisCurve, rollPnlHeatmap, syntheticFundingSeries } from '../../lib/options/basis';
+import { buildBasisCurve, liveFundingSeries, rollPnlHeatmap } from '../../lib/options/basis';
 import { chartTooltipStyle, chartGridProps } from '../../lib/chartTheme';
 import { cn } from '../../lib/utils';
 import {
@@ -67,10 +67,7 @@ function ThinBookPane({
     }));
   }, [snap]);
   const fundAnn = book?.market?.fundingAnn ?? snap?.fundingAnn ?? null;
-  const funding = useMemo(
-    () => syntheticFundingSeries(16, fundAnn != null ? fundAnn : 0.12, ccy === 'BTC' ? 42 : 99),
-    [fundAnn, ccy],
-  );
+  const funding = useMemo(() => liveFundingSeries(16, fundAnn), [fundAnn]);
   const gexMini = useMemo(() => {
     if (!snap) return [];
     return gammaExposure(snap).points.slice(0, 20).map((p) => ({
@@ -119,11 +116,15 @@ function ThinBookPane({
           <div className="mb-0.5 font-mono text-type-2xs text-muted-foreground">
             Fund {fundAnn != null ? fmtPct(fundAnn) : '—'}
           </div>
-          <ResponsiveContainer width="100%" height="90%">
-            <ComposedChart data={funding} margin={{ top: 2, right: 2, bottom: 0, left: 0 }}>
-              <Bar dataKey="fundingAnn" fill="var(--primary)" opacity={0.75} isAnimationActive={false} />
-            </ComposedChart>
-          </ResponsiveContainer>
+          {funding.length ? (
+            <ResponsiveContainer width="100%" height="90%">
+              <ComposedChart data={funding} margin={{ top: 2, right: 2, bottom: 0, left: 0 }}>
+                <Bar dataKey="fundingAnn" fill="var(--primary)" opacity={0.75} isAnimationActive={false} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="flex h-[90%] items-center justify-center font-mono text-type-2xs text-muted-foreground">—</div>
+          )}
         </div>
         <div className="min-h-0">
           <div className="mb-0.5 font-mono text-type-2xs text-muted-foreground">GEX</div>
@@ -239,14 +240,13 @@ export function BtcView() {
     () => (snapshot ? buildBasisCurve(snapshot, { fundingAnn: liveFundingAnn }) : null),
     [snapshot, liveFundingAnn],
   );
-  const funding = useMemo(
-    () => syntheticFundingSeries(30, liveFundingAnn != null ? liveFundingAnn : 0.12, 42),
-    [liveFundingAnn],
-  );
+  const funding = useMemo(() => liveFundingSeries(30, liveFundingAnn), [liveFundingAnn]);
   const roll = useMemo(
-    () => (snapshot
-      ? rollPnlHeatmap(snapshot, { fundingAnn: liveFundingAnn ?? 0.12 })
-      : null),
+    () => (snapshot && liveFundingAnn != null
+      ? rollPnlHeatmap(snapshot, { fundingAnn: liveFundingAnn })
+      : snapshot
+        ? rollPnlHeatmap(snapshot, {}) // equity-style r−q carry only; no fake crypto funding
+        : null),
     [snapshot, liveFundingAnn],
   );
 
@@ -400,7 +400,7 @@ export function BtcView() {
                   : 'LIVE SPOT · SYNTH SMILE')
               : 'DEMO'}
           </span>
-          <FreshnessChip kind={source === 'live' ? (chainUsed === 'deribit' ? 'live' : 'delayed') : 'demo'} />
+          <FreshnessChip kind={chainUsed === 'deribit' ? 'live' : chainAvailable ? 'live' : 'delayed'} />
           <span className="text-type-2xs font-mono text-muted-foreground hidden lg:inline">
             {cryptoDualCharts
               ? '2× charts on · click pane or tape to switch active book'
@@ -502,26 +502,34 @@ export function BtcView() {
           </ResponsiveContainer>
         </Panel>
 
-        {/* Funding / basis */}
+        {/* Funding / basis — Deribit live print only (no mock path) */}
         <Panel
           title="Funding / Carry"
-          subtitle={liveFundingAnn != null ? `Live 8h ann. ${fmtPct(liveFundingAnn)} · path synth around mean` : 'Synth perpetual funding (ann.)'}
+          subtitle={
+            liveFundingAnn != null
+              ? `Deribit live 8h ann. ${fmtPct(liveFundingAnn)}`
+              : 'Awaiting Deribit funding'
+          }
           className="col-span-4 row-span-1 min-h-0"
         >
-          <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={funding} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--grid)" />
-              <XAxis dataKey="t" tick={{ fontSize: 9, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }} />
-              <YAxis yAxisId="l" tick={{ fontSize: 9, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }} width={40} tickFormatter={(v: number) => `${(v * 100).toFixed(0)}%`} />
-              <YAxis yAxisId="r" orientation="right" tick={{ fontSize: 9, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }} width={36} tickFormatter={(v: number) => `${(v * 100).toFixed(1)}%`} />
-              <Tooltip
-                contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', fontSize: 11, fontFamily: 'JetBrains Mono' }}
-                formatter={(v: number, name: string) => [name === 'fundingAnn' ? `${(v * 100).toFixed(1)}%` : `${(v * 100).toFixed(2)}%`, name === 'fundingAnn' ? 'Funding' : 'Cum']}
-              />
-              <Bar yAxisId="l" dataKey="fundingAnn" fill="var(--primary)" opacity={0.7} />
-              <Line yAxisId="r" type="monotone" dataKey="cumPnl" stroke="var(--up)" strokeWidth={1.5} dot={false} />
-            </ComposedChart>
-          </ResponsiveContainer>
+          {funding.length ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={funding} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--grid)" />
+                <XAxis dataKey="t" tick={{ fontSize: 9, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }} />
+                <YAxis yAxisId="l" tick={{ fontSize: 9, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }} width={40} tickFormatter={(v: number) => `${(v * 100).toFixed(0)}%`} />
+                <YAxis yAxisId="r" orientation="right" tick={{ fontSize: 9, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }} width={36} tickFormatter={(v: number) => `${(v * 100).toFixed(1)}%`} />
+                <Tooltip
+                  contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', fontSize: 11, fontFamily: 'JetBrains Mono' }}
+                  formatter={(v: number, name: string) => [name === 'fundingAnn' ? `${(v * 100).toFixed(1)}%` : `${(v * 100).toFixed(2)}%`, name === 'fundingAnn' ? 'Funding' : 'Cum']}
+                />
+                <Bar yAxisId="l" dataKey="fundingAnn" fill="var(--primary)" opacity={0.7} />
+                <Line yAxisId="r" type="monotone" dataKey="cumPnl" stroke="var(--up)" strokeWidth={1.5} dot={false} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          ) : (
+            <EmptyState kind="no-data" title="No live funding" body="Deribit funding not loaded. Stay on LIVE · BTC/ETH." />
+          )}
         </Panel>
 
         {/* GEX */}

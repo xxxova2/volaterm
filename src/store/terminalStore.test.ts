@@ -1,9 +1,53 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { useTerminalStore } from './terminalStore';
+import { buildSnapshot, buildSurfaceGrid } from '../lib/options/synthetic';
+import { sviReadout } from '../lib/options/surfaceTools';
+import { diagnoseArbitrage } from '../lib/options/noarb';
+
+/**
+ * LIVE-only store tests. Network-backed setSymbol is not exercised here —
+ * seed a real-shaped snapshot (from the shared builder used in unit fixtures)
+ * and assert SVI/arb math + symbol validation.
+ */
+function seedLiveSurface(symbol = 'SPY') {
+  const snap = buildSnapshot(symbol, Date.now(), 500, 0, 0);
+  // Mark as live so store provenance paths treat it as market data.
+  const liveSnap = { ...snap, surfaceSource: 'live' as const };
+  const surface = buildSurfaceGrid(liveSnap);
+  const readout = sviReadout(surface, liveSnap.spot);
+  const arb = diagnoseArbitrage(surface, liveSnap.spot);
+  useTerminalStore.setState({
+    symbol,
+    snapshot: liveSnap,
+    surface,
+    sviReadout: readout,
+    arbResult: arb,
+    historicalFrames: [],
+    frameIndex: 0,
+    isPlaying: false,
+    speed: 1,
+    source: 'live',
+    liveAvailable: true,
+    loading: false,
+    lastUpdate: Date.now(),
+    activeTab: 'home',
+    displayMode: 'strike',
+    selectedExpiry: null,
+    playbackInterval: null,
+    refreshInterval: null,
+    fmpQuote: null,
+    fmpTreasuryRates: null,
+    liveRFR: null,
+    fmpSpot: null,
+    chainAvailable: true,
+    chainUsed: 'yfinance',
+    spotSource: 'yfinance',
+    historyMode: 'live',
+  });
+}
 
 describe('terminalStore', () => {
   beforeEach(() => {
-    // Reset to a deterministic demo state without triggering live network calls.
     useTerminalStore.setState({
       symbol: 'SPY',
       snapshot: null,
@@ -14,7 +58,7 @@ describe('terminalStore', () => {
       frameIndex: 0,
       isPlaying: false,
       speed: 1,
-      source: 'demo',
+      source: 'live',
       liveAvailable: false,
       loading: false,
       lastUpdate: Date.now(),
@@ -27,14 +71,15 @@ describe('terminalStore', () => {
       fmpTreasuryRates: null,
       liveRFR: null,
       fmpSpot: null,
+      chainAvailable: false,
+      chainUsed: 'none',
+      spotSource: 'none',
+      historyMode: 'live',
     });
   });
 
-  // Demo path builds a full synthetic surface + multi-expiry SVI fits; allow headroom.
-  it('computes sviReadout and arbResult after setSymbol', async () => {
-    await useTerminalStore.getState().setSource('demo');
-    await useTerminalStore.getState().setSymbol('SPY');
-
+  it('computes sviReadout and arbResult on a live-shaped surface', () => {
+    seedLiveSurface('SPY');
     const state = useTerminalStore.getState();
     expect(state.snapshot).not.toBeNull();
     expect(state.surface).not.toBeNull();
@@ -52,37 +97,24 @@ describe('terminalStore', () => {
     expect(state.arbResult!.calendar.violations).toBe(0);
     expect(state.arbResult!.butterfly.violations).toBe(0);
     expect(state.arbResult!.clean).toBe(true);
-  }, 20_000);
+    expect(state.source).toBe('live');
+    expect(state.chainUsed).toBe('yfinance');
+  });
 
   it('rejects invalid symbols and preserves previous state', async () => {
-    await useTerminalStore.getState().setSource('demo');
-    await useTerminalStore.getState().setSymbol('SPY');
-    const validState = useTerminalStore.getState();
-    const validSnapshot = validState.snapshot;
+    seedLiveSurface('SPY');
+    const validSnapshot = useTerminalStore.getState().snapshot;
 
-    // Try to set an invalid symbol
     await useTerminalStore.getState().setSymbol('123INVALID');
     const afterInvalid = useTerminalStore.getState();
 
-    // State should be unchanged (same snapshot object)
     expect(afterInvalid.symbol).toBe('SPY');
     expect(afterInvalid.snapshot).toBe(validSnapshot);
-  }, 20_000);
+  });
 
-  it('updates sviReadout and arbResult on refresh in demo mode', async () => {
+  it('setSource(demo) forces live-only', async () => {
+    seedLiveSurface('SPY');
     await useTerminalStore.getState().setSource('demo');
-    await useTerminalStore.getState().setSymbol('SPY');
-
-    const before = useTerminalStore.getState();
-    expect(before.sviReadout).not.toBeNull();
-
-    await useTerminalStore.getState().refresh();
-    const after = useTerminalStore.getState();
-    expect(after.snapshot).not.toBeNull();
-    expect(after.surface).not.toBeNull();
-    expect(after.sviReadout).not.toBeNull();
-    expect(after.arbResult).not.toBeNull();
-    expect(after.sviReadout!.samples).toBeGreaterThanOrEqual(5);
-    expect(after.arbResult!.clean).toBe(true);
-  }, 20_000);
+    expect(useTerminalStore.getState().source).toBe('live');
+  }, 30_000);
 });

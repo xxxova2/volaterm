@@ -188,7 +188,7 @@ export function PositioningView() {
           </button>
         ))}
         <span className="ml-auto">
-          <FreshnessChip kind={source === 'live' ? 'live' : 'demo'} />
+          <FreshnessChip kind={snapshot ? 'live' : 'delayed'} />
         </span>
       </div>
 

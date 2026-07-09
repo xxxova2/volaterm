@@ -1,5 +1,4 @@
 import { useCallback, useState } from 'react';
-import { ApiSources } from './ApiSources';
 import { ImplyDrawer } from '../common/ImplyDrawer';
 import { EmptyState, SectionSkeleton } from '../common/EmptyState';
 import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
@@ -16,6 +15,7 @@ import { CurveSection } from './rates/CurveSection';
 import { CorrSection } from './rates/CorrSection';
 import { PremiumSection } from './rates/PremiumSection';
 import { JapanCarryPanel } from './rates/JapanCarryPanel';
+import { CurvesBoard } from './rates/CurvesBoard';
 
 export function RatesPanel() {
   const {
@@ -31,9 +31,9 @@ export function RatesPanel() {
 
   if (loading) {
     return (
-      <div className="p-2">
+      <div className="p-1">
         <EmptyState kind="loading" title="Loading rates…" body="FRED · NYFed · yfinance via MacroVol (:8765)" compact />
-        <SectionSkeleton rows={4} className="mt-2" />
+        <SectionSkeleton rows={3} className="mt-1" />
       </div>
     );
   }
@@ -58,29 +58,26 @@ export function RatesPanel() {
 
   return (
     <SectionErrorBoundary name="Rates panel">
-      <div className="flex flex-col gap-3 p-2 font-mono [&>*]:min-w-0">
+      {/* Dense content stack — curves first, boards second; less chrome/padding */}
+      <div className="flex flex-col gap-1.5 p-1 font-mono [&>*]:min-w-0">
         <ImplyDrawer
           open={!!implyDrawer}
           imply={implyDrawer?.imply ?? null}
           context={implyDrawer?.context}
           onClose={() => setImplyDrawer(null)}
         />
-        <div className="order-1 px-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-sm font-bold text-foreground">RATES &amp; STIR</h2>
-            <ApiSources apis={['FRED', 'NYFed', 'yfinance', 'MacroVol']} />
-          </div>
-          <p className="mt-0.5 text-type-xs text-muted-foreground">
-            Priority stack: snapshot → STIR strip → NYFed → basis → curve → plumbing → carry → DV01
-          </p>
-          {summary?.risk_free_rate != null && (
-            <p className="mt-1 text-type-xs text-up/90">
-              Pricing r(T) = Treasury curve (term) · SOFR anchor {(summary.risk_free_rate * 100).toFixed(2)}% for short T
-            </p>
-          )}
-        </div>
 
         <SnapshotCards summary={summary} />
+
+        <CurvesBoard
+          curve={curve}
+          curveMeta={curveMeta}
+          stirChart={stirChart}
+          sofr={summary?.sofr ?? stir?.sofr}
+          shape={shape}
+          spreadHistory={shapeHistoryCharts}
+          onOpenImply={openImply}
+        />
 
         {shape && (
           <ShapeSection
@@ -89,6 +86,34 @@ export function RatesPanel() {
             onOpenImply={openImply}
           />
         )}
+
+        <StirSection stir={stir} stirChart={stirChart} onOpenImply={openImply} />
+
+        {stir?.nyfed?.ref_print && stir.nyfed.ref_print.length > 0 && (
+          <NyFedBoard nyfed={stir.nyfed} />
+        )}
+
+        {basis && (
+          <BasisSection
+            basis={basis}
+            basisHist={basisHist}
+            plumbing={plumbing}
+            basisChart={basisChart}
+          />
+        )}
+
+        <PlumbingSection plumbing={plumbing} />
+
+        {/* UST curve also lives in CurvesBoard hero — keep compact table section below fold */}
+        <CurveSection curve={curve} curveMeta={curveMeta} />
+
+        {corr && corr.matrix?.length > 0 && <CorrSection corr={corr} />}
+
+        <PremiumSection basis={basis} plumbing={plumbing} stir={stir} shape={shape} />
+
+        <div className="order-11 min-w-0">
+          <JapanCarryPanel />
+        </div>
 
         <Dv01Book
           dv01={dv01}
@@ -105,33 +130,6 @@ export function RatesPanel() {
           setDv01Loading={setDv01Loading}
           reloadDv01={reloadDv01}
         />
-
-        {stir?.nyfed?.ref_print && stir.nyfed.ref_print.length > 0 && (
-          <NyFedBoard nyfed={stir.nyfed} />
-        )}
-
-        <StirSection stir={stir} stirChart={stirChart} onOpenImply={openImply} />
-
-        {basis && (
-          <BasisSection
-            basis={basis}
-            basisHist={basisHist}
-            plumbing={plumbing}
-            basisChart={basisChart}
-          />
-        )}
-
-        <PlumbingSection plumbing={plumbing} />
-
-        <CurveSection curve={curve} curveMeta={curveMeta} />
-
-        {corr && corr.matrix?.length > 0 && <CorrSection corr={corr} />}
-
-        <div className="order-11 min-w-0">
-          <JapanCarryPanel />
-        </div>
-
-        <PremiumSection basis={basis} plumbing={plumbing} stir={stir} shape={shape} />
       </div>
     </SectionErrorBoundary>
   );

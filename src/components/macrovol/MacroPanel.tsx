@@ -113,33 +113,29 @@ export function MacroPanel() {
 
   if (!cards) {
     return (
-      <div className="grid grid-cols-2 gap-2 p-3 md:grid-cols-4" aria-busy="true" aria-label="Loading macro indicators">
+      <div className="grid grid-cols-4 gap-1 p-1 md:grid-cols-8" aria-busy="true" aria-label="Loading macro indicators">
         {INDICATORS.map((i) => (
-          <div key={i.key} className="h-28 skeleton rounded-xl border border-border" />
+          <div key={i.key} className="h-16 skeleton rounded border border-border" />
         ))}
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col gap-3 p-2 font-mono">
-      <div className="px-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <h2 className="text-sm font-bold text-foreground">MACRO DASHBOARD</h2>
-          <ApiSources apis={['FRED']} />
-        </div>
-        <p className="mt-0.5 text-type-xs text-muted-foreground">
-          CPI · Core CPI · Core PCE · NFP · labor · housing · Fed BS — top of desk
-        </p>
+    <div className="flex flex-col gap-1 p-1 font-mono">
+      <div className="flex flex-wrap items-center gap-1.5 px-0.5">
+        <h2 className="text-type-xs font-bold text-foreground">MACRO</h2>
+        <ApiSources apis={['FRED']} />
+        <span className="text-type-2xs text-muted-foreground">CPI · PCE · NFP · labor · housing · Fed BS</span>
       </div>
-      <div className="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-8">
+      <div className="grid grid-cols-4 gap-1 md:grid-cols-8">
         {INDICATORS.map((ind) => {
           const e = cards[ind.key];
           if (!e || e.value == null) {
             return (
-              <div key={ind.key} className="rounded-xl border border-border bg-card p-3">
-                <div className="text-type-xs text-muted-foreground">{ind.label}</div>
-                <div className="text-xl font-bold text-foreground">—</div>
+              <div key={ind.key} className="rounded border border-border bg-card p-1.5">
+                <div className="text-type-2xs text-muted-foreground">{ind.label}</div>
+                <div className="text-sm font-bold text-foreground">—</div>
               </div>
             );
           }
@@ -149,29 +145,25 @@ export function MacroPanel() {
           return (
             <div
               key={ind.key}
-              className={`rounded-xl border p-3 ${isWarning ? 'border-down/50 bg-down/15' : 'border-border bg-card'}`}
+              className={`rounded border p-1.5 ${isWarning ? 'border-down/50 bg-down/15' : 'border-border bg-card'}`}
             >
-              <div className="mb-0.5 text-type-xs text-muted-foreground">{ind.label}</div>
-              <div className={`flex items-center gap-1.5 text-xl font-bold ${isWarning ? 'text-down' : 'text-foreground'}`}>
+              <div className="mb-0.5 text-type-2xs text-muted-foreground">{ind.label}</div>
+              <div className={`flex items-center gap-1 text-sm font-bold ${isWarning ? 'text-down' : 'text-foreground'}`}>
                 {e.value.toFixed(2)}
-                <span className="text-sm" style={{ color: arrowColor }}>
+                <span className="text-type-xs" style={{ color: arrowColor }}>
                   {e.trend === 'up' ? '↑' : e.trend === 'down' ? '↓' : '→'}
                 </span>
               </div>
-              <div className="mt-0.5 text-type-xs text-muted-foreground">
-                {ind.sublabel}
-                {e.changeLabel && <span className="ml-1.5">{e.changeLabel}</span>}
-              </div>
               {e.history.length > 0 && (
-                <div className="mt-2 flex h-7 items-end gap-px">
-                  {e.history.map((v, i) => (
+                <div className="mt-1 flex h-4 items-end gap-px">
+                  {e.history.slice(-16).map((v, i) => (
                     <div
                       key={i}
                       className="w-1 rounded-t"
                       style={{
                         height: `${Math.max((v / e.maxHist) * 100, 4)}%`,
                         backgroundColor: barColor,
-                        opacity: 0.5 + 0.5 * (i / e.history.length),
+                        opacity: 0.5 + 0.5 * (i / 16),
                       }}
                     />
                   ))}
@@ -184,12 +176,10 @@ export function MacroPanel() {
       <DataBadge
         asOf={meta.as_of}
         source={meta.source || 'FRED'}
-        note="API: FRED via MacroVol · CPI/PCE/NFP lag release calendars — badge is request time"
+        note="FRED live via MacroVol"
         staleThresholdMin={120}
+        className="mt-0.5"
       />
-      <p className="text-type-2xs text-muted-foreground">
-        Retail sales / Fed BS shown as FRED levels (not YoY). NFP is MoM change in thousands of jobs.
-      </p>
     </div>
   );
 }

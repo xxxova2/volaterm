@@ -41,23 +41,17 @@ export function RatesView() {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border bg-card/40 px-2 py-1">
-        <span className="font-mono text-type-sm font-bold tracking-wider text-primary">MACROS &amp; RATES</span>
-        <span className="hidden font-mono text-type-xs text-muted-foreground md:inline">
-          Macro · SOFR / STIR · curve · plumbing · basis · carry
-        </span>
-        <span className="ml-auto flex flex-wrap items-center gap-2">
-          <span className="hidden font-mono text-type-2xs text-muted-foreground/70 lg:inline" title="Resolved upstreams for this desk">
-            desk sources
-          </span>
-          <ApiSources apis={['FRED', 'NYFed', 'yfinance', 'MacroVol']} />
-        </span>
+      {/* Single thin strip: title + jump + sources (was 2 chrome rows) */}
+      <div className="flex h-6 shrink-0 items-center gap-1.5 border-b border-border bg-card/40 px-1.5">
+        <span className="shrink-0 font-mono text-type-xs font-bold tracking-wider text-primary">RATES</span>
+        <div className="min-w-0 flex-1">
+          <DeskSubNav items={RATES_SECTIONS} label="" className="border-0 bg-transparent px-0" />
+        </div>
+        <ApiSources apis={['FRED', 'NYFed', 'yfinance', 'MacroVol']} />
       </div>
 
-      <DeskSubNav items={RATES_SECTIONS} label="Jump" />
-
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <section id="sec-macro" className="scroll-mt-10 border-b border-border/60" aria-label="Macro indicators">
+        <section id="sec-macro" className="scroll-mt-8 border-b border-border/60" aria-label="Macro indicators">
           <SectionErrorBoundary name="Macro">
             <MacroPanel />
           </SectionErrorBoundary>
@@ -70,7 +64,7 @@ export function RatesView() {
         </section>
 
         {corr && (
-          <div className="mx-auto max-w-5xl px-2 pb-4 font-mono">
+          <div className="px-1 pb-2 font-mono">
             <CollapsibleSection
               id="sec-asset-corr"
               title="ASSET CORRELATIONS (30d)"

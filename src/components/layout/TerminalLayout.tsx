@@ -54,7 +54,12 @@ export function TerminalLayout() {
   // SSE spot ticks in live mode (Node/Docker server). No-ops if stream unavailable.
   useSpotStream(symbol, source === 'live');
 
+  // Always boot into LIVE so desks never start on synthetic/demo market data.
   useEffect(() => {
+    const s = useTerminalStore.getState();
+    if (s.source !== 'live') {
+      void s.setSource('live');
+    }
     setSymbol('SPY');
   }, [setSymbol]);
 
@@ -93,8 +98,9 @@ export function TerminalLayout() {
     s: handleSymbolSwitch,
     space: () => useTerminalStore.getState().togglePlay(),
     l: () => {
-      const s = useTerminalStore.getState();
-      s.setSource(s.source === 'demo' ? 'live' : 'demo');
+      // LIVE-only: L re-asserts live market feeds (demo disabled).
+      void useTerminalStore.getState().setSource('live');
+      toast.message('LIVE', { description: 'Refreshing market feeds' });
     },
     tab: nextTab,
     '?': () => setShortcutsOpen((o) => !o),

@@ -39,7 +39,6 @@ import {
   historyToSpotBars,
   optionGreeksPnl,
   straddleBreakEvens,
-  syntheticSpotPath,
 } from '../../lib/options/greeksPnl';
 import { buildBasisCurve, rollPnlHeatmap } from '../../lib/options/basis';
 import { isCryptoSymbol } from '../../lib/options/basis';
@@ -123,7 +122,7 @@ export function DeskView() {
     return (
       <Panel title="MM Desk" apis={['yfinance', 'FMP', 'Deribit']} className="h-full">
         <EmptyState
-          kind={source === 'demo' ? 'demo' : 'no-data'}
+          kind="no-data"
           title="No surface data"
           body="Load a symbol / wait for chain — inventory blotter needs a snapshot."
         />
@@ -148,7 +147,7 @@ export function DeskView() {
           >
             {badge.label}
           </span>
-          <FreshnessChip kind={source === 'live' ? (chainUsed === 'synthetic' ? 'delayed' : 'live') : 'demo'} />
+          <FreshnessChip kind={chainUsed === 'none' || !chainUsed ? 'delayed' : 'live'} />
           <span className="hidden font-mono text-type-2xs text-muted-foreground md:inline">
             Blotter first · tools secondary · BS-Merton
             {chainUsed === 'deribit' ? ' · Deribit mark IV' : ''}
@@ -235,22 +234,20 @@ export function DeskView() {
   );
 }
 
-/** Shared spot path: real history when available, else synthetic around spot. */
+/**
+ * Spot path for desk tools: real FMP/yfinance history only.
+ * No synthetic path under LIVE — tools show empty until history is available.
+ */
 function useSpotPath(days = 40) {
-  const snapshot = useTerminalStore(s => s.snapshot)!;
   const fmpHistory = useTerminalStore(s => s.fmpHistory);
   const historySource = useTerminalStore(s => s.historySource);
   return useMemo(() => {
     const fromHist = historyToSpotBars(fmpHistory, days);
-    if (fromHist.length >= 5) {
-      return { path: fromHist, source: historySource === 'none' ? 'history' : historySource };
+    if (fromHist.length >= 5 && historySource !== 'none') {
+      return { path: fromHist, source: historySource };
     }
-    const atm = snapshot.expiries[0]?.atmIV ?? 0.25;
-    return {
-      path: syntheticSpotPath(snapshot.spot, days, atm, 21),
-      source: 'synthetic' as const,
-    };
-  }, [fmpHistory, historySource, snapshot, days]);
+    return { path: [] as ReturnType<typeof historyToSpotBars>, source: 'none' as const };
+  }, [fmpHistory, historySource, days]);
 }
 
 /* ─── Hedging ───────────────────────────────────────────────── */

@@ -15,7 +15,8 @@ export function SidePanel() {
   } = useTerminalStore();
   const spot = snapshot?.spot ?? 0;
 
-  const sourceLabel = source === 'live' && liveAvailable ? 'Live' : 'Demo';
+  // LIVE-only terminal: never label market UI as Demo.
+  const sourceLabel = liveAvailable || chainAvailable ? 'Live' : 'Waiting';
   const sourceDotClass = sourceLabel === 'Live' ? 'bg-up' : 'bg-amber';
 
   const modes: { key: DisplayMode; label: string }[] = [
@@ -27,11 +28,11 @@ export function SidePanel() {
   if (!snapshot) {
     return (
       <div
-        className="flex h-8 shrink-0 items-center border-t border-border bg-card px-2"
+        className="flex h-6 shrink-0 items-center border-t border-border bg-card px-1.5"
         role="region"
         aria-label="Display and data sources"
       >
-        <div className="font-mono text-type-xs text-muted-foreground">Waiting for surface…</div>
+        <div className="font-mono text-type-2xs text-muted-foreground">Waiting for surface…</div>
       </div>
     );
   }
@@ -40,7 +41,7 @@ export function SidePanel() {
 
   return (
     <div
-      className="flex shrink-0 flex-col border-t border-border bg-card px-2 py-1 font-mono"
+      className="flex shrink-0 flex-col border-t border-border bg-card px-1.5 py-0.5 font-mono"
       role="region"
       aria-label="Display and data sources"
     >
@@ -158,7 +159,7 @@ export function SidePanel() {
               >
                 chain:
                 <span className={cn('ml-0.5 tabular-nums', chainAvailable ? 'text-up' : 'text-amber')}>
-                  {chainAvailable ? chainUsed : 'synthetic'}
+                  {chainAvailable ? chainUsed : 'none'}
                 </span>
                 <span className="ml-1.5">spot:{spotSource}</span>
               </span>

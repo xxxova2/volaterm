@@ -17,14 +17,14 @@ export function SnapshotCards({ summary }: { summary: RatesSummary | null }) {
   return (
     <CollapsibleSection
       id="sec-snapshot"
-      className="order-2"
-      title="RATES SNAPSHOT"
+      className="order-1"
+      title="SNAPSHOT"
       apis={['FRED']}
       defaultOpen
       storageKey="rates.sec.snapshot"
       subtitle={summary?.spread_note}
     >
-      <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-6">
+      <div className="grid grid-cols-3 gap-1 sm:grid-cols-6">
         {cards.map((card) => {
           const display =
             card.value != null
@@ -34,13 +34,12 @@ export function SnapshotCards({ summary }: { summary: RatesSummary | null }) {
           return (
             <div
               key={card.label}
-              className={`rounded-lg border p-2.5 ${isNeg ? 'border-down/50 bg-down/15' : 'border-border bg-background/40'}`}
+              className={`rounded border px-1.5 py-1 ${isNeg ? 'border-down/50 bg-down/15' : 'border-border bg-background/40'}`}
             >
-              <div className={`text-type-xs ${isNeg ? 'text-down' : 'text-muted-foreground'}`}>{card.label}</div>
-              <div className={`text-lg font-bold tabular-nums ${isNeg ? 'text-down' : 'text-foreground'}`}>
+              <div className={`truncate text-type-2xs ${isNeg ? 'text-down' : 'text-muted-foreground'}`}>{card.label}</div>
+              <div className={`text-sm font-bold tabular-nums ${isNeg ? 'text-down' : 'text-foreground'}`}>
                 {display}
               </div>
-              {isNeg && <div className="mt-0.5 text-type-xs text-down">⚠ INVERTED</div>}
             </div>
           );
         })}
@@ -50,6 +49,7 @@ export function SnapshotCards({ summary }: { summary: RatesSummary | null }) {
         source={summary?.source || 'FRED · snapshot'}
         note={summary?.spread_note}
         staleThresholdMin={60}
+        className="mt-1"
       />
     </CollapsibleSection>
   );

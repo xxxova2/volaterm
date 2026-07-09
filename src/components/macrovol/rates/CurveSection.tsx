@@ -20,11 +20,12 @@ export function CurveSection({
     <CollapsibleSection
       id="sec-curve"
       belowFold
-      className="order-8"
-      title="US TREASURY YIELD CURVE"
+      className="order-9"
+      title="UST CURVE (table view)"
       apis={['FRED', 'yfinance']}
-      defaultOpen
+      defaultOpen={false}
       storageKey="rates.sec.curve"
+      subtitle="Same FRED CMTs as hero curve — compact chart for jump-nav"
       badge={
         <span className="text-type-xs text-muted-foreground">{curveLive}/{curve.length} tenors live</span>
       }

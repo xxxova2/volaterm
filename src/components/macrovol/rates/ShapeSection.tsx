@@ -21,23 +21,26 @@ export function ShapeSection({
   };
   onOpenImply: (i: ImplyRead) => void;
 }) {
+  // Compact regime strip — full spread curves live on CurvesBoard (sec-curves).
   const shapeCards = [
     { key: '2s10s', label: '2s10s', spark: shape.history?.spark_2s10s, color: '#3b82f6' },
     { key: '5s30s', label: '5s30s', spark: shape.history?.spark_5s30s, color: '#22c55e' },
-    { key: 'fly_2s5s10s', label: '2s5s10s fly', spark: shape.history?.spark_fly, color: '#a78bfa' },
-    { key: '2s5s', label: '2s5s', spark: undefined, color: '#f59e0b' },
-    { key: '10s30s', label: '10s30s', spark: undefined, color: '#06b6d4' },
-    { key: '3m10y', label: '3m10y', spark: undefined, color: '#ef4444' },
+    { key: 'fly_2s5s10s', label: 'fly', spark: shape.history?.spark_fly, color: '#a78bfa' },
+    { key: '2s5s', label: '2s5s', spark: shape.history?.spark_2s5s, color: '#f59e0b' },
+    { key: '5s10s', label: '5s10s', spark: shape.history?.spark_5s10s, color: '#06b6d4' },
+    { key: '10s30s', label: '10s30s', spark: shape.history?.spark_10s30s, color: '#a78bfa' },
+    { key: '3m10y', label: '3m10y', spark: shape.history?.spark_3m10y, color: '#ef4444' },
   ];
 
   return (
     <CollapsibleSection
       id="sec-shape"
-      className="order-6"
-      title="CURVE SHAPE"
+      className="order-3"
+      title="SHAPE REGIME"
       apis={['FRED']}
-      defaultOpen
+      defaultOpen={false}
       storageKey="rates.sec.shape"
+      subtitle="Prints + regime — full curve charts under CURVES & SPREADS"
       badge={
         <>
           <span
@@ -56,25 +59,19 @@ export function ShapeSection({
         </>
       }
     >
-      <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-6">
+      <div className="grid grid-cols-3 gap-1.5 md:grid-cols-4 lg:grid-cols-7">
         {shapeCards.map((sc) => {
           const sp = shape.spreads[sc.key];
           const bps = sp?.bps;
           return (
-            <div key={sc.key} className="rounded-lg border border-border bg-background/50 p-3">
-              <div className="text-type-xs text-muted-foreground">{sc.label}</div>
-              <div className={`text-lg font-bold ${bps != null && bps < 0 ? 'text-down' : 'text-foreground'}`}>
+            <div key={sc.key} className="rounded border border-border bg-background/50 p-1.5">
+              <div className="text-type-2xs text-muted-foreground">{sc.label}</div>
+              <div className={`text-sm font-bold tabular-nums ${bps != null && bps < 0 ? 'text-down' : 'text-foreground'}`}>
                 {bps != null ? `${bps >= 0 ? '+' : ''}${bps.toFixed(0)}` : '—'}
-                <span className="ml-0.5 text-type-xs font-normal text-muted-foreground">bps</span>
+                <span className="ml-0.5 text-type-2xs font-normal text-muted-foreground">bp</span>
               </div>
-              <div className="mt-1 text-type-2xs text-muted-foreground/80">{sp?.formula}</div>
-              {sp?.imply && (
-                <div className="mt-1">
-                  <ImplyChip imply={sp.imply} compact onOpen={onOpenImply} />
-                </div>
-              )}
               {sc.spark && sc.spark.length > 0 && (
-                <div className="mt-1">
+                <div className="mt-0.5">
                   <Spark values={sc.spark} color={sc.color} />
                 </div>
               )}
@@ -82,32 +79,34 @@ export function ShapeSection({
           );
         })}
       </div>
-      <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-3">
+      {/* Larger multi-spread history strip */}
+      <div className="mt-2 grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-4">
         {[
-          { title: '2s10s history', data: shapeHistoryCharts.s2s10, color: '#3b82f6' },
-          { title: '5s30s history', data: shapeHistoryCharts.s5s30, color: '#22c55e' },
-          { title: '2s5s10s fly', data: shapeHistoryCharts.fly, color: '#a78bfa' },
+          { title: '2s10s', data: shapeHistoryCharts.s2s10, color: '#3b82f6' },
+          { title: '5s30s', data: shapeHistoryCharts.s5s30, color: '#22c55e' },
+          { title: '3m10y', data: shapeHistoryCharts.s3m10y, color: '#ef4444' },
+          { title: 'fly 2s5s10s', data: shapeHistoryCharts.fly, color: '#a78bfa' },
         ].map((ch) => (
-          <div key={ch.title}>
-            <div className="mb-1 text-type-xs text-muted-foreground">{ch.title} (bps)</div>
+          <div key={ch.title} className="rounded border border-border/60 p-1">
+            <div className="mb-0.5 text-type-2xs text-muted-foreground">{ch.title} (bps)</div>
             {ch.data.length > 0 ? (
-              <ResponsiveContainer width="100%" height={110}>
-                <AreaChart data={ch.data}>
+              <ResponsiveContainer width="100%" height={96}>
+                <AreaChart data={ch.data} margin={{ top: 2, right: 2, bottom: 0, left: 0 }}>
                   <CartesianGrid stroke="#1f1f1f" strokeDasharray="2 2" />
-                  <XAxis dataKey="date" tick={{ fill: '#71717a', fontSize: 8 }} interval="preserveStartEnd" />
-                  <YAxis tick={{ fill: '#71717a', fontSize: 8 }} width={32} />
+                  <XAxis dataKey="date" hide />
+                  <YAxis hide domain={['auto', 'auto']} />
                   <Tooltip contentStyle={chartTooltipStyle} />
                   <ReferenceLine y={0} stroke="#333" />
-                  <Area type="monotone" dataKey="bps" stroke={ch.color} fill={ch.color} fillOpacity={0.15} strokeWidth={1.5} />
+                  <Area type="monotone" dataKey="bps" stroke={ch.color} fill={ch.color} fillOpacity={0.15} strokeWidth={1.4} isAnimationActive={false} />
                 </AreaChart>
               </ResponsiveContainer>
             ) : (
-              <div className="py-6 text-center text-type-xs text-muted-foreground">No aligned history</div>
+              <div className="py-4 text-center text-type-2xs text-muted-foreground">No history</div>
             )}
           </div>
         ))}
       </div>
-      <DataBadge asOf={shape.as_of} source={shape.source || 'FRED'} note={shape.unit_note} className="mt-2" />
+      <DataBadge asOf={shape.as_of} source={shape.source || 'FRED'} note={shape.unit_note} className="mt-1" />
     </CollapsibleSection>
   );
 }

@@ -174,14 +174,33 @@ export function rollPnlHeatmap(
 }
 
 /**
- * Crypto-style perpetual funding series (synthetic when no feed).
- * Mean-reverting funding rate for visualization.
+ * Flat series at the live annualized funding print (Deribit funding_8h × 3 × 365).
+ * No random walk / mock path — empty when funding is unavailable.
+ */
+export function liveFundingSeries(
+  days = 30,
+  fundingAnn: number | null | undefined,
+): { t: number; fundingAnn: number; cumPnl: number }[] {
+  if (fundingAnn == null || !isFinite(fundingAnn)) return [];
+  const out: { t: number; fundingAnn: number; cumPnl: number }[] = [];
+  let cum = 0;
+  for (let d = 0; d <= days; d++) {
+    cum += fundingAnn / 365;
+    out.push({ t: d, fundingAnn, cumPnl: cum });
+  }
+  return out;
+}
+
+/**
+ * @deprecated Offline/demo visual only — do not use under LIVE tools.
+ * Prefer liveFundingSeries(days, realFundingAnn).
  */
 export function syntheticFundingSeries(
   days = 30,
   meanAnn = 0.10,
   seed = 11,
 ): { t: number; fundingAnn: number; cumPnl: number }[] {
+  // Keep deterministic generator for unit tests / explicit DEMO only.
   let s = seed >>> 0;
   const rand = () => {
     s = (s + 0x6D2B79F5) >>> 0;

@@ -220,14 +220,15 @@ async def _load_curve_map() -> tuple[dict[str, float | None], list, list, str]:
 @app.get("/api/rates/shape")
 async def rates_shape(history: int = Query(60, ge=10, le=260)):
     """
-    Curve shape desk: live spreads + sparklines for 2s10s / 5s30s / fly 2s5s10s.
-    History built from FRED daily CMTs (aligned dates only — no invented points).
+    Curve shape desk: live spreads + history for every board spread.
+    History from FRED daily CMTs (aligned dates only — no invented points).
     """
     by_label, yields, obs_dates, source = await _load_curve_map()
     shape = rate_risk.compute_shape(by_label)
 
-    # Historical sparklines — fetch only tenors we need
-    dgs2, dgs5, dgs10, dgs30 = await asyncio.gather(
+    # All tenors needed for 2s5s / 5s10s / 10s30s / 3m10y / fly + classics
+    dgs3m, dgs2, dgs5, dgs10, dgs30 = await asyncio.gather(
+        fetch_series("DGS3MO", limit=history + 20),
         fetch_series("DGS2", limit=history + 20),
         fetch_series("DGS5", limit=history + 20),
         fetch_series("DGS10", limit=history + 20),
@@ -236,6 +237,10 @@ async def rates_shape(history: int = Query(60, ge=10, le=260)):
 
     hist_2s10s = rate_risk.align_spread_history(dgs10, dgs2, max_points=history)
     hist_5s30s = rate_risk.align_spread_history(dgs30, dgs5, max_points=history)
+    hist_2s5s = rate_risk.align_spread_history(dgs5, dgs2, max_points=history)
+    hist_5s10s = rate_risk.align_spread_history(dgs10, dgs5, max_points=history)
+    hist_10s30s = rate_risk.align_spread_history(dgs30, dgs10, max_points=history)
+    hist_3m10y = rate_risk.align_spread_history(dgs10, dgs3m, max_points=history)
 
     # Butterfly history: need 2,5,10 on same dates
     m5 = {r["date"]: r["value"] for r in dgs5}
@@ -260,9 +265,17 @@ async def rates_shape(history: int = Query(60, ge=10, le=260)):
         "history": {
             "2s10s": hist_2s10s,
             "5s30s": hist_5s30s,
+            "2s5s": hist_2s5s,
+            "5s10s": hist_5s10s,
+            "10s30s": hist_10s30s,
+            "3m10y": hist_3m10y,
             "fly_2s5s10s": fly_hist,
             "spark_2s10s": _spark(hist_2s10s),
             "spark_5s30s": _spark(hist_5s30s),
+            "spark_2s5s": _spark(hist_2s5s),
+            "spark_5s10s": _spark(hist_5s10s),
+            "spark_10s30s": _spark(hist_10s30s),
+            "spark_3m10y": _spark(hist_3m10y),
             "spark_fly": _spark(fly_hist),
         },
         "as_of": datetime.now(timezone.utc).isoformat(),
@@ -795,7 +808,7 @@ async def get_stir_strip():
       - Desk spreads: calendars, flies, packs, SERFF, inter, cash
     Free data: yfinance (delayed) + NY Fed Markets API + FRED (IORB).
     """
-    key = "stir_strip:v4"
+    key = "stir_strip:v5"
     hit = ttl_cache.get_cached(key, STIR_CACHE_TTL)
     if not ttl_cache.is_miss(hit):
         return hit
@@ -804,7 +817,8 @@ async def get_stir_strip():
     import asyncio
     from services.nyfed_client import fetch_reference_rates
 
-    # 3M SOFR (CME SR3) — board tickers often shown as SFRM6 / SFRZ6 etc.
+    # 3M SOFR (CME SR3) — quarterly strip through 2030 (Bloomberg-style path chart).
+    # Board tickers SFR{M}{Y}; yfinance CME symbols SR3{M}{YY}.CME
     SR3_CONTRACTS = [
         {"symbol": "SR3H26.CME", "label": "SR3H6", "ticker": "SFRH6", "month": "Mar 26"},
         {"symbol": "SR3M26.CME", "label": "SR3M6", "ticker": "SFRM6", "month": "Jun 26"},
@@ -818,6 +832,14 @@ async def get_stir_strip():
         {"symbol": "SR3M28.CME", "label": "SR3M8", "ticker": "SFRM8", "month": "Jun 28"},
         {"symbol": "SR3U28.CME", "label": "SR3U8", "ticker": "SFRU8", "month": "Sep 28"},
         {"symbol": "SR3Z28.CME", "label": "SR3Z8", "ticker": "SFRZ8", "month": "Dec 28"},
+        {"symbol": "SR3H29.CME", "label": "SR3H9", "ticker": "SFRH9", "month": "Mar 29"},
+        {"symbol": "SR3M29.CME", "label": "SR3M9", "ticker": "SFRM9", "month": "Jun 29"},
+        {"symbol": "SR3U29.CME", "label": "SR3U9", "ticker": "SFRU9", "month": "Sep 29"},
+        {"symbol": "SR3Z29.CME", "label": "SR3Z9", "ticker": "SFRZ9", "month": "Dec 29"},
+        {"symbol": "SR3H30.CME", "label": "SR3H0", "ticker": "SFRH0", "month": "Mar 30"},
+        {"symbol": "SR3M30.CME", "label": "SR3M0", "ticker": "SFRM0", "month": "Jun 30"},
+        {"symbol": "SR3U30.CME", "label": "SR3U0", "ticker": "SFRU0", "month": "Sep 30"},
+        {"symbol": "SR3Z30.CME", "label": "SR3Z0", "ticker": "SFRZ0", "month": "Dec 30"},
     ]
 
     # 1M SOFR (CME SR1) — months that yfinance usually quotes
@@ -1081,16 +1103,28 @@ async def get_stir_strip():
                 "imply": s.get("imply"),
             })
 
-    chart = [
-        {
-            "x": p.get("month") or p.get("contract"),
-            "contract": p.get("contract"),
+    # Dual strip for Bloomberg-style chart: live yield vs prior settlement yield.
+    # Implied rate = 100 − futures price. Settlement ≈ previous close.
+    settle_by_label = {}
+    for row in sr3_results:
+        lab = row.get("contract")
+        px = row.get("settlement") if row.get("settlement") is not None else row.get("prev_close")
+        if lab and px is not None and float(px) > 50:
+            settle_by_label[lab] = round(100.0 - float(px), 4)
+
+    chart = []
+    for p in (path.get("points") or []):
+        lab = p.get("contract")
+        prior = settle_by_label.get(lab) if lab else None
+        chart.append({
+            "x": p.get("month") or lab,
+            "contract": lab,
+            "ticker": p.get("ticker"),
             "implied_rate": p.get("implied_rate"),
+            "prior_rate": prior,
             "source": p.get("source"),
             "vs_sofr_bps": p.get("vs_sofr_bps"),
-        }
-        for p in (path.get("points") or [])
-    ]
+        })
 
     # Compact reference-rate print for UI (CME/NYFed style)
     ref_print = []

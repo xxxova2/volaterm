@@ -8,25 +8,24 @@ describe('StatusBar', () => {
   it('renders source indicator and contract info', () => {
     useTerminalStore.setState({
       symbol: 'SPY',
-      source: 'demo',
+      source: 'live',
       lastUpdate: Date.now(),
       lastSpotUpdate: 0,
       lastChainUpdate: 0,
       fmpQuote: null,
       liveRFR: null,
       snapshot: null,
-      chainUsed: 'synthetic',
-      spotSource: 'synthetic',
+      chainUsed: 'none',
+      spotSource: 'none',
       chainAvailable: false,
       streamConnected: false,
-      historyMode: 'synthetic',
+      historyMode: 'live',
       historicalFrames: [],
       session: { isOpen: false, phase: 'closed', minutesSinceOpen: null },
     });
     render(<StatusBar />);
     expect(screen.getByText(/SPY/)).toBeTruthy();
-    // Dual chips: spot + chain may both show DEMO in demo mode
-    expect(screen.getAllByText('DEMO').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText(/chain:none/)).toBeTruthy();
   });
 
   it('shows spot price when available', () => {
@@ -82,11 +81,11 @@ describe('StatusBar', () => {
       fmpQuote: null,
       liveRFR: 0.0398,
       snapshot: null,
-      chainUsed: 'synthetic',
-      spotSource: 'synthetic',
+      chainUsed: 'none',
+      spotSource: 'none',
       chainAvailable: false,
       streamConnected: false,
-      historyMode: 'synthetic',
+      historyMode: 'live',
       historicalFrames: [],
       session: { isOpen: false, phase: 'after', minutesSinceOpen: 400 },
     });

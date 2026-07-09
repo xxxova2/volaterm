@@ -100,34 +100,51 @@ export function useRatesData() {
       return stir.chart.map((p) => ({
         x: p.x,
         rate: p.implied_rate,
+        prior: p.prior_rate ?? null,
         vsSofr: p.vs_sofr_bps ?? null,
         source: p.source,
+        contract: p.contract,
       }));
     }
+    // Fallback: build live + prior settle from board rows
     return (stir?.sr3 || [])
-      .filter((c) => c.implied_rate != null)
-      .map((c) => ({
-        x: c.month || c.contract,
-        rate: c.implied_rate,
-        vsSofr: stir?.sofr != null && c.implied_rate != null
-          ? (c.implied_rate - stir.sofr) * 100
-          : null,
-        source: c.source,
-      }));
+      .filter((c) => c.implied_rate != null || c.settlement != null || c.prev_close != null)
+      .map((c) => {
+        const settlePx = c.settlement ?? c.prev_close ?? null;
+        const prior =
+          settlePx != null && settlePx > 50 ? 100 - settlePx : null;
+        return {
+          x: c.month || c.contract,
+          rate: c.implied_rate,
+          prior,
+          vsSofr: stir?.sofr != null && c.implied_rate != null
+            ? (c.implied_rate - stir.sofr) * 100
+            : null,
+          source: c.source,
+          contract: c.contract,
+        };
+      });
   }, [stir]);
 
   const shapeHistoryCharts = useMemo(() => {
+    const empty: { date: string; bps: number }[] = [];
+    const map = (key: string) =>
+      ((shape?.history as Record<string, { date: string; spread_bps: number }[]> | undefined)?.[key] || [])
+        .map((p) => ({ date: p.date.slice(5), bps: p.spread_bps }));
     if (!shape?.history) {
       return {
-        s2s10: [] as { date: string; bps: number }[],
-        s5s30: [] as { date: string; bps: number }[],
-        fly: [] as { date: string; bps: number }[],
+        s2s10: empty, s5s30: empty, s2s5: empty, s5s10: empty,
+        s10s30: empty, s3m10y: empty, fly: empty,
       };
     }
     return {
-      s2s10: (shape.history['2s10s'] || []).map((p) => ({ date: p.date.slice(5), bps: p.spread_bps })),
-      s5s30: (shape.history['5s30s'] || []).map((p) => ({ date: p.date.slice(5), bps: p.spread_bps })),
-      fly: (shape.history.fly_2s5s10s || []).map((p) => ({ date: p.date.slice(5), bps: p.spread_bps })),
+      s2s10: map('2s10s'),
+      s5s30: map('5s30s'),
+      s2s5: map('2s5s'),
+      s5s10: map('5s10s'),
+      s10s30: map('10s30s'),
+      s3m10y: map('3m10y'),
+      fly: map('fly_2s5s10s'),
     };
   }, [shape]);
 

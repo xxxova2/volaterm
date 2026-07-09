@@ -8,7 +8,7 @@ export function TabNav() {
 
   return (
     <nav 
-      className="flex h-7 shrink-0 items-center border-b border-border bg-background px-1.5"
+      className="flex h-6 shrink-0 items-center border-b border-border bg-background px-1"
       role="tablist"
       aria-label="Terminal view tabs"
     >

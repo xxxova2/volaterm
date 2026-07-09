@@ -24,7 +24,14 @@ export function StirSection({
   onOpenImply,
 }: {
   stir: StirStripData | null;
-  stirChart: { x: string; rate: number | null; vsSofr: number | null; source?: string }[];
+  stirChart: {
+    x: string;
+    rate: number | null;
+    prior?: number | null;
+    vsSofr: number | null;
+    source?: string;
+    contract?: string;
+  }[];
   onOpenImply: (i: ImplyRead) => void;
 }) {
   const { focused: stirFocused, rowIndex: stirRow, focusRow: focusStir } = useBoardFocus('stir-sr3');
@@ -45,7 +52,7 @@ export function StirSection({
   return (
     <CollapsibleSection
       id="sec-stir"
-      className="order-3"
+      className="order-4"
       title="STIR PATH (SOFR FUTURES)"
       apis={['yfinance', 'NYFed', 'FRED', 'MacroVol']}
       defaultOpen
@@ -131,12 +138,13 @@ export function StirSection({
           </div>
         </div>
       )}
+      {/* Full dual-path chart lives on CurvesBoard; keep compact path here for jump-nav */}
       {stirChart.length > 0 ? (
-        <div className="mt-3">
-          <ResponsiveContainer width="100%" height={220}>
+        <div className="mt-2">
+          <ResponsiveContainer width="100%" height={180}>
             <LineChart data={stirChart} margin={{ top: 8, right: 12, left: 0, bottom: 8 }}>
               <CartesianGrid stroke="#1f1f1f" strokeDasharray="2 2" />
-              <XAxis dataKey="x" tick={{ fill: '#71717a', fontSize: 9 }} interval={0} angle={-30} textAnchor="end" height={50} />
+              <XAxis dataKey="x" tick={{ fill: '#71717a', fontSize: 9 }} interval="preserveStartEnd" height={36} />
               <YAxis
                 tick={{ fill: '#71717a', fontSize: 9 }}
                 domain={['auto', 'auto']}
@@ -146,8 +154,8 @@ export function StirSection({
               <Tooltip
                 contentStyle={chartTooltipStyle}
                 formatter={(v: number, name: string) => [
-                  name === 'rate' ? `${Number(v).toFixed(3)}%` : `${Number(v).toFixed(1)} bps`,
-                  name === 'rate' ? 'Implied' : 'vs SOFR',
+                  `${Number(v).toFixed(3)}%`,
+                  name === 'rate' ? 'Live' : name === 'prior' ? 'Prior settle' : name,
                 ]}
               />
               {stir?.sofr != null && (
@@ -158,12 +166,13 @@ export function StirSection({
                   label={{ value: `SOFR ${stir.sofr.toFixed(2)}%`, fill: '#f59e0b', fontSize: 9 }}
                 />
               )}
-              <Line type="monotone" dataKey="rate" stroke="#3b82f6" strokeWidth={2} dot={{ r: 3, fill: '#3b82f6' }} connectNulls />
+              <Line type="monotone" dataKey="prior" stroke="#3b82f6" strokeWidth={1.5} dot={{ r: 2 }} connectNulls isAnimationActive={false} />
+              <Line type="monotone" dataKey="rate" stroke="#f4f4f5" strokeWidth={2} dot={{ r: 2.5 }} connectNulls isAnimationActive={false} />
             </LineChart>
           </ResponsiveContainer>
         </div>
       ) : (
-        <div className="mt-3 rounded border border-border bg-background/40 p-3 text-type-xs text-muted-foreground">
+        <div className="mt-2 rounded border border-border bg-background/40 p-3 text-type-xs text-muted-foreground">
           No live SOFR futures quotes — strip left empty rather than inventing rates.
         </div>
       )}

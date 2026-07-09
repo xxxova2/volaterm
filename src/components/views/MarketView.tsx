@@ -84,7 +84,7 @@ export function MarketView() {
         <div className="flex items-center gap-1">
           <SourceChip
             label="Spot"
-            ok={spotSource !== 'synthetic'}
+            ok={spotSource !== 'none'}
             source={
               spotSource === 'fmp' ? 'FMP'
                 : spotSource === 'yfinance' ? 'yfinance'

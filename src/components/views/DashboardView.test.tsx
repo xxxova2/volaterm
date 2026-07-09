@@ -3,6 +3,10 @@ import React from 'react';
 import { render, screen } from '@testing-library/react';
 import { DashboardView } from './DashboardView';
 import { useTerminalStore } from '../../store/terminalStore';
+import { buildSnapshot, buildSurfaceGrid } from '../../lib/options/synthetic';
+import { sviReadout } from '../../lib/options/surfaceTools';
+import { diagnoseArbitrage } from '../../lib/options/noarb';
+import { pushLiveFrame } from '../../lib/options/liveHistory';
 
 // jsdom polyfills required by recharts' ResponsiveContainer.
 class ResizeObserverStub {
@@ -13,32 +17,55 @@ class ResizeObserverStub {
 (globalThis as unknown as { ResizeObserver: typeof ResizeObserverStub }).ResizeObserver =
   ResizeObserverStub as unknown as typeof ResizeObserver;
 
+/**
+ * Seed a LIVE-shaped surface (real pipeline math on a fixture chain).
+ * Tests do not call demo mode — production is LIVE-only.
+ */
+function seedLiveDashboard() {
+  const snap = { ...buildSnapshot('SPY', Date.now(), 500, 0, 0), surfaceSource: 'live' as const };
+  const surface = buildSurfaceGrid(snap);
+  const readout = sviReadout(surface, snap.spot);
+  const arb = diagnoseArbitrage(surface, snap.spot);
+  let frames: ReturnType<typeof pushLiveFrame> = [];
+  for (let i = 0; i < 8; i++) {
+    const s = {
+      ...buildSnapshot('SPY', Date.now() - (8 - i) * 60_000, 500 + i, i / 8, 0),
+      surfaceSource: 'live' as const,
+    };
+    frames = pushLiveFrame(frames, s, buildSurfaceGrid(s));
+  }
+  useTerminalStore.setState({
+    symbol: 'SPY',
+    snapshot: snap,
+    surface,
+    sviReadout: readout,
+    arbResult: arb,
+    historicalFrames: frames,
+    frameIndex: frames.length - 1,
+    isPlaying: false,
+    speed: 1,
+    source: 'live',
+    liveAvailable: true,
+    loading: false,
+    lastUpdate: Date.now(),
+    activeTab: 'home',
+    displayMode: 'strike',
+    selectedExpiry: null,
+    playbackInterval: null,
+    refreshInterval: null,
+    chainAvailable: true,
+    chainUsed: 'yfinance',
+    spotSource: 'yfinance',
+    historyMode: 'live',
+    historySource: 'yfinance',
+    fmpHistory: null,
+    fmpQuote: null,
+  });
+}
+
 describe('DashboardView', () => {
-  beforeEach(async () => {
-    // Reset to a deterministic demo state. setSymbol('SPY') populates snapshot,
-    // surface, sviReadout, arbResult, and historicalFrames without live network.
-    useTerminalStore.setState({
-      symbol: 'SPY',
-      snapshot: null,
-      surface: null,
-      sviReadout: null,
-      arbResult: null,
-      historicalFrames: [],
-      frameIndex: 0,
-      isPlaying: false,
-      speed: 1,
-      source: 'demo',
-      liveAvailable: false,
-      loading: false,
-      lastUpdate: Date.now(),
-      activeTab: 'home',
-      displayMode: 'strike',
-      selectedExpiry: null,
-      playbackInterval: null,
-      refreshInterval: null,
-    });
-    await useTerminalStore.getState().setSource('demo');
-    await useTerminalStore.getState().setSymbol('SPY');
+  beforeEach(() => {
+    seedLiveDashboard();
   });
 
   it('renders the diagnostics card with SVI RMSE and arbitrage counts', () => {
@@ -47,15 +74,12 @@ describe('DashboardView', () => {
     const card = screen.getByTestId('diagnostics-card');
     expect(card).toBeInTheDocument();
 
-    // RMSE is formatted as a percentage so it contains a "%" sign.
     const rmseNode = screen.getByTestId('svi-rmse');
     expect(rmseNode.textContent).toMatch(/%/);
 
-    // Calendar / Butterfly labels are rendered as MiniStat labels.
     expect(screen.getByText('Calendar')).toBeInTheDocument();
     expect(screen.getByText('Butterfly')).toBeInTheDocument();
 
-    // For SPY demo data the synthetic surface is arbitrage-clean.
     const badge = screen.getByTestId('arb-badge');
     expect(badge.getAttribute('data-arb-clean')).toBe('true');
     expect(badge.textContent?.toLowerCase()).toContain('clean');
@@ -67,16 +91,10 @@ describe('DashboardView', () => {
 
     render(<DashboardView />);
 
-    // IV High and IV Low are rendered as MiniStat values inside the
-    // Volatility Regime panel. They are formatted with "%" via fmtPct.
     const allText = document.body.textContent ?? '';
-
-    // Pull every percent-formatted stat block; the demo's historical IVs
-    // are far above 0 so we expect multiple "%" strings in the document.
     const percentMatches = allText.match(/-?\d+\.\d{2}%/g) ?? [];
     expect(percentMatches.length).toBeGreaterThan(2);
 
-    // Sanity check: the IV High / IV Low labels exist alongside percent values.
     expect(screen.getByText('IV High')).toBeInTheDocument();
     expect(screen.getByText('IV Low')).toBeInTheDocument();
   });
@@ -99,7 +117,6 @@ describe('DashboardView', () => {
     expect(badge.getAttribute('data-arb-clean')).toBe('false');
     expect(badge.textContent?.toLowerCase()).toContain('flags');
 
-    // Counts rendered in MiniStats.
     const counts = screen.getAllByText(/^[0-9]+$/);
     expect(counts).toContainEqual(expect.objectContaining({ textContent: '3' }));
     expect(counts).toContainEqual(expect.objectContaining({ textContent: '1' }));
@@ -111,8 +128,6 @@ describe('DashboardView', () => {
 
     render(<DashboardView />);
 
-    // With no historical frames but a live snapshot, IV High and IV Low
-    // both equal the snapshot's minimum-DTE expiry atmIV — non-zero.
     expect(snapshot).not.toBeNull();
     expect(snapshot!.expiries.length).toBeGreaterThan(0);
     expect(screen.getByText('IV High')).toBeInTheDocument();

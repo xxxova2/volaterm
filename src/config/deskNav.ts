@@ -12,16 +12,17 @@ export type DeskNavItem = {
 export const RATES_SECTIONS: DeskNavItem[] = [
   { id: 'sec-macro', label: 'Macro', short: 'Macro', apis: ['FRED'] },
   { id: 'sec-snapshot', label: 'Snapshot', short: 'Snap', apis: ['FRED'] },
-  { id: 'sec-stir', label: 'STIR Path', short: 'STIR', apis: ['yfinance', 'NYFed', 'FRED'] },
+  { id: 'sec-curves', label: 'Curves', short: 'Crv', apis: ['FRED', 'yfinance', 'MacroVol'] },
+  { id: 'sec-shape', label: 'Shape', short: 'Shape', apis: ['FRED'] },
+  { id: 'sec-stir', label: 'STIR', short: 'STIR', apis: ['yfinance', 'NYFed', 'FRED'] },
   { id: 'sec-nyfed', label: 'NY Fed', short: 'NYFed', apis: ['NYFed'] },
   { id: 'sec-basis', label: 'Basis', short: 'Basis', apis: ['FRED', 'MacroVol'] },
-  { id: 'sec-shape', label: 'Curve Shape', short: 'Shape', apis: ['FRED'] },
   { id: 'sec-plumbing', label: 'Plumbing', short: 'Plumb', apis: ['FRED'] },
-  { id: 'sec-curve', label: 'UST Curve', short: 'UST', apis: ['FRED', 'yfinance'] },
-  { id: 'sec-premium', label: 'Premium Map', short: 'Prem', apis: ['FRED', 'MacroVol'] },
+  { id: 'sec-curve', label: 'UST table', short: 'UST', apis: ['FRED'] },
+  { id: 'sec-premium', label: 'Premium', short: 'Prem', apis: ['FRED', 'MacroVol'] },
   { id: 'sec-corr', label: 'Corr', short: 'Corr', apis: ['yfinance'] },
-  { id: 'sec-carry', label: 'JPY Carry', short: 'JPY', apis: ['FRED'] },
-  { id: 'sec-asset-corr', label: 'Asset Corr', short: 'ACorr', apis: ['yfinance'] },
+  { id: 'sec-carry', label: 'JPY', short: 'JPY', apis: ['FRED'] },
+  { id: 'sec-asset-corr', label: 'ACorr', short: 'ACorr', apis: ['yfinance'] },
   { id: 'sec-dv01', label: 'DV01', short: 'DV01', apis: ['FRED', 'MacroVol'] },
 ];
 

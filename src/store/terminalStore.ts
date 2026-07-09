@@ -84,20 +84,20 @@ interface TerminalStore {
   fmpNews: FmpNewsItem[] | null;
   fmpHistory: FmpPriceBar[] | null;
   fmpEarnings: FmpEarnings[] | null;
-  /** Whether the live surface used a real option chain (vs synthetic fallback). */
+  /** Whether the live surface used a real option chain. */
   chainAvailable: boolean;
-  /** Where the live spot came from. */
-  spotSource: 'fmp' | 'yfinance' | 'deribit' | 'synthetic';
-  /** Which source actually served the chain / history / profile. */
-  chainUsed: 'fmp' | 'yfinance' | 'deribit' | 'synthetic';
+  /** Where the live spot came from (`none` = no real print yet). */
+  spotSource: 'fmp' | 'yfinance' | 'deribit' | 'none';
+  /** Which source actually served the chain (`none` = unavailable). */
+  chainUsed: 'fmp' | 'yfinance' | 'deribit' | 'none';
   historySource: 'fmp' | 'yfinance' | 'none';
   profileSource: 'fmp' | 'yfinance' | 'none';
   /** Latest US equity session snapshot (updated on refresh). */
   session: SessionStatus;
   /** Whether the SSE spot stream is currently connected. */
   streamConnected: boolean;
-  /** Playback frames are from live captures vs synthetic seed. */
-  historyMode: 'live' | 'synthetic';
+  /** Playback frames are from live captures only (LIVE-only terminal). */
+  historyMode: 'live';
   /** Beginner hover hints: show plain-English explanations on tool metrics. */
   explainHovers: boolean;
   /** UI density: dense (terminal) vs readable (more padding). */
@@ -172,13 +172,13 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
   fmpHistory: null,
   fmpEarnings: null,
   chainAvailable: false,
-  spotSource: 'synthetic',
-  chainUsed: 'synthetic',
+  spotSource: 'none',
+  chainUsed: 'none',
   historySource: 'none',
   profileSource: 'none',
   session: usEquitySession(),
   streamConnected: false,
-  historyMode: 'synthetic',
+  historyMode: 'live',
   explainHovers: true,
   uiDensity: (() => {
     try {
@@ -240,81 +240,58 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
       isPlaying: false,
       lastSpotUpdate: 0,
       lastChainUpdate: 0,
-      historyMode: 'synthetic',
+      historyMode: 'live',
       boardFocus: { boardId: null, rowIndex: 0, colKey: null },
       chainAvailable: false,
-      chainUsed: 'synthetic',
-      spotSource: 'synthetic',
+      chainUsed: 'none',
+      spotSource: 'none',
       fundingAnn: null,
+      source: 'live',
     });
 
-    const currentSource = get().source;
-    if (currentSource === 'live') {
-      // Live path: fail-closed — never seed synthetic IV under LIVE.
-      // Stay loading until a real chain arrives; empty state if unavailable.
-      await fetchLiveEnrichment(trimmed);
-      if (get().symbol !== trimmed) return;
-      await fetchLiveSnapshot(trimmed, true);
-      if (get().symbol !== trimmed) return;
-      if (!get().snapshot) {
-        set({
-          snapshot: null,
-          surface: null,
-          sviReadout: null,
-          arbResult: null,
-          historicalFrames: [],
-          loading: false,
-          chainUsed: 'synthetic',
-          chainAvailable: false,
-          session: usEquitySession(),
-        });
-        if (!liveWarned) {
-          liveWarned = true;
-          toast.warning('Live chain unavailable', {
-            description: 'No real option chain. Try Chain → yfinance / FMP, open BTC for Deribit, or switch to DEMO.',
-          });
-        }
-      }
-    } else {
-      const demo = getProvider('demo');
-      const snapshot = (await demo.getSnapshot(trimmed, { jitter: 0 }))!;
-      const frames = demo.getHistory!(trimmed, 64);
-      const surface = frames[0]?.surface ?? buildSurfaceGrid(snapshot);
-      const { sviReadout: readout, arbResult: arb } = processSurface(surface, snapshot.spot);
-
+    // LIVE-only: never seed demo/synthetic surfaces.
+    await fetchLiveEnrichment(trimmed);
+    if (get().symbol !== trimmed) return;
+    await fetchLiveSnapshot(trimmed, true);
+    if (get().symbol !== trimmed) return;
+    if (!get().snapshot) {
       set({
-        snapshot,
-        surface,
-        sviReadout: readout,
-        arbResult: arb,
-        historicalFrames: frames,
+        snapshot: null,
+        surface: null,
+        sviReadout: null,
+        arbResult: null,
+        historicalFrames: [],
         loading: false,
-        lastUpdate: Date.now(),
+        chainUsed: 'none',
+        chainAvailable: false,
         session: usEquitySession(),
       });
+      if (!liveWarned) {
+        liveWarned = true;
+        toast.warning('Live chain unavailable', {
+          description: 'No real option chain. Equities: yfinance/FMP · Crypto: BTC/ETH (Deribit).',
+        });
+      }
     }
 
-    startRefreshLoop(get, set, currentSource);
+    startRefreshLoop(get, set, 'live');
   },
 
   storeFrames: (snap: VolSnapshot) => {
     const state = get();
-    // Live real chains: accumulate a ring buffer for IV rank / scrubbing.
-    if (state.source === 'live' && state.chainAvailable && snap.surfaceSource !== 'synthetic') {
-      const surface = buildSurfaceGrid(snap);
-      // Drop synthetic seed when we first receive a real chain.
-      const base = state.historyMode === 'live' ? state.historicalFrames : [];
-      const frames = pushLiveFrame(base, snap, surface);
-      set({
-        historicalFrames: frames,
-        frameIndex: Math.max(0, frames.length - 1),
-        historyMode: 'live',
-      });
+    // LIVE-only ring buffer — never seed demo frames.
+    if (!state.chainAvailable || snap.surfaceSource === 'synthetic') {
+      set({ historicalFrames: [], historyMode: 'live', frameIndex: 0 });
       return;
     }
-    // Demo / synthetic fallback: classic generated history.
-    const frames = getProvider('demo').getHistory!(snap.symbol, 64);
-    set({ historicalFrames: frames, historyMode: 'synthetic', frameIndex: 0 });
+    const surface = buildSurfaceGrid(snap);
+    const base = state.historyMode === 'live' ? state.historicalFrames : [];
+    const frames = pushLiveFrame(base, snap, surface);
+    set({
+      historicalFrames: frames,
+      frameIndex: Math.max(0, frames.length - 1),
+      historyMode: 'live',
+    });
   },
 
   setBoardFocus: (focus) => set({ boardFocus: focus }),
@@ -394,90 +371,59 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
     const state = get();
     set({ session: usEquitySession() });
 
-    if (state.source === 'live') {
-      const session = usEquitySession();
-      const now = Date.now();
-      const spotCadence = session.isOpen
-        ? REFRESH_CONFIG.LIVE_SPOT_OPEN_MS
-        : REFRESH_CONFIG.LIVE_SPOT_CLOSED_MS;
-      const chainCadence = session.isOpen
-        ? REFRESH_CONFIG.LIVE_CHAIN_OPEN_MS
-        : REFRESH_CONFIG.LIVE_CHAIN_CLOSED_MS;
+    // LIVE-only refresh — market feeds only.
+    const session = usEquitySession();
+    const now = Date.now();
+    const spotCadence = session.isOpen
+      ? REFRESH_CONFIG.LIVE_SPOT_OPEN_MS
+      : REFRESH_CONFIG.LIVE_SPOT_CLOSED_MS;
+    const chainCadence = session.isOpen
+      ? REFRESH_CONFIG.LIVE_CHAIN_OPEN_MS
+      : REFRESH_CONFIG.LIVE_CHAIN_CLOSED_MS;
 
-      const needSpot = now - state.lastSpotUpdate >= spotCadence || state.lastSpotUpdate === 0;
-      const needChain = now - state.lastChainUpdate >= chainCadence || state.lastChainUpdate === 0;
+    const needSpot = now - state.lastSpotUpdate >= spotCadence || state.lastSpotUpdate === 0;
+    const needChain = now - state.lastChainUpdate >= chainCadence || state.lastChainUpdate === 0;
 
-      // When SSE is connected, skip poll-based spot (stream owns lastSpotUpdate).
-      if (needSpot && !state.streamConnected) {
-        try {
-          const quotes = await fetchFmpQuote(state.symbol);
-          if (quotes && quotes.length > 0) {
-            const q = quotes[0]!;
-            const prevSpotKind = get().provenance.spot?.kind;
-            const spotProv = makeProvenance('spot', 'fmp', now, {
-              previousKind: prevSpotKind,
-            });
-            set({
-              fmpQuote: q,
-              fmpSpot: q.price,
-              liveAvailable: true,
-              lastSpotUpdate: now,
-              lastUpdate: now,
-              spotSource: 'fmp',
-              provenance: { ...get().provenance, spot: spotProv },
-            });
-            const snap = get().snapshot;
-            if (snap && q.price > 0 && Math.abs(q.price - snap.spot) / snap.spot > 0.00005) {
-              const patched = { ...snap, spot: q.price, timestamp: now };
-              const processed = perfTimeSync('store.spotPatch', () => processSnapshot(patched));
-              set({
-                snapshot: patched,
-                surface: processed.surface,
-                sviReadout: processed.sviReadout,
-                arbResult: processed.arbResult,
-              });
-            }
-          }
-        } catch (err) {
-          console.error('Spot refresh failed:', err);
-        }
-      }
-
-      if (needChain) {
-        await fetchLiveSnapshot(state.symbol, false);
-        // Periodic enrichment (history/news) — cheap via cache.
-        fetchLiveEnrichment(state.symbol);
-      }
-    } else {
+    // When SSE is connected, skip poll-based spot (stream owns lastSpotUpdate).
+    if (needSpot && !state.streamConnected) {
       try {
-        const spot = state.snapshot?.spot || undefined;
-        const snap = await getProvider('demo').getSnapshot(state.symbol, {
-          spot,
-          jitter: (Math.random() - 0.5) * 0.02,
-        });
-        if (!snap) throw new Error('synthetic generation failed');
-        const { surface, sviReadout: readout, arbResult: arb } = processSnapshot(snap);
-        const t = Date.now();
-        set({
-          snapshot: snap,
-          surface,
-          sviReadout: readout,
-          arbResult: arb,
-          lastUpdate: t,
-          lastSpotUpdate: t,
-          lastChainUpdate: t,
-          provenance: {
-            ...get().provenance,
-            spot: makeProvenance('spot', 'synthetic', t, { demo: true }),
-            chain: makeProvenance('chain', 'synthetic', t, { demo: true }),
-          },
-        });
+        const quotes = await fetchFmpQuote(state.symbol);
+        if (quotes && quotes.length > 0) {
+          const q = quotes[0]!;
+          const prevSpotKind = get().provenance.spot?.kind;
+          const spotProv = makeProvenance('spot', 'fmp', now, {
+            previousKind: prevSpotKind,
+          });
+          set({
+            fmpQuote: q,
+            fmpSpot: q.price,
+            liveAvailable: true,
+            lastSpotUpdate: now,
+            lastUpdate: now,
+            spotSource: 'fmp',
+            provenance: { ...get().provenance, spot: spotProv },
+          });
+          const snap = get().snapshot;
+          if (snap && q.price > 0 && Math.abs(q.price - snap.spot) / snap.spot > 0.00005) {
+            const patched = { ...snap, spot: q.price, timestamp: now };
+            const processed = perfTimeSync('store.spotPatch', () => processSnapshot(patched));
+            set({
+              snapshot: patched,
+              surface: processed.surface,
+              sviReadout: processed.sviReadout,
+              arbResult: processed.arbResult,
+            });
+          }
+        }
       } catch (err) {
-        console.error('Failed to generate synthetic data:', err);
-        toast.error('Data Generation Error', {
-          description: 'Failed to generate synthetic data',
-        });
+        console.error('Spot refresh failed:', err);
       }
+    }
+
+    if (needChain) {
+      await fetchLiveSnapshot(state.symbol, false);
+      // Periodic enrichment (history/news) — cheap via cache.
+      fetchLiveEnrichment(state.symbol);
     }
   },
 
@@ -534,14 +480,18 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
   },
 
   setSource: async (source: 'demo' | 'live') => {
+    // Terminal is LIVE-only — demo/synthetic mode is disabled.
+    if (source === 'demo') {
+      toast.message('LIVE only', {
+        description: 'Demo/synthetic surfaces are disabled. Using market feeds.',
+      });
+    }
     const { refreshInterval } = get();
     if (refreshInterval) clearInterval(refreshInterval);
-    set({ source, lastSpotUpdate: 0, lastChainUpdate: 0 });
-    if (source === 'live') {
-      await fetchLiveEnrichment(get().symbol);
-      await fetchLiveSnapshot(get().symbol, true);
-    }
-    startRefreshLoop(get, set, source);
+    set({ source: 'live', lastSpotUpdate: 0, lastChainUpdate: 0 });
+    await fetchLiveEnrichment(get().symbol);
+    await fetchLiveSnapshot(get().symbol, true);
+    startRefreshLoop(get, set, 'live');
   },
 }));
 
@@ -553,13 +503,13 @@ let liveFetchGen = 0;
 function startRefreshLoop(
   get: () => TerminalStore,
   set: (partial: Partial<TerminalStore>) => void,
-  source: 'demo' | 'live',
+  _source: 'demo' | 'live',
 ) {
   const { refreshInterval } = get();
   if (refreshInterval) clearInterval(refreshInterval);
   const id = setInterval(() => {
     get().refresh();
-  }, source === 'demo' ? REFRESH_CONFIG.DEMO_INTERVAL_MS : REFRESH_CONFIG.LIVE_INTERVAL_MS);
+  }, REFRESH_CONFIG.LIVE_INTERVAL_MS);
   set({ refreshInterval: id });
 }
 
@@ -583,13 +533,13 @@ async function fetchLiveSnapshot(symbol: string, force: boolean) {
       set({
         loading: false,
         chainAvailable: false,
-        chainUsed: 'synthetic',
+        chainUsed: 'none',
         session: usEquitySession(Date.now()),
       });
       if (!liveWarned) {
         liveWarned = true;
         toast.warning('Live chain unavailable', {
-          description: 'No real option chain for this symbol. Try yfinance/FMP/Deribit or DEMO mode.',
+          description: 'No real option chain for this symbol. Equities: yfinance/FMP · Crypto: BTC/ETH.',
         });
       }
       return;
@@ -598,26 +548,27 @@ async function fetchLiveSnapshot(symbol: string, force: boolean) {
     const now = Date.now();
     const liveSpot = provider.lastSpotSource !== 'synthetic';
     const prev = useTerminalStore.getState();
-    const chainDemo = !provider.lastChainAvailable || provider.lastChainSource === 'synthetic';
+    const chainOk = provider.lastChainAvailable && provider.lastChainSource !== 'synthetic';
     const spotAsOf = liveSpot
       ? (provider.lastSpotFetchedAt || now)
       : (prev.lastSpotUpdate || null);
     const chainAsOf = provider.lastChainFetchedAt || now;
     const spotProv = makeProvenance('spot', provider.lastSpotSource, spotAsOf, {
       previousKind: prev.provenance.spot?.kind,
-      demo: provider.lastSpotSource === 'synthetic' && prev.source === 'demo',
+      demo: false,
     });
-    // Never pure LIVE for synthetic chain surface
     const chainProv = makeProvenance(
       'chain',
       provider.lastChainSource,
       chainAsOf,
       {
         previousKind: prev.provenance.chain?.kind,
-        demo: chainDemo,
-        label: chainDemo ? 'chain:synth' : `chain:${provider.lastChainSource}`,
+        demo: false,
+        label: chainOk ? `chain:${provider.lastChainSource}` : 'chain:none',
       },
     );
+    const spotSrc = provider.lastSpotSource === 'synthetic' ? 'none' as const : provider.lastSpotSource;
+    const chainSrc = provider.lastChainSource === 'synthetic' ? 'none' as const : provider.lastChainSource;
     set({
       snapshot: snap,
       surface,
@@ -629,8 +580,8 @@ async function fetchLiveSnapshot(symbol: string, force: boolean) {
       lastSpotUpdate: liveSpot ? now : prev.lastSpotUpdate,
       liveAvailable: true,
       chainAvailable: provider.lastChainAvailable,
-      spotSource: provider.lastSpotSource,
-      chainUsed: provider.lastChainSource,
+      spotSource: spotSrc,
+      chainUsed: chainSrc,
       fundingAnn: provider.lastFundingAnn ?? snap.fundingAnn ?? null,
       session: usEquitySession(now),
       provenance: {
@@ -644,9 +595,8 @@ async function fetchLiveSnapshot(symbol: string, force: boolean) {
     if (!provider.lastChainAvailable && !liveWarned) {
       liveWarned = true;
       toast.warning('Live chain unavailable', {
-        description: provider.lastSpotSource === 'synthetic'
-          ? 'No live chain or spot — synthetic surface. Try source → yfinance, or open BTC for Deribit.'
-          : 'Using synthetic surface at live spot. Switch Chain → yfinance (equities) or Deribit (BTC/ETH).',
+        description:
+          'No real option chain. Equities: yfinance/FMP · Crypto: BTC/ETH (Deribit).',
       });
     }
   } catch (err) {

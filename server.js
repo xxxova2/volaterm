@@ -8,7 +8,7 @@ import { dirname, join } from 'path';
 import { FMP_BASE, FMP_ALLOWED_ENDPOINTS, isFmpEndpointAllowed, buildSpyHistoryAsync, proxyFmp } from './api/_shared.js';
 
 // The FMP key must come from the environment — no hardcoded fallback.
-// If absent, the server still runs (synthetic/Yahoo data work) but FMP enrichment is disabled.
+// If absent, equity enrichment falls back to yfinance only (never synthetic market data).
 const FMP_API_KEY = process.env.FMP_API_KEY || null;
 if (!FMP_API_KEY) {
   console.warn('WARN: FMP_API_KEY not set — FMP enrichment endpoints will return 503.');
@@ -42,7 +42,7 @@ await fastify.register(cors, {
 // already protected by a 60s server-side + client-side cache, so it makes very
 // few outbound calls. The yfinance endpoints are local (Python) and the app
 // legitimately issues several requests per refresh — throttling them at a low
-// cap silently breaks live mode (chain fetch 429s -> synthetic fallback).
+// cap silently breaks live mode (chain fetch 429s -> empty fail-closed surface).
 // We therefore keep a generous local limit to absorb refresh bursts.
 await fastify.register(rateLimit, {
   max: 600,
@@ -99,25 +99,36 @@ fastify.get('/api/options/:symbol', async (request, reply) => {
 
   try {
     const result = await new Promise((resolve, reject) => {
-      execFile('python3', args, { timeout: isProbe ? 12000 : 25000 }, (err, stdout, stderr) => {
+      // yfinance often needs 45–90s for multi-expiry equity chains (Yahoo rate
+      // limits + sequential option_chain). 25s was killing valid fetches mid-run
+      // and surface as LIVE "no real option chain" with fail-closed store.
+      execFile('python3', args, { timeout: isProbe ? 20000 : 90000 }, (err, stdout, stderr) => {
+        // Prefer JSON on stdout even when yfinance prints noise on stderr
+        // (e.g. "$SPY: possibly delisted") or the process was slow/noisy.
+        const tryParse = (raw) => {
+          if (!raw) return null;
+          try {
+            const data = JSON.parse(String(raw).trim().split('\n').filter(Boolean).pop());
+            if (data && !data.error && Array.isArray(data.quotes)) return data;
+            if (data?.error) return { __err: data.error };
+          } catch { /* fall through */ }
+          return null;
+        };
+        const parsed = tryParse(stdout);
+        if (parsed && !parsed.__err) return resolve(parsed);
         if (err) {
           console.error('Python script error:', err);
           console.error('Python stderr:', stderr);
           console.error('Python stdout:', stdout?.slice(0, 500));
-          const detail = stderr || stdout?.slice(0, 500) || err.message;
+          const detail = parsed?.__err || stderr || stdout?.slice(0, 500) || err.message;
           return reject(new Error(detail));
         }
-        try {
-          const data = JSON.parse(stdout);
-          if (data.error) {
-            console.error('Data fetcher error:', data.error);
-            return reject(new Error(data.error));
-          }
-          resolve(data);
-        } catch (parseError) {
-          console.error('JSON parse error:', parseError);
-          reject(new Error('Invalid response from data fetcher'));
+        if (parsed?.__err) {
+          console.error('Data fetcher error:', parsed.__err);
+          return reject(new Error(parsed.__err));
         }
+        console.error('JSON parse error / empty options payload');
+        reject(new Error('Invalid response from data fetcher'));
       });
     });
 
@@ -139,18 +150,21 @@ fastify.get('/api/options/:symbol', async (request, reply) => {
 
 function runYf(symbol, mode) {
   return new Promise((resolve, reject) => {
-    execFile('python3', [join(__dirname, 'fetch_yf.py'), symbol, mode], { timeout: 25000 }, (err, stdout, stderr) => {
+    execFile('python3', [join(__dirname, 'fetch_yf.py'), symbol, mode], { timeout: 60000 }, (err, stdout, stderr) => {
+      // Accept JSON even if yfinance wrote rate-limit noise to stderr.
+      try {
+        const line = String(stdout || '').trim().split('\n').filter(Boolean).pop();
+        if (line) {
+          const data = JSON.parse(line);
+          if (!data.error) return resolve(data);
+          return reject(new Error(data.error));
+        }
+      } catch { /* fall through to err */ }
       if (err) {
         const detail = stderr || stdout?.slice(0, 500) || err.message;
         return reject(new Error(detail));
       }
-      try {
-        const data = JSON.parse(stdout);
-        if (data.error) return reject(new Error(data.error));
-        resolve(data);
-      } catch {
-        reject(new Error('Invalid response from yfinance fetcher'));
-      }
+      reject(new Error('Invalid response from yfinance fetcher'));
     });
   });
 }
@@ -196,9 +210,62 @@ fastify.get('/api/yf/info/:symbol', async (request, reply) => {
 // The seeded, memoized SPY history now lives in api/_shared.js and is shared
 // with the Vercel serverless deployment.
 
-fastify.get('/api/history/spy', async () => {
-  // Prefer real FMP daily history when the key is set; synthetic otherwise.
-  return buildSpyHistoryAsync(FMP_API_KEY, FMP_BASE);
+fastify.get('/api/history/spy', async (request, reply) => {
+  // Real market history only: FMP (key) → yfinance. Never silent synthetic.
+  const fmp = await buildSpyHistoryAsync(FMP_API_KEY, FMP_BASE, { allowSynthetic: false });
+  if (fmp?.source === 'fmp' && Array.isArray(fmp.data) && fmp.data.length >= 50) {
+    return fmp;
+  }
+  try {
+    const yf = await runYf('SPY', 'history');
+    const bars = Array.isArray(yf?.bars) ? yf.bars : [];
+    const sorted = bars
+      .map((b) => ({ date: String(b.date ?? ''), close: Number(b.close) }))
+      .filter((b) => b.date && isFinite(b.close) && b.close > 0)
+      .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+    if (sorted.length < 20) {
+      reply.code(502);
+      return { error: 'No live SPY history (FMP/yfinance)', symbol: 'SPY', data: [], source: 'none' };
+    }
+    // Inline same shape as FMP path (close + ret + RV proxy).
+    const data = [];
+    for (let i = 0; i < sorted.length; i++) {
+      const close = sorted[i].close;
+      const prev = i > 0 ? sorted[i - 1].close : close;
+      const ret = prev > 0 ? (close - prev) / prev : 0;
+      let vix = 18;
+      if (i >= 20) {
+        let sum = 0;
+        let sum2 = 0;
+        for (let j = i - 19; j <= i; j++) {
+          const p0 = sorted[j - 1] ? sorted[j - 1].close : sorted[j].close;
+          const r = p0 > 0 ? Math.log(sorted[j].close / p0) : 0;
+          sum += r;
+          sum2 += r * r;
+        }
+        const mean = sum / 20;
+        const var_ = Math.max(0, sum2 / 20 - mean * mean);
+        vix = Math.min(80, Math.max(8, Math.sqrt(var_ * 252) * 100));
+      }
+      data.push({
+        date: sorted[i].date,
+        close: Math.round(close * 100) / 100,
+        return: Math.round(ret * 100000) / 100000,
+        logReturn: Math.round(Math.log(1 + ret) * 100000) / 100000,
+        vix: Math.round(vix * 10) / 10,
+      });
+    }
+    return { symbol: 'SPY', data, source: 'yfinance' };
+  } catch (err) {
+    reply.code(502);
+    return {
+      error: 'Failed to fetch live SPY history',
+      detail: err.message,
+      symbol: 'SPY',
+      data: [],
+      source: 'none',
+    };
+  }
 });
 
 // ── Deribit public market data (no API key) ───────────────────

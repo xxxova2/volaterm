@@ -9,6 +9,7 @@ import { ArbitrageView } from './ArbitrageView';
 import { cn } from '../../lib/utils';
 import { useTerminalStore } from '../../store/terminalStore';
 import { DeskLoading } from '../common/Skeleton';
+import { EmptyState } from '../common/EmptyState';
 
 const SurfaceView = lazy(() =>
   import('./surface/SurfaceView').then((m) => ({ default: m.SurfaceView })),
@@ -31,12 +32,34 @@ const SUBS: { id: Sub; label: string; blurb: string; domId: string }[] = [
 export function VolStructureView() {
   const [sub, setSub] = useState<Sub>('surface');
   const setDeskContext = useTerminalStore((s) => s.setDeskContext);
+  const snapshot = useTerminalStore((s) => s.snapshot);
+  const loading = useTerminalStore((s) => s.loading);
+  const chainUsed = useTerminalStore((s) => s.chainUsed);
 
   useEffect(() => {
     const meta = SUBS.find((s) => s.id === sub);
-    setDeskContext({ id: meta?.domId ?? null, label: meta?.label ?? 'Surface', apis: [] });
+    setDeskContext({
+      id: meta?.domId ?? null,
+      label: meta?.label ?? 'Surface',
+      apis: chainUsed === 'deribit' ? ['Deribit'] : ['yfinance', 'FMP'],
+    });
     return () => setDeskContext({ id: null, label: null, apis: [] });
-  }, [sub, setDeskContext]);
+  }, [sub, setDeskContext, chainUsed]);
+
+  if (loading && !snapshot) {
+    return <DeskLoading message="Loading live option chain…" />;
+  }
+  if (!snapshot) {
+    return (
+      <div className="flex h-full items-center justify-center p-4">
+        <EmptyState
+          kind="no-data"
+          title="No live surface"
+          body="Awaiting a real option chain (yfinance/FMP equities, Deribit for BTC/ETH)."
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-full flex-col overflow-hidden">

@@ -328,7 +328,10 @@ export interface StirStripData {
   chart?: Array<{
     x: string;
     contract?: string;
+    ticker?: string;
     implied_rate: number | null;
+    /** Prior settlement implied yield = 100 − settlement/prev_close */
+    prior_rate?: number | null;
     source?: string;
     vs_sofr_bps?: number | null;
   }>;
@@ -356,9 +359,17 @@ export interface CurveShapeData {
   history?: {
     spark_2s10s?: number[];
     spark_5s30s?: number[];
+    spark_2s5s?: number[];
+    spark_5s10s?: number[];
+    spark_10s30s?: number[];
+    spark_3m10y?: number[];
     spark_fly?: number[];
     '2s10s'?: { date: string; spread_bps: number }[];
     '5s30s'?: { date: string; spread_bps: number }[];
+    '2s5s'?: { date: string; spread_bps: number }[];
+    '5s10s'?: { date: string; spread_bps: number }[];
+    '10s30s'?: { date: string; spread_bps: number }[];
+    '3m10y'?: { date: string; spread_bps: number }[];
     fly_2s5s10s?: { date: string; spread_bps: number }[];
   };
   as_of?: string;

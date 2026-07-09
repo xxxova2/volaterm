@@ -65,34 +65,34 @@ export function StatusBar() {
             ? 'HOL'
             : 'CLOSED';
 
-  const chainLabel = !chainAvailable || chainUsed === 'synthetic'
-    ? 'chain:synth'
+  const chainLabel = !chainAvailable || chainUsed === 'none'
+    ? 'chain:none'
     : `chain:${chainUsed}`;
 
-  const spotDemo = source === 'demo' || spotSource === 'synthetic';
-  const chainDemo = source === 'demo' || !chainAvailable || chainUsed === 'synthetic';
+  const spotMissing = spotSource === 'none';
+  const chainMissing = !chainAvailable || chainUsed === 'none';
 
   const spotKind = kindFromProvenance(
     provenance.spot?.kind,
     provenance.spot?.asOfMs ?? (lastSpotUpdate > 0 ? lastSpotUpdate : null),
     'spot',
-    { demo: spotDemo && source === 'demo' },
+    { demo: false, down: spotMissing },
   );
   const chainKind = kindFromProvenance(
     provenance.chain?.kind,
     provenance.chain?.asOfMs ?? (lastChainUpdate > 0 ? lastChainUpdate : null),
     'chain',
-    { demo: chainDemo },
+    { demo: false, down: chainMissing },
   );
 
   const streamKind: FreshnessKind = streamConnected ? 'live' : 'unknown';
 
   return (
-    <footer className="flex h-6 items-center justify-between border-t border-border bg-card px-3 text-type-xs font-mono text-muted-foreground">
+    <footer className="flex h-5 items-center justify-between border-t border-border bg-card px-2 text-type-2xs font-mono text-muted-foreground">
       <div className="flex items-center gap-2 sm:gap-3">
         <span className="flex items-center gap-1" title="Spot freshness">
           <span className="text-type-2xs uppercase opacity-70">spot</span>
-          <FreshnessChip kind={source === 'demo' ? 'demo' : spotKind} />
+          <FreshnessChip kind={spotKind} />
         </span>
         <span className="flex items-center gap-1" title="Chain / surface freshness">
           <span className="text-type-2xs uppercase opacity-70">chain</span>
