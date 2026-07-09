@@ -52,3 +52,5 @@ describe('BootBriefing', () => {
     await waitFor(() => expect(onEnter).toHaveBeenCalled());
   });
 });
+
+// covers deploy smoke path used with boot briefing

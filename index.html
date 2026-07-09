@@ -5,12 +5,37 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>VOLATERM — Options Trading Terminal</title>
+    <!-- Inline dark shell so a failed JS load never shows a blank white page -->
+    <style>
+      html, body { height: 100%; margin: 0; background: #0a0a0a; color: #e8e4dc; }
+      #root { min-height: 100%; }
+      #boot-fallback {
+        display: none; font-family: ui-monospace, monospace; padding: 2rem;
+        max-width: 36rem; margin: 0 auto;
+      }
+      #boot-fallback.show { display: block; }
+      #boot-fallback h1 { font-size: 1rem; letter-spacing: 0.12em; text-transform: uppercase; color: #a1a1aa; }
+      #boot-fallback p { color: #d4d4d8; line-height: 1.5; }
+      #boot-fallback a { color: #fbbf24; }
+    </style>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
   </head>
   <body>
     <div id="root"></div>
+    <div id="boot-fallback" aria-live="polite">
+      <h1>VOLATERM</h1>
+      <p>Loading terminal… If this stays blank, hard-refresh (Ctrl+Shift+R) or check that JS assets load.</p>
+    </div>
+    <script>
+      // Show fallback only if React never mounts (asset/CORS failure).
+      setTimeout(function () {
+        var root = document.getElementById('root');
+        var fb = document.getElementById('boot-fallback');
+        if (root && fb && !root.childElementCount) fb.classList.add('show');
+      }, 4000);
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

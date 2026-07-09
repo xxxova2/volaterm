@@ -28,11 +28,29 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = parseInt(process.env.PORT || '3001', 10);
 
 // Restrict CORS to an explicit allowlist (comma-separated CORS_ORIGIN env var).
-// Defaults to localhost dev origins only — never wide open in production.
+// Defaults to localhost dev origins. Production also allows Railway public host
+// (ES module scripts always send Origin — without this the UI is a blank page).
 const ALLOWED_ORIGINS = (process.env.CORS_ORIGIN || 'http://localhost:5173,http://localhost:3000,http://localhost:3001,http://localhost:3200,http://localhost:3201')
   .split(',')
   .map((o) => o.trim())
   .filter(Boolean);
+
+function isAllowedOrigin(origin) {
+  if (!origin) return true;
+  if (ALLOWED_ORIGINS.includes(origin)) return true;
+  try {
+    const u = new URL(origin);
+    // Deployed Railway app (module scripts are CORS-mode)
+    if (u.hostname.endsWith('.up.railway.app')) return true;
+    if (u.hostname === 'localhost' || u.hostname === '127.0.0.1') return true;
+    // Railway injects the public domain without scheme
+    const pub = process.env.RAILWAY_PUBLIC_DOMAIN || process.env.RAILWAY_STATIC_URL || '';
+    if (pub && (origin === `https://${pub}` || origin === `http://${pub}` || origin === pub)) {
+      return true;
+    }
+  } catch { /* ignore */ }
+  return false;
+}
 
 const DERIBIT_BASE = 'https://www.deribit.com/api/v2/public';
 // MacroVol FastAPI (FRED rates / macro). Defined early for boot briefing + warmer.
@@ -42,9 +60,7 @@ const fastify = Fastify({ logger: false });
 
 await fastify.register(cors, {
   origin: (origin, cb) => {
-    // Allow non-browser/REST clients (no Origin header) for server-to-server use.
-    if (!origin) return cb(null, true);
-    if (ALLOWED_ORIGINS.includes(origin)) return cb(null, true);
+    if (isAllowedOrigin(origin)) return cb(null, true);
     return cb(new Error('Not allowed by CORS'), false);
   },
 });
@@ -59,6 +75,11 @@ await fastify.register(cors, {
 await fastify.register(rateLimit, {
   max: 600,
   timeWindow: '1 minute',
+  // Never throttle static SPA assets — browsers load many chunks in parallel.
+  allowList: (request) => {
+    const u = request.url || '';
+    return u.startsWith('/assets/') || u === '/favicon.svg' || u === '/favicon.ico';
+  },
   errorResponseBuilder: (request, context) => ({
     code: 429,
     error: 'Too Many Requests',
@@ -801,19 +822,27 @@ fastify.get('/api/opra/chain/:symbol', async (request, reply) => {
 });
 
 // ── Static Files ──────────────────────────────────────────────
-// Serve static files in production
+// Serve Vite build. Do not SPA-fallback /assets/* (broken JS → blank white page).
 try {
   await fastify.register(fastifyStatic, {
     root: join(__dirname, 'dist'),
     wildcard: false,
+    // Cache hashed assets aggressively
+    maxAge: process.env.NODE_ENV === 'production' ? '7d' : 0,
+    immutable: true,
   });
-} catch {}
+} catch (err) {
+  console.error('static register failed', err);
+}
 
 fastify.setNotFoundHandler((request, reply) => {
-  if (!request.url.startsWith('/api')) {
-    return reply.sendFile('index.html');
+  const path = (request.url || '').split('?')[0];
+  // Missing build assets must 404 (not return HTML) so the browser surfaces the real error
+  if (path.startsWith('/assets/') || path.startsWith('/api')) {
+    reply.code(404).send({ error: 'Not found', path });
+    return;
   }
-  reply.code(404).send({ error: 'Not found' });
+  return reply.sendFile('index.html');
 });
 
 /** Background warmer: pre-fill shared cache so first visitors get fast hits. */
