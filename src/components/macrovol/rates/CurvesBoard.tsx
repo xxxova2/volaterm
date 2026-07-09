@@ -1,18 +1,19 @@
 /**
- * Hero curves board — UST yield curve, SOFR futures path, and every spread history.
+ * Hero curves board — dual UST (today vs last year), SOFR futures path, every spread history.
  * Dense grid to fill rates desk content area (not chrome).
  */
 import {
-  Area, AreaChart, CartesianGrid, Line, LineChart, ReferenceLine,
+  Area, AreaChart, CartesianGrid, ReferenceLine,
   ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
 import { CollapsibleSection } from '../../terminal/CollapsibleSection';
 import { DataBadge } from '../DataBadge';
 import { chartTooltipStyle } from '../../../lib/chartTheme';
-import type { CurveShapeData, ImplyRead } from '../../../lib/macrovol/api';
+import type { CurveShapeData, ImplyRead, RatesCurveHistory } from '../../../lib/macrovol/api';
 import { ImplyChip } from '../../common/ImplyDrawer';
 import { Spark } from './Spark';
 import { SofrFuturesCurve } from './SofrFuturesCurve';
+import { YieldCurveCompare, type CurveComparePoint } from './YieldCurveCompare';
 
 export type CurvePoint = { label: string; yield: number | null };
 export type StirPathPoint = {
@@ -133,6 +134,8 @@ function MiniCurve({
 export function CurvesBoard({
   curve,
   curveMeta,
+  curveComparePoints,
+  curveCompare,
   stirChart,
   sofr,
   shape,
@@ -141,14 +144,17 @@ export function CurvesBoard({
 }: {
   curve: CurvePoint[];
   curveMeta: { as_of?: string; source?: string; note?: string };
+  curveComparePoints: CurveComparePoint[];
+  curveCompare?: RatesCurveHistory | null;
   stirChart: StirPathPoint[];
   sofr: number | null | undefined;
   shape: CurveShapeData | null;
   spreadHistory: SpreadHistoryPack;
   onOpenImply?: (i: ImplyRead) => void;
 }) {
-  const ustLive = curve.filter((c) => c.yield != null);
+  const compareLive = curveComparePoints.filter((p) => p.today != null || p.historical != null);
   const sofrPath = stirChart.filter((p) => p.rate != null || p.prior != null);
+  const compareDate = curveCompare?.compare_as_of;
 
   return (
     <CollapsibleSection
@@ -158,65 +164,41 @@ export function CurvesBoard({
       apis={['FRED', 'yfinance', 'MacroVol']}
       defaultOpen
       storageKey="rates.sec.curves"
-      subtitle="3M SOFR strip (live vs prior settle) · UST CMTs · every spread history"
+      subtitle="UST today vs last year · 3M SOFR strip (live vs prior) · every spread history"
       badge={
         <span className="font-mono text-type-2xs text-muted-foreground">
-          {sofrPath.length} SOFR futs · {ustLive.length} UST · {SPREAD_META.length} spreads
+          {compareLive.length} UST dual · {sofrPath.length} SOFR futs · {SPREAD_META.length} spreads
+          {sofr != null ? ` · SOFR ${sofr.toFixed(2)}%` : ''}
         </span>
       }
     >
-      {/* Bloomberg-style dual SOFR futures yield path — full width hero */}
-      <SofrFuturesCurve
-        data={sofrPath.map((p) => ({
-          x: p.x,
-          rate: p.rate,
-          prior: p.prior ?? null,
-          vsSofr: p.vsSofr,
-          source: p.source,
-          contract: p.contract,
+      {/* Bloomberg-style dual UST: white = today, blue = ~1Y ago */}
+      <YieldCurveCompare
+        points={curveComparePoints.length ? curveComparePoints : curve.map((c) => ({
+          label: c.label,
+          today: c.yield,
+          historical: null,
+          delta_bps: null,
         }))}
-        height={260}
+        todayAsOf={curveCompare?.today_as_of || curveMeta.as_of}
+        compareAsOf={compareDate}
+        source={curveCompare?.source || curveMeta.source}
+        height={280}
       />
 
-      {/* UST CMT curve under SOFR strip */}
-      <div className="mt-2 rounded border border-border bg-background/30 p-1.5">
-        <div className="mb-1 flex items-center justify-between">
-          <span className="font-mono text-type-xs font-semibold text-primary">UST YIELD CURVE</span>
-          <span className="font-mono text-type-2xs text-muted-foreground">
-            {curveMeta.source || 'FRED'} · spot SOFR {sofr != null ? `${sofr.toFixed(2)}%` : '—'}
-          </span>
-        </div>
-        {ustLive.length > 0 ? (
-          <ResponsiveContainer width="100%" height={160}>
-            <LineChart data={curve} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
-              <CartesianGrid stroke="var(--grid)" strokeDasharray="2 2" />
-              <XAxis dataKey="label" tick={{ fill: 'var(--muted-foreground)', fontSize: 9 }} />
-              <YAxis
-                tick={{ fill: 'var(--muted-foreground)', fontSize: 9 }}
-                width={36}
-                tickFormatter={(v) => `${v}`}
-                domain={['auto', 'auto']}
-              />
-              <Tooltip
-                contentStyle={chartTooltipStyle}
-                formatter={(v: number) => [`${Number(v).toFixed(3)}%`, 'Yield']}
-              />
-              <Line
-                type="monotone"
-                dataKey="yield"
-                stroke="#3b82f6"
-                strokeWidth={2}
-                dot={{ r: 2.5, fill: '#3b82f6' }}
-                connectNulls
-                isAnimationActive={false}
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        ) : (
-          <div className="flex h-[160px] items-center justify-center text-type-xs text-muted-foreground">
-            Awaiting FRED curve…
-          </div>
-        )}
+      {/* Bloomberg-style dual SOFR futures yield path */}
+      <div className="mt-2">
+        <SofrFuturesCurve
+          data={sofrPath.map((p) => ({
+            x: p.x,
+            rate: p.rate,
+            prior: p.prior ?? null,
+            vsSofr: p.vsSofr,
+            source: p.source,
+            contract: p.contract,
+          }))}
+          height={240}
+        />
       </div>
 
       {/* Every spread — live print + history curve */}
@@ -244,9 +226,13 @@ export function CurvesBoard({
       </div>
 
       <DataBadge
-        asOf={shape?.as_of || curveMeta.as_of}
-        source={shape?.source || curveMeta.source || 'FRED'}
-        note="Spreads in bps · UST / SOFR path in % · aligned FRED history only"
+        asOf={shape?.as_of || curveCompare?.as_of || curveMeta.as_of}
+        source={shape?.source || curveCompare?.source || curveMeta.source || 'FRED'}
+        note={
+          compareDate
+            ? `UST dual: live vs ${compareDate} · Spreads bps · SOFR path % · FRED + yfinance only`
+            : 'Spreads in bps · UST / SOFR path in % · aligned FRED history only'
+        }
         className="mt-1.5"
       />
     </CollapsibleSection>

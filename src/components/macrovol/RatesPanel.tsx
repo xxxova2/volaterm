@@ -19,7 +19,8 @@ import { CurvesBoard } from './rates/CurvesBoard';
 
 export function RatesPanel() {
   const {
-    summary, plumbing, basis, basisHist, stir, shape, dv01, setDv01, curve, curveMeta, corr,
+    summary, plumbing, basis, basisHist, stir, shape, dv01, setDv01, curve, curveMeta,
+    curveCompare, curveComparePoints, corr,
     error, loading,
     n2, setN2, n5, setN5, n10, setN10, n30, setN30,
     sh2, setSh2, sh5, setSh5, sh10, setSh10, sh30, setSh30,
@@ -72,6 +73,8 @@ export function RatesPanel() {
         <CurvesBoard
           curve={curve}
           curveMeta={curveMeta}
+          curveComparePoints={curveComparePoints}
+          curveCompare={curveCompare}
           stirChart={stirChart}
           sofr={summary?.sofr ?? stir?.sofr}
           shape={shape}

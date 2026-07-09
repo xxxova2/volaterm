@@ -4,6 +4,7 @@ import {
   type RatesSummary,
   type PlumbingData,
   type RatesCurve,
+  type RatesCurveHistory,
   type CorrelationData,
   type BasisData,
   type BasisHistoryData,
@@ -23,6 +24,7 @@ export function useRatesData() {
   const [dv01, setDv01] = useState<Dv01BookData | null>(null);
   const [curve, setCurve] = useState<{ label: string; yield: number | null }[]>([]);
   const [curveMeta, setCurveMeta] = useState<{ as_of?: string; source?: string; note?: string }>({});
+  const [curveCompare, setCurveCompare] = useState<RatesCurveHistory | null>(null);
   const [corr, setCorr] = useState<CorrelationData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -66,7 +68,8 @@ export function useRatesData() {
       macrovolApi.ratesShape(60).catch(() => null),
       macrovolApi.ratesDv01({ n2: 1, n5: 1, n10: 1, n30: 1 }).catch(() => null),
       macrovolApi.ratesBasisHistory(90).catch(() => null),
-    ]).then(([s, p, c, cor, b, st, sh, d, bh]) => {
+      macrovolApi.ratesCurveHistory('1Y').catch(() => null),
+    ]).then(([s, p, c, cor, b, st, sh, d, bh, ch]) => {
       if (cancelled) return;
       perfMark('rates.load.end');
       perfMeasure('rates.load', 'rates.load.start', 'rates.load.end');
@@ -86,6 +89,7 @@ export function useRatesData() {
       if (sh.status === 'fulfilled' && sh.value) setShape(sh.value as CurveShapeData);
       if (d.status === 'fulfilled' && d.value) setDv01(d.value as Dv01BookData);
       if (bh.status === 'fulfilled' && bh.value) setBasisHist(bh.value as BasisHistoryData);
+      if (ch.status === 'fulfilled' && ch.value) setCurveCompare(ch.value as RatesCurveHistory);
       const failed = [s, p, c].every((x) => x.status === 'rejected');
       if (failed) {
         setError([s, p, c].find((x) => x.status === 'rejected')?.reason?.message || 'MacroVol rates unavailable');
@@ -158,8 +162,30 @@ export function useRatesData() {
     }));
   }, [basisHist]);
 
+  /** Dual UST curve points for Bloomberg-style today vs last-year chart. */
+  const curveComparePoints = useMemo(() => {
+    if (curveCompare?.points?.length) {
+      return curveCompare.points.map((p) => ({
+        label: p.label,
+        today: p.today != null ? Number(Number(p.today).toFixed(3)) : null,
+        historical: p.historical != null ? Number(Number(p.historical).toFixed(3)) : null,
+        delta_bps: p.delta_bps ?? null,
+      }));
+    }
+    // Fallback: live curve only if history endpoint is cold
+    if (curve.length) {
+      return curve.map((c) => ({
+        label: c.label,
+        today: c.yield,
+        historical: null as number | null,
+        delta_bps: null as number | null,
+      }));
+    }
+    return [];
+  }, [curveCompare, curve]);
+
   return {
-    summary, plumbing, basis, basisHist, stir, shape, dv01, setDv01, curve, curveMeta, corr,
+    summary, plumbing, basis, basisHist, stir, shape, dv01, setDv01, curve, curveMeta, curveCompare, curveComparePoints, corr,
     error, loading,
     n2, setN2, n5, setN5, n10, setN10, n30, setN30,
     sh2, setSh2, sh5, setSh5, sh10, setSh10, sh30, setSh30,

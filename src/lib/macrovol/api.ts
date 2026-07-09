@@ -40,8 +40,8 @@ export const macrovolApi = {
   ratesBasis: () => fetchJson<BasisData>(`${BASE}/rates/basis`),
   ratesBasisHistory: (limit = 90) =>
     fetchJson<BasisHistoryData>(`${BASE}/rates/basis-history?limit=${limit}`),
-  ratesCurveHistory: (periods = '1M') =>
-    fetchJson(`${BASE}/rates/curve-history?periods=${encodeURIComponent(periods)}`),
+  ratesCurveHistory: (periods = '1Y') =>
+    fetchJson<RatesCurveHistory>(`${BASE}/rates/curve-history?periods=${encodeURIComponent(periods)}`),
   ratesShape: (history = 60) =>
     fetchJson<CurveShapeData>(`${BASE}/rates/shape?history=${history}`),
   ratesDv01: (params?: {
@@ -116,6 +116,29 @@ export interface RatesCurve {
   note?: string;
   as_of?: string;
   source?: string;
+}
+
+/** Dual UST curve: live vs historical snapshot (default 1Y). */
+export interface RatesCurveHistory {
+  labels: string[];
+  series_ids?: string[];
+  today: (number | null)[];
+  historical: (number | null)[];
+  historical_dates?: (string | null)[];
+  today_dates?: (string | null)[];
+  today_as_of?: string | null;
+  compare_as_of?: string | null;
+  compare_label?: string;
+  points?: Array<{
+    label: string;
+    today: number | null;
+    historical: number | null;
+    delta_bps?: number | null;
+  }>;
+  periods?: string;
+  as_of?: string;
+  source?: string;
+  note?: string;
 }
 
 export interface PlumbingData {

@@ -1,14 +1,9 @@
-import { useMemo, useRef } from 'react';
-import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine,
-} from 'recharts';
-import type { ImplyRead, StirStripData } from '../../../lib/macrovol/api';
+import { useMemo, useRef, type ReactNode } from 'react';
+import type { ImplyRead, StirContract, StirStripData } from '../../../lib/macrovol/api';
 import { DataBadge } from '../DataBadge';
 import { CollapsibleSection } from '../../terminal/CollapsibleSection';
-import { chartTooltipStyle } from '../../../lib/chartTheme';
 import { ImplyChip } from '../../common/ImplyDrawer';
 import { EmptyState } from '../../common/EmptyState';
-import { VirtualRows } from '../../common/VirtualRows';
 import { ExportCsvButton } from '../../common/ExportCsvButton';
 import {
   useBoardFocus,
@@ -18,12 +13,106 @@ import {
 import { SerffBoard } from './SerffBoard';
 import { CalendarPacksBoard } from './CalendarPacksBoard';
 
+/** Dense CME-style header cells — fill full width (no fixed-width dead gutter). */
+const SR3_COLS =
+  'grid grid-cols-[0.9fr_1fr_0.85fr_0.85fr_0.85fr_0.75fr_0.75fr_0.9fr_0.9fr_0.75fr_1.2fr] gap-x-1 items-center';
+
+function fmtPx(v: number | null | undefined, d = 2): string {
+  return v != null && Number.isFinite(v) ? v.toFixed(d) : '—';
+}
+
+function fmtNet(v: number | null | undefined, d = 3): string {
+  if (v == null || !Number.isFinite(v)) return '—';
+  return v >= 0 ? `+${v.toFixed(d)}` : v.toFixed(d);
+}
+
+function BoardShell({
+  title,
+  badge,
+  actions,
+  children,
+  className = '',
+}: {
+  title: ReactNode;
+  badge?: ReactNode;
+  actions?: ReactNode;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={`flex min-h-0 min-w-0 flex-col overflow-hidden rounded border border-border bg-background/30 ${className}`}>
+      <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-border bg-background/60 px-1.5 py-0.5">
+        <div className="min-w-0 flex-1 font-mono text-type-2xs font-semibold leading-tight text-foreground">
+          {title}
+          {badge != null && (
+            <span className="ml-1.5 font-normal text-muted-foreground">{badge}</span>
+          )}
+        </div>
+        {actions}
+      </div>
+      <div className="min-h-0 flex-1 overflow-auto">{children}</div>
+    </div>
+  );
+}
+
+function DenseTableHead({ cols }: { cols: string[] }) {
+  return (
+    <div className="sticky top-0 z-[1] grid border-b border-border bg-card/95 px-1.5 py-0.5 font-mono text-type-2xs text-muted-foreground"
+      style={{ gridTemplateColumns: `repeat(${cols.length}, minmax(0, 1fr))` }}
+    >
+      {cols.map((c, i) => (
+        <span
+          key={c}
+          className={i === 0 || i === 1 ? 'truncate text-left' : 'truncate text-right'}
+        >
+          {c}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function DenseRow({
+  cells,
+  emphasize,
+  onClick,
+  selected,
+}: {
+  cells: { text: string; className?: string; align?: 'left' | 'right' }[];
+  emphasize?: boolean;
+  onClick?: () => void;
+  selected?: boolean;
+}) {
+  return (
+    <div
+      role={onClick ? 'row' : undefined}
+      onClick={onClick}
+      className={`grid items-center border-b border-border/40 px-1.5 py-0.5 font-mono text-type-2xs hover:bg-muted/20 ${
+        onClick ? 'cursor-default' : ''
+      } ${selected ? 'focus-ring-term-inset bg-primary/10' : ''} ${emphasize ? 'font-semibold' : ''}`}
+      style={{ gridTemplateColumns: `repeat(${cells.length}, minmax(0, 1fr))` }}
+    >
+      {cells.map((cell, i) => (
+        <span
+          key={i}
+          className={`truncate tabular-nums ${
+            cell.align === 'left' || i < 2 ? 'text-left' : 'text-right'
+          } ${cell.className || ''}`}
+        >
+          {cell.text}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 export function StirSection({
   stir,
-  stirChart,
+  stirChart: _stirChart,
   onOpenImply,
 }: {
   stir: StirStripData | null;
+  /** Kept for call-site compat; full dual-path chart lives on CurvesBoard. */
   stirChart: {
     x: string;
     rate: number | null;
@@ -47,7 +136,24 @@ export function StirSection({
   }), []);
   useRegisterBoard('stir-sr3', stirFocusApi);
 
-  const liveSr3 = (stir?.sr3 || []).filter((c) => c.implied_rate != null);
+  const liveSr3 = useMemo(
+    () => (stir?.sr3 || []).filter((c) => c.implied_rate != null),
+    [stir?.sr3],
+  );
+  const liveSr1 = useMemo(
+    () => (stir?.sr1 || []).filter((c) => c.implied_rate != null),
+    [stir?.sr1],
+  );
+  const liveTsy = useMemo(
+    () => (stir?.treasury_futures || []).filter((c) => c.last_price != null),
+    [stir?.treasury_futures],
+  );
+
+  sr3Ref.current = liveSr3.map((x) => ({
+    month: x.month || '',
+    ticker: x.ticker || x.contract,
+    implied: x.implied_rate!,
+  }));
 
   return (
     <CollapsibleSection
@@ -57,146 +163,108 @@ export function StirSection({
       apis={['yfinance', 'NYFed', 'FRED', 'MacroVol']}
       defaultOpen
       storageKey="rates.sec.stir"
-      subtitle="Implied rate = 100 − price · CME-style strip · delayed yfinance · no silent fallbacks"
+      subtitle="Implied = 100 − price · dual path on CURVES · boards fill the desk"
     >
+      {/* Compact strip implies + path stats — one dense row, no wasted cards */}
       {stir?.path && (
-        <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-6">
+        <div className="mt-1 grid grid-cols-3 gap-1 sm:grid-cols-4 md:grid-cols-6 xl:grid-cols-8">
           {stir.path.imply && (
-            <div className="col-span-2 rounded border border-border bg-background/40 px-2 py-1.5 md:col-span-3 lg:col-span-6">
-              <div className="text-type-2xs text-muted-foreground">STRIP IMPLIES</div>
-              <div className="mt-0.5 flex flex-wrap items-center gap-2">
-                <ImplyChip imply={stir.path.imply} onOpen={onOpenImply} />
-                {stir.path.front_imply && <ImplyChip imply={stir.path.front_imply} compact onOpen={onOpenImply} />}
-              </div>
+            <div className="col-span-3 flex flex-wrap items-center gap-1.5 rounded border border-border bg-background/40 px-1.5 py-1 sm:col-span-4 md:col-span-6 xl:col-span-2">
+              <span className="text-type-2xs text-muted-foreground">STRIP</span>
+              <ImplyChip imply={stir.path.imply} onOpen={onOpenImply} />
+              {stir.path.front_imply && (
+                <ImplyChip imply={stir.path.front_imply} compact onOpen={onOpenImply} />
+              )}
             </div>
           )}
-          <div className="rounded border border-border px-2 py-1.5">
-            <div className="text-type-2xs text-muted-foreground">SOFR spot</div>
-            <div className="text-sm font-bold">{stir.sofr != null ? `${stir.sofr.toFixed(2)}%` : '—'}</div>
-          </div>
-          <div className="rounded border border-border px-2 py-1.5">
-            <div className="text-type-2xs text-muted-foreground">Path Δ (live)</div>
-            <div className={`text-sm font-bold ${
-              (stir.path.path_change_bps ?? 0) < 0 ? 'text-up' : 'text-amber-400'
-            }`}>
-              {stir.path.path_change_bps != null
-                ? `${stir.path.path_change_bps >= 0 ? '+' : ''}${stir.path.path_change_bps} bps`
-                : '—'}
-            </div>
-          </div>
-          <div className="rounded border border-border px-2 py-1.5">
-            <div className="text-type-2xs text-muted-foreground">≈ 25bp steps priced</div>
-            <div className={`text-sm font-bold ${
-              (stir.path.approx_25bp_cuts_priced ?? 0) > 0
-                ? 'text-up'
-                : (stir.path.approx_25bp_cuts_priced ?? 0) < 0
-                  ? 'text-amber-400'
-                  : 'text-foreground'
-            }`}>
-              {stir.path.approx_25bp_cuts_priced != null
-                ? `${Math.abs(stir.path.approx_25bp_cuts_priced).toFixed(2)} ${
-                    stir.path.approx_25bp_cuts_priced > 0
-                      ? 'cuts'
-                      : stir.path.approx_25bp_cuts_priced < 0
-                        ? 'hikes'
-                        : 'flat'
-                  }`
-                : '—'}
-            </div>
-          </div>
-          <div className="rounded border border-border px-2 py-1.5">
-            <div className="text-type-2xs text-muted-foreground">Cut / hike path</div>
-            <div className={`text-sm font-bold ${
-              (stir.path.path_change_bps ?? 0) < 0 ? 'text-up' : 'text-amber-400'
-            }`}>
-              {stir.path.path_change_bps != null
-                ? (stir.path.path_change_bps < 0
-                  ? `${(Math.abs(stir.path.path_change_bps) / 100).toFixed(2)}% cuts`
-                  : `${(stir.path.path_change_bps / 100).toFixed(2)}% hikes`)
-                : '—'}
-            </div>
-            <div className="text-type-2xs text-muted-foreground">path Δ in rate pts</div>
-          </div>
-          <div className="rounded border border-border px-2 py-1.5">
-            <div className="text-type-2xs text-muted-foreground">Front vs SOFR</div>
-            <div className="text-sm font-bold">
-              {stir.path.front_vs_sofr_bps != null
-                ? `${stir.path.front_vs_sofr_bps >= 0 ? '+' : ''}${stir.path.front_vs_sofr_bps} bps`
-                : '—'}
-            </div>
-          </div>
-          <div className="rounded border border-border px-2 py-1.5">
-            <div className="text-type-2xs text-muted-foreground">Implied end rate</div>
-            <div className="text-sm font-bold">
-              {stir.path.back?.implied_rate != null
-                ? `${Number(stir.path.back.implied_rate).toFixed(2)}%`
-                : '—'}
-            </div>
-            <div className="text-type-2xs text-muted-foreground">
-              {stir.path.back?.month || stir.path.back?.contract || 'back live'}
-            </div>
-          </div>
-        </div>
-      )}
-      {/* Full dual-path chart lives on CurvesBoard; keep compact path here for jump-nav */}
-      {stirChart.length > 0 ? (
-        <div className="mt-2">
-          <ResponsiveContainer width="100%" height={180}>
-            <LineChart data={stirChart} margin={{ top: 8, right: 12, left: 0, bottom: 8 }}>
-              <CartesianGrid stroke="#1f1f1f" strokeDasharray="2 2" />
-              <XAxis dataKey="x" tick={{ fill: '#71717a', fontSize: 9 }} interval="preserveStartEnd" height={36} />
-              <YAxis
-                tick={{ fill: '#71717a', fontSize: 9 }}
-                domain={['auto', 'auto']}
-                tickFormatter={(v) => `${Number(v).toFixed(2)}%`}
-                width={48}
-              />
-              <Tooltip
-                contentStyle={chartTooltipStyle}
-                formatter={(v: number, name: string) => [
-                  `${Number(v).toFixed(3)}%`,
-                  name === 'rate' ? 'Live' : name === 'prior' ? 'Prior settle' : name,
-                ]}
-              />
-              {stir?.sofr != null && (
-                <ReferenceLine
-                  y={stir.sofr}
-                  stroke="#f59e0b"
-                  strokeDasharray="4 2"
-                  label={{ value: `SOFR ${stir.sofr.toFixed(2)}%`, fill: '#f59e0b', fontSize: 9 }}
-                />
+          {[
+            {
+              label: 'SOFR',
+              value: stir.sofr != null ? `${stir.sofr.toFixed(2)}%` : '—',
+              cls: '',
+            },
+            {
+              label: 'Path Δ',
+              value:
+                stir.path.path_change_bps != null
+                  ? `${stir.path.path_change_bps >= 0 ? '+' : ''}${stir.path.path_change_bps}bp`
+                  : '—',
+              cls: (stir.path.path_change_bps ?? 0) < 0 ? 'text-up' : 'text-amber-400',
+            },
+            {
+              label: '≈25bp',
+              value:
+                stir.path.approx_25bp_cuts_priced != null
+                  ? `${Math.abs(stir.path.approx_25bp_cuts_priced).toFixed(2)}${
+                      stir.path.approx_25bp_cuts_priced > 0
+                        ? 'c'
+                        : stir.path.approx_25bp_cuts_priced < 0
+                          ? 'h'
+                          : ''
+                    }`
+                  : '—',
+              cls: '',
+            },
+            {
+              label: 'Front vs S',
+              value:
+                stir.path.front_vs_sofr_bps != null
+                  ? `${stir.path.front_vs_sofr_bps >= 0 ? '+' : ''}${stir.path.front_vs_sofr_bps}bp`
+                  : '—',
+              cls: '',
+            },
+            {
+              label: 'End rate',
+              value:
+                stir.path.back?.implied_rate != null
+                  ? `${Number(stir.path.back.implied_rate).toFixed(2)}%`
+                  : '—',
+              cls: '',
+              sub: stir.path.back?.month || stir.path.back?.contract,
+            },
+            {
+              label: 'Live',
+              value: `${stir.live_count ?? liveSr3.length}/${stir.total_sr3 ?? liveSr3.length}`,
+              cls: 'text-up',
+            },
+          ].map((c) => (
+            <div key={c.label} className="rounded border border-border/80 px-1.5 py-1">
+              <div className="text-type-2xs leading-none text-muted-foreground">{c.label}</div>
+              <div className={`text-sm font-bold tabular-nums leading-tight ${c.cls}`}>{c.value}</div>
+              {c.sub && (
+                <div className="truncate text-type-2xs text-muted-foreground">{c.sub}</div>
               )}
-              <Line type="monotone" dataKey="prior" stroke="#3b82f6" strokeWidth={1.5} dot={{ r: 2 }} connectNulls isAnimationActive={false} />
-              <Line type="monotone" dataKey="rate" stroke="#f4f4f5" strokeWidth={2} dot={{ r: 2.5 }} connectNulls isAnimationActive={false} />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      ) : (
-        <div className="mt-2 rounded border border-border bg-background/40 p-3 text-type-xs text-muted-foreground">
-          No live SOFR futures quotes — strip left empty rather than inventing rates.
+            </div>
+          ))}
         </div>
       )}
-      {/* CME Globex-style SOFR futures board: Last · Change · Settlement · High · Low · Volume */}
-      {liveSr3.length > 0 && (
-        <div className="mt-3 space-y-3">
-          <div className="rounded border border-border">
-            <div className="flex flex-wrap items-center gap-2 border-b border-border bg-background/50 px-2 py-1 text-type-xs font-semibold text-foreground">
-              <span>
-                3M SOFR FUTURES (SFR / SR3) · CME-style board
-                <span className="ml-2 font-normal text-muted-foreground">
-                  {liveSr3.length} live · virtualized
-                </span>
-              </span>
+
+      {/*
+        Invest free space: wide = SR3 left + (SR1 / Tsy) right column that stretches.
+        No duplicate path chart (CurvesBoard owns the dual SOFR path).
+      */}
+      {liveSr3.length > 0 ? (
+        <div className="mt-1.5 grid grid-cols-1 items-stretch gap-1.5 xl:grid-cols-12">
+          {/* ── 3M SOFR (SR3) — primary strip, takes most width ── */}
+          <BoardShell
+            className="xl:col-span-7 2xl:col-span-8"
+            title="3M SOFR FUTURES (SFR / SR3) · CME board"
+            badge={`${liveSr3.length} live`}
+            actions={
               <ExportCsvButton
-                className="ml-auto"
                 filename={`sr3-strip-${new Date().toISOString().slice(0, 10)}`}
-                headers={['Month', 'Ticker', 'Last', 'Change', 'Settlement', 'High', 'Low', 'Volume', 'Implied%', 'vsSOFR_bp']}
-                rows={(stir?.sr3 || []).filter((c) => c.implied_rate != null).map((c) => {
-                  const vs = stir?.sofr != null && c.implied_rate != null
-                    ? (c.implied_rate - stir.sofr) * 100
-                    : null;
+                headers={[
+                  'Month', 'Ticker', 'Last', 'Change', 'Settlement',
+                  'High', 'Low', 'Volume', 'Implied%', 'vsSOFR_bp',
+                ]}
+                rows={liveSr3.map((c) => {
+                  const vs =
+                    stir?.sofr != null && c.implied_rate != null
+                      ? (c.implied_rate - stir.sofr) * 100
+                      : null;
                   const net = c.net ?? c.change;
-                  const last = c.last_price ?? (c.implied_rate != null ? 100 - c.implied_rate : null);
+                  const last =
+                    c.last_price ?? (c.implied_rate != null ? 100 - c.implied_rate : null);
                   const sett = c.settlement ?? c.prev_close;
                   return [
                     c.month, c.ticker || c.contract,
@@ -205,245 +273,250 @@ export function StirSection({
                   ];
                 })}
               />
+            }
+          >
+            <div className={`${SR3_COLS} sticky top-0 z-[1] border-b border-border bg-card/95 px-1.5 py-0.5 font-mono text-type-2xs text-muted-foreground`}>
+              <span>Month</span>
+              <span>Ticker</span>
+              <span className="text-right">Last</span>
+              <span className="text-right">Chg</span>
+              <span className="text-right">Sett</span>
+              <span className="text-right">Hi</span>
+              <span className="text-right">Lo</span>
+              <span className="text-right">Vol</span>
+              <span className="text-right">Impl%</span>
+              <span className="text-right">vsS</span>
+              <span>Imply</span>
             </div>
-            {/* Sticky header row + virtual body (Phase G) */}
-            <div className="flex border-b border-border bg-card px-1.5 py-1 font-mono text-type-2xs text-muted-foreground sticky top-0 z-[1]">
-              <span className="w-14 shrink-0">Month</span>
-              <span className="w-16 shrink-0">Ticker</span>
-              <span className="w-14 shrink-0 text-right">Last</span>
-              <span className="w-14 shrink-0 text-right">Chg</span>
-              <span className="w-14 shrink-0 text-right">Sett</span>
-              <span className="w-12 shrink-0 text-right">Hi</span>
-              <span className="w-12 shrink-0 text-right">Lo</span>
-              <span className="w-14 shrink-0 text-right">Vol</span>
-              <span className="w-14 shrink-0 text-right">Impl%</span>
-              <span className="w-14 shrink-0 text-right">vsS</span>
-              <span className="min-w-0 flex-1">Imply</span>
-            </div>
-            <VirtualRows
-              height={Math.min(320, Math.max(120, liveSr3.length * 28))}
-              rowHeight={28}
-              items={(stir?.sr3 || []).filter((c) => c.implied_rate != null)}
-              renderRow={({ index, style, item: c }) => {
-                // Keep focus registry in sync (cheap)
-                const live = (stir?.sr3 || []).filter((x) => x.implied_rate != null);
-                sr3Ref.current = live.map((x) => ({
-                  month: x.month || '',
-                  ticker: x.ticker || x.contract,
-                  implied: x.implied_rate!,
-                }));
-                const vs = stir?.sofr != null && c.implied_rate != null
-                  ? (c.implied_rate - stir.sofr) * 100
-                  : null;
+            {/* Natural-height rows: no virtualized empty viewport */}
+            <div className="divide-y divide-border/30">
+              {liveSr3.map((c, index) => {
+                const vs =
+                  stir?.sofr != null && c.implied_rate != null
+                    ? (c.implied_rate - stir.sofr) * 100
+                    : null;
                 const net = c.net ?? c.change;
-                const last = c.last_price ?? (c.implied_rate != null ? 100 - c.implied_rate : null);
+                const last =
+                  c.last_price ?? (c.implied_rate != null ? 100 - c.implied_rate : null);
                 const sett = c.settlement ?? c.prev_close;
                 const ptImply = (stir?.path?.points || []).find(
                   (p) => p.contract === c.contract,
                 )?.imply;
                 return (
                   <div
-                    style={style}
+                    key={c.contract}
                     role="row"
                     aria-selected={stirFocused && index === stirRow}
                     onClick={() => focusStir(index, 'ticker')}
-                    className={`flex items-center border-b border-border/40 px-1.5 font-mono text-type-xs hover:bg-muted/20 cursor-default ${
-                      stirFocused && index === stirRow ? 'focus-ring-term-inset bg-primary/10' : ''
+                    className={`${SR3_COLS} cursor-default px-1.5 py-[3px] font-mono text-type-2xs hover:bg-muted/20 ${
+                      stirFocused && index === stirRow
+                        ? 'focus-ring-term-inset bg-primary/10'
+                        : ''
                     }`}
                   >
-                    <span className="w-14 shrink-0 text-muted-foreground">{c.month}</span>
-                    <span className="w-16 shrink-0 font-bold text-foreground">{c.ticker || c.contract}</span>
-                    <span className="w-14 shrink-0 text-right tabular-nums font-semibold">
-                      {last != null ? last.toFixed(2) : '—'}
+                    <span className="truncate text-muted-foreground">{c.month}</span>
+                    <span className="truncate font-bold text-foreground">
+                      {c.ticker || c.contract}
                     </span>
-                    <span className={`w-14 shrink-0 text-right tabular-nums ${
-                      net == null ? '' : net >= 0 ? 'text-up' : 'text-down'
-                    }`}>
-                      {net != null ? (net >= 0 ? `+${net.toFixed(3)}` : net.toFixed(3)) : '—'}
+                    <span className="text-right tabular-nums font-semibold">
+                      {fmtPx(last)}
                     </span>
-                    <span className="w-14 shrink-0 text-right tabular-nums text-muted-foreground">
-                      {sett != null ? sett.toFixed(2) : '—'}
+                    <span
+                      className={`text-right tabular-nums ${
+                        net == null ? '' : net >= 0 ? 'text-up' : 'text-down'
+                      }`}
+                    >
+                      {fmtNet(net)}
                     </span>
-                    <span className="w-12 shrink-0 text-right tabular-nums">
-                      {c.high != null ? c.high.toFixed(2) : '—'}
+                    <span className="text-right tabular-nums text-muted-foreground">
+                      {fmtPx(sett)}
                     </span>
-                    <span className="w-12 shrink-0 text-right tabular-nums">
-                      {c.low != null ? c.low.toFixed(2) : '—'}
-                    </span>
-                    <span className="w-14 shrink-0 text-right tabular-nums">
+                    <span className="text-right tabular-nums">{fmtPx(c.high)}</span>
+                    <span className="text-right tabular-nums">{fmtPx(c.low)}</span>
+                    <span className="text-right tabular-nums">
                       {c.volume != null ? c.volume.toLocaleString() : '—'}
                     </span>
-                    <span className="w-14 shrink-0 text-right tabular-nums">
+                    <span className="text-right tabular-nums font-semibold">
                       {c.implied_rate!.toFixed(3)}
                     </span>
-                    <span className={`w-14 shrink-0 text-right tabular-nums ${
-                      vs != null && vs < 0 ? 'text-up' : vs != null && vs > 0 ? 'text-amber-400' : ''
-                    }`}>
+                    <span
+                      className={`text-right tabular-nums ${
+                        vs != null && vs < 0
+                          ? 'text-up'
+                          : vs != null && vs > 0
+                            ? 'text-amber-400'
+                            : ''
+                      }`}
+                    >
                       {vs != null ? `${vs >= 0 ? '+' : ''}${vs.toFixed(0)}` : '—'}
                     </span>
-                    <span className="min-w-0 flex-1 truncate">
+                    <span className="min-w-0 truncate">
                       <ImplyChip imply={ptImply} compact onOpen={onOpenImply} />
                     </span>
                   </div>
                 );
-              }}
-            />
-          </div>
-
-          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-            <div className="overflow-x-auto rounded border border-border">
-              <div className="border-b border-border bg-background/50 px-2 py-1 text-type-xs font-semibold text-foreground">
-                1M SOFR (SR1) · monthly SERFF legs
-              </div>
-              {(stir?.sr1 || []).filter((c) => c.implied_rate != null).length === 0 ? (
-                <EmptyState kind="no-data" compact title="No live SR1" body="Strip empty or yfinance delayed — not silent zeros." />
-              ) : (
-                <table className="w-full border-collapse text-type-xs">
-                  <thead>
-                    <tr className="text-muted-foreground">
-                      <th className="p-1.5 text-left font-normal">Month</th>
-                      <th className="p-1.5 text-left font-normal">Ticker</th>
-                      <th className="p-1.5 text-right font-normal">Last</th>
-                      <th className="p-1.5 text-right font-normal">Change</th>
-                      <th className="p-1.5 text-right font-normal">High</th>
-                      <th className="p-1.5 text-right font-normal">Low</th>
-                      <th className="p-1.5 text-right font-normal">Vol</th>
-                      <th className="p-1.5 text-right font-normal">Implied %</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(stir?.sr1 || []).filter((c) => c.implied_rate != null).map((c) => (
-                      <tr key={c.contract} className="border-t border-border/50">
-                        <td className="p-1.5 text-muted-foreground">{c.month}</td>
-                        <td className="p-1.5 font-bold">{c.ticker || c.contract}</td>
-                        <td className="p-1.5 text-right font-mono tabular-nums">
-                          {(c.last_price ?? (100 - c.implied_rate!)).toFixed(2)}
-                        </td>
-                        <td className={`p-1.5 text-right font-mono tabular-nums ${
-                          c.net == null ? '' : c.net >= 0 ? 'text-up' : 'text-down'
-                        }`}>
-                          {c.net != null ? (c.net >= 0 ? `+${c.net.toFixed(3)}` : c.net.toFixed(3)) : '—'}
-                        </td>
-                        <td className="p-1.5 text-right font-mono tabular-nums">{c.high != null ? c.high.toFixed(2) : '—'}</td>
-                        <td className="p-1.5 text-right font-mono tabular-nums">{c.low != null ? c.low.toFixed(2) : '—'}</td>
-                        <td className="p-1.5 text-right font-mono tabular-nums">
-                          {c.volume != null ? c.volume.toLocaleString() : '—'}
-                        </td>
-                        <td className="p-1.5 text-right font-mono tabular-nums">{c.implied_rate!.toFixed(3)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
+              })}
             </div>
+          </BoardShell>
 
-            {/* Treasury futures continuum — CME rates complex */}
-            <div className="overflow-x-auto rounded border border-border">
-              <div className="border-b border-border bg-background/50 px-2 py-1 text-type-xs font-semibold text-foreground">
-                TREASURY FUTURES · ZT / ZF / ZN / TN / ZB / UB
-                <span className="ml-2 font-normal text-muted-foreground">
-                  {stir?.live_tsy ?? 0} live
-                </span>
-              </div>
-              {(stir?.treasury_futures || []).filter((c) => c.last_price != null).length === 0 ? (
-                <div className="p-3 text-type-xs text-muted-foreground">No live Treasury futures</div>
+          {/* ── Right stack: SR1 + Treasury fill remaining height ── */}
+          <div className="grid min-h-0 grid-rows-2 gap-1.5 xl:col-span-5 2xl:col-span-4">
+            <BoardShell
+              title="1M SOFR (SR1) · monthly SERFF legs"
+              badge={`${liveSr1.length} live`}
+            >
+              {liveSr1.length === 0 ? (
+                <EmptyState
+                  kind="no-data"
+                  compact
+                  title="No live SR1"
+                  body="Strip empty or delayed — not silent zeros."
+                />
               ) : (
-                <table className="w-full border-collapse text-type-xs">
-                  <thead>
-                    <tr className="text-muted-foreground">
-                      <th className="p-1.5 text-left font-normal">Product</th>
-                      <th className="p-1.5 text-left font-normal">CC</th>
-                      <th className="p-1.5 text-right font-normal">Last</th>
-                      <th className="p-1.5 text-right font-normal">Change</th>
-                      <th className="p-1.5 text-right font-normal">High</th>
-                      <th className="p-1.5 text-right font-normal">Low</th>
-                      <th className="p-1.5 text-right font-normal">Vol</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(stir?.treasury_futures || []).filter((c) => c.last_price != null).map((c) => (
-                      <tr key={c.contract} className="border-t border-border/50 hover:bg-muted/20">
-                        <td className="p-1.5 text-muted-foreground">{c.product || c.month}</td>
-                        <td className="p-1.5 font-bold text-foreground">{c.ticker || c.contract}</td>
-                        <td className="p-1.5 text-right font-mono font-semibold tabular-nums">
-                          {c.last_price!.toFixed(4)}
-                        </td>
-                        <td className={`p-1.5 text-right font-mono tabular-nums ${
-                          c.net == null ? '' : c.net >= 0 ? 'text-up' : 'text-down'
-                        }`}>
-                          {c.net != null ? (c.net >= 0 ? `+${c.net.toFixed(4)}` : c.net.toFixed(4)) : '—'}
-                        </td>
-                        <td className="p-1.5 text-right font-mono tabular-nums">{c.high != null ? c.high.toFixed(4) : '—'}</td>
-                        <td className="p-1.5 text-right font-mono tabular-nums">{c.low != null ? c.low.toFixed(4) : '—'}</td>
-                        <td className="p-1.5 text-right font-mono tabular-nums">
-                          {c.volume != null ? c.volume.toLocaleString() : '—'}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <>
+                  <DenseTableHead
+                    cols={['Month', 'Ticker', 'Last', 'Chg', 'Hi', 'Lo', 'Vol', 'Impl%']}
+                  />
+                  {liveSr1.map((c) => (
+                    <DenseRow
+                      key={c.contract}
+                      cells={[
+                        { text: c.month || '—', align: 'left', className: 'text-muted-foreground' },
+                        {
+                          text: c.ticker || c.contract,
+                          align: 'left',
+                          className: 'font-bold text-foreground',
+                        },
+                        {
+                          text: fmtPx(
+                            c.last_price ?? (c.implied_rate != null ? 100 - c.implied_rate : null),
+                          ),
+                        },
+                        {
+                          text: fmtNet(c.net),
+                          className:
+                            c.net == null ? '' : c.net >= 0 ? 'text-up' : 'text-down',
+                        },
+                        { text: fmtPx(c.high) },
+                        { text: fmtPx(c.low) },
+                        {
+                          text: c.volume != null ? c.volume.toLocaleString() : '—',
+                        },
+                        {
+                          text: c.implied_rate != null ? c.implied_rate.toFixed(3) : '—',
+                          className: 'font-semibold',
+                        },
+                      ]}
+                    />
+                  ))}
+                </>
               )}
-            </div>
+            </BoardShell>
+
+            <BoardShell
+              title="TREASURY FUTURES · ZT / ZF / ZN / TN / ZB / UB"
+              badge={`${liveTsy.length} live`}
+            >
+              {liveTsy.length === 0 ? (
+                <div className="p-2 text-type-2xs text-muted-foreground">
+                  No live Treasury futures
+                </div>
+              ) : (
+                <>
+                  <DenseTableHead
+                    cols={['Product', 'CC', 'Last', 'Chg', 'Hi', 'Lo', 'Vol']}
+                  />
+                  {liveTsy.map((c: StirContract) => (
+                    <DenseRow
+                      key={c.contract}
+                      emphasize
+                      cells={[
+                        {
+                          text: c.product || c.month || '—',
+                          align: 'left',
+                          className: 'text-muted-foreground',
+                        },
+                        {
+                          text: c.ticker || c.contract,
+                          align: 'left',
+                          className: 'font-bold text-foreground',
+                        },
+                        { text: fmtPx(c.last_price, 4), className: 'font-semibold' },
+                        {
+                          text: fmtNet(c.net, 4),
+                          className:
+                            c.net == null ? '' : c.net >= 0 ? 'text-up' : 'text-down',
+                        },
+                        { text: fmtPx(c.high, 4) },
+                        { text: fmtPx(c.low, 4) },
+                        {
+                          text: c.volume != null ? c.volume.toLocaleString() : '—',
+                        },
+                      ]}
+                    />
+                  ))}
+                  {/* Fill leftover with a compact continuum strip so the panel isn't empty */}
+                  {liveTsy.length > 0 && liveTsy.length < 10 && (
+                    <div className="mt-auto border-t border-border/50 px-1.5 py-1 font-mono text-type-2xs text-muted-foreground">
+                      <div className="mb-0.5 text-type-2xs uppercase tracking-wide text-zinc-500">
+                        Curve continuum (last)
+                      </div>
+                      <div className="grid grid-cols-3 gap-1 sm:grid-cols-6">
+                        {liveTsy.map((c) => (
+                          <div
+                            key={`chip-${c.contract}`}
+                            className="rounded border border-border/60 bg-background/50 px-1 py-0.5 text-center"
+                          >
+                            <div className="truncate font-bold text-foreground">
+                              {(c.ticker || c.contract).slice(0, 4)}
+                            </div>
+                            <div className="tabular-nums text-foreground">
+                              {fmtPx(c.last_price, 2)}
+                            </div>
+                            <div
+                              className={`tabular-nums ${
+                                c.net == null
+                                  ? 'text-muted-foreground'
+                                  : c.net >= 0
+                                    ? 'text-up'
+                                    : 'text-down'
+                              }`}
+                            >
+                              {fmtNet(c.net, 3)}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </BoardShell>
           </div>
+        </div>
+      ) : (
+        <div className="mt-1.5 rounded border border-border bg-background/40 p-2 text-type-xs text-muted-foreground">
+          No live SOFR futures quotes — strip left empty rather than inventing rates.
         </div>
       )}
 
       {stir?.serff_board && stir.serff_board.length > 0 && (
-        <SerffBoard rows={stir.serff_board} onOpenImply={onOpenImply} />
-      )}
-
-      {/* Path cut/hike detail table */}
-      {liveSr3.length > 0 && (
-        <div className="mt-2 overflow-x-auto">
-          <table className="w-full border-collapse text-type-xs">
-            <thead>
-              <tr className="text-muted-foreground">
-                <th className="p-1 text-left font-normal">Contract</th>
-                <th className="p-1 text-right font-normal">Cut/Hike vs SOFR</th>
-                <th className="p-1 text-right font-normal">≈25bp</th>
-                <th className="p-1 text-right font-normal">Src</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(stir?.sr3 || []).filter((c) => c.implied_rate != null).map((c) => {
-                const vs = stir?.sofr != null && c.implied_rate != null
-                  ? (c.implied_rate - stir.sofr) * 100
-                  : null;
-                const cuts25 = vs != null ? vs / -25 : null;
-                const cutHikePct = vs != null
-                  ? (vs < 0
-                    ? `${(Math.abs(vs) / 100).toFixed(2)}% cut`
-                    : `${(vs / 100).toFixed(2)}% hike`)
-                  : null;
-                return (
-                  <tr key={`path-${c.contract}`} className="border-t border-border/50">
-                    <td className="p-1 font-medium">{c.ticker || c.contract} <span className="text-muted-foreground">{c.month}</span></td>
-                    <td className={`p-1 text-right ${
-                      vs != null && vs < 0 ? 'text-up' : vs != null && vs > 0 ? 'text-amber-400' : ''
-                    }`}>
-                      {cutHikePct ?? '—'}
-                    </td>
-                    <td className="p-1 text-right">
-                      {cuts25 != null ? (cuts25 >= 0 ? `+${cuts25.toFixed(2)}c` : `${cuts25.toFixed(2)}h`) : '—'}
-                    </td>
-                    <td className={`p-1 text-right ${c.source === 'live' ? 'text-up' : 'text-amber-400'}`}>
-                      {c.source}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+        <div className="mt-1.5">
+          <SerffBoard rows={stir.serff_board} onOpenImply={onOpenImply} />
         </div>
       )}
 
-      {stir && <CalendarPacksBoard stir={stir} onOpenImply={onOpenImply} />}
+      {stir && (
+        <div className="mt-1.5">
+          <CalendarPacksBoard stir={stir} onOpenImply={onOpenImply} />
+        </div>
+      )}
 
       <DataBadge
         asOf={stir?.as_of}
         source={stir?.source || 'yfinance'}
         note={stir?.path?.note || stir?.quality_note || undefined}
-        className="mt-2"
+        className="mt-1.5"
       />
     </CollapsibleSection>
   );

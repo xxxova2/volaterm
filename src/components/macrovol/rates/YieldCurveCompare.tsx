@@ -1,37 +1,44 @@
 /**
- * Bloomberg-style 3M SOFR futures yield strip:
- * white = live implied yield, blue = prior settlement yield.
- * X = delivery quarter, Y = yield %. Real yfinance quotes only.
- * Visual twin of the uploaded dual-path chart (black field, dual dots).
+ * Bloomberg-style dual UST yield curve:
+ * white = today, blue = ~1 year ago (or selected compare date).
+ * Matches the uploaded dual-path chart aesthetic (black field, dual dots).
  */
 import {
   CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
 import { chartTooltipStyle } from '../../../lib/chartTheme';
 
-export type SofrCurvePoint = {
-  x: string;
-  rate: number | null;
-  prior?: number | null;
-  vsSofr?: number | null;
-  source?: string;
-  contract?: string;
+export type CurveComparePoint = {
+  label: string;
+  today: number | null;
+  historical: number | null;
+  delta_bps?: number | null;
 };
 
-export function SofrFuturesCurve({
-  data,
+function fmtDate(iso?: string | null): string {
+  if (!iso) return '—';
+  // FRED dates are YYYY-MM-DD
+  const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return iso;
+  return `${Number(m[2])}/${Number(m[3])}/${m[1]}`;
+}
+
+export function YieldCurveCompare({
+  points,
+  todayAsOf,
+  compareAsOf,
   height = 280,
-  asOf,
+  source,
 }: {
-  data: SofrCurvePoint[];
+  points: CurveComparePoint[];
+  todayAsOf?: string | null;
+  compareAsOf?: string | null;
   height?: number;
-  asOf?: string | null;
+  source?: string | null;
 }) {
-  const rows = data.filter((d) => d.rate != null || d.prior != null);
-  const liveLabel = '3M SOFR Future · Yield · Live Data';
-  const priorLabel = asOf
-    ? `3M SOFR Future · Yield · ${asOf}`
-    : '3M SOFR Future · Yield · prior settle';
+  const rows = points.filter((p) => p.today != null || p.historical != null);
+  const liveLabel = `UST CMT · Live · ${fmtDate(todayAsOf)}`;
+  const histLabel = `UST CMT · Yield · ${fmtDate(compareAsOf)}`;
 
   if (rows.length < 2) {
     return (
@@ -39,7 +46,7 @@ export function SofrFuturesCurve({
         className="flex items-center justify-center rounded border border-border bg-black/90 font-mono text-type-xs text-muted-foreground"
         style={{ height }}
       >
-        Awaiting live 3M SOFR futures strip…
+        Awaiting FRED UST curve (today vs last year)…
       </div>
     );
   }
@@ -48,22 +55,21 @@ export function SofrFuturesCurve({
     <div className="rounded border border-border bg-black p-1.5">
       <div className="mb-1 flex flex-wrap items-center justify-between gap-1 px-1">
         <span className="font-mono text-type-xs font-semibold tracking-wide text-zinc-100">
-          3 MONTH SOFR FUTURE · YIELD
+          UST YIELD CURVE · TODAY VS LAST YEAR
         </span>
         <span className="font-mono text-type-2xs text-zinc-500">
-          Live vs prior settlement · white = live · blue = prior · USD %
+          {source || 'FRED'} · white = live · blue = ~1Y ago · USD %
         </span>
       </div>
       <ResponsiveContainer width="100%" height={height}>
         <LineChart data={rows} margin={{ top: 10, right: 18, left: 4, bottom: 8 }}>
           <CartesianGrid stroke="#1f1f1f" strokeDasharray="0" vertical horizontal />
           <XAxis
-            dataKey="x"
+            dataKey="label"
             tick={{ fill: '#a1a1aa', fontSize: 10, fontFamily: 'JetBrains Mono' }}
-            interval="preserveStartEnd"
-            minTickGap={18}
             axisLine={{ stroke: '#333' }}
             tickLine={{ stroke: '#333' }}
+            interval={0}
           />
           <YAxis
             tick={{ fill: '#a1a1aa', fontSize: 10, fontFamily: 'JetBrains Mono' }}
@@ -88,22 +94,26 @@ export function SofrFuturesCurve({
               border: '1px solid #333',
               color: '#fafafa',
             }}
-            formatter={(v: number, name: string) => [
-              `${Number(v).toFixed(3)}%`,
-              name === 'rate' ? liveLabel : priorLabel,
-            ]}
-            labelFormatter={(l) => String(l)}
+            formatter={(v: number, name: string) => {
+              const n = Number(v);
+              if (!Number.isFinite(n)) return ['—', name];
+              return [
+                `${n.toFixed(3)}%`,
+                name === 'today' ? liveLabel : histLabel,
+              ];
+            }}
+            labelFormatter={(l) => `Tenor ${l}`}
           />
           <Legend
             wrapperStyle={{ fontSize: 11, fontFamily: 'JetBrains Mono', color: '#a1a1aa', paddingTop: 4 }}
-            formatter={(value) => (value === 'rate' ? liveLabel : priorLabel)}
+            formatter={(value) => (value === 'today' ? liveLabel : histLabel)}
             iconType="circle"
           />
-          {/* Blue = prior settlement (Bloomberg-style compare path) */}
+          {/* Blue = last year (Bloomberg compare series) */}
           <Line
             type="monotone"
-            dataKey="prior"
-            name="prior"
+            dataKey="historical"
+            name="historical"
             stroke="#3b82f6"
             strokeWidth={2.25}
             dot={{ r: 3.5, fill: '#3b82f6', stroke: '#3b82f6' }}
@@ -111,11 +121,11 @@ export function SofrFuturesCurve({
             connectNulls
             isAnimationActive={false}
           />
-          {/* White = live strip */}
+          {/* White = live today */}
           <Line
             type="monotone"
-            dataKey="rate"
-            name="rate"
+            dataKey="today"
+            name="today"
             stroke="#f4f4f5"
             strokeWidth={2.25}
             dot={{ r: 3.5, fill: '#f4f4f5', stroke: '#f4f4f5' }}
@@ -125,6 +135,27 @@ export function SofrFuturesCurve({
           />
         </LineChart>
       </ResponsiveContainer>
+      {/* Compact delta strip under chart */}
+      <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 border-t border-zinc-800 px-1 pt-1 font-mono text-type-2xs text-zinc-500">
+        {rows.map((p) => {
+          const d =
+            p.delta_bps != null
+              ? p.delta_bps
+              : p.today != null && p.historical != null
+                ? Math.round((p.today - p.historical) * 1000) / 10
+                : null;
+          if (d == null) return null;
+          return (
+            <span key={p.label}>
+              <span className="text-zinc-400">{p.label}</span>{' '}
+              <span className={d > 0 ? 'text-amber-400' : d < 0 ? 'text-emerald-400' : 'text-zinc-300'}>
+                {d > 0 ? '+' : ''}
+                {d.toFixed(0)}bp
+              </span>
+            </span>
+          );
+        })}
+      </div>
     </div>
   );
 }

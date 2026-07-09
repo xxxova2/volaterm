@@ -1,6 +1,7 @@
 import asyncio
 import os
-from datetime import datetime, timezone
+from collections import Counter
+from datetime import date as date_cls, datetime, timedelta, timezone
 
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -580,40 +581,89 @@ async def rates_basis_history(limit: int = 90):
 
 
 @app.get("/api/rates/curve-history")
-async def curve_history(periods: str = "1M"):
+async def curve_history(periods: str = "1Y"):
+    """
+    Live UST CMT curve vs a historical snapshot (default 1Y ago).
+    Used by Curves & Spreads dual-curve chart (today white · compare blue).
+    FRED series are newest-first.
+    """
     tenors = list(CURVE_IDS)
     labels = list(CURVE_LABELS)
 
-    # Approx trading-day lookbacks (Treasury yields are daily on business days)
-    limit_map = {"1W": 10, "1M": 25, "3M": 70, "6M": 140, "1Y": 260}
-    limit = limit_map.get(periods, 25)
+    # Approx calendar-day lookbacks → pull enough daily observations
+    limit_map = {"1W": 15, "1M": 35, "3M": 90, "6M": 160, "1Y": 280, "2Y": 540}
+    target_days = {"1W": 7, "1M": 30, "3M": 90, "6M": 180, "1Y": 365, "2Y": 730}
+    limit = limit_map.get(periods, 280)
+    want_days = target_days.get(periods, 365)
 
     results = await asyncio.gather(
-        *[fetch_series(t, limit=limit + 5) for t in tenors],
+        *[fetch_series(t, limit=limit + 10) for t in tenors],
         return_exceptions=True
     )
 
-    today_yields = []
-    historical_yields = []
-    hist_dates = []
+    today_yields: list[float | None] = []
+    historical_yields: list[float | None] = []
+    hist_dates: list[str | None] = []
+    today_dates: list[str | None] = []
     live_n = 0
 
-    for i, result in enumerate(results):
+    target = date_cls.today() - timedelta(days=want_days)
+
+    def _pick_near(series: list[dict], target_d: date_cls) -> tuple[float | None, str | None]:
+        """Closest observation on or before target_d (FRED desc-sorted)."""
+        best = None
+        best_delta = None
+        for row in series:
+            try:
+                d = date_cls.fromisoformat(row["date"])
+            except Exception:
+                continue
+            delta = abs((d - target_d).days)
+            # Prefer on-or-before; still accept nearest within 14d if needed
+            if d > target_d and delta > 14:
+                continue
+            if best is None or delta < best_delta:
+                best = row
+                best_delta = delta
+        if best is None and series:
+            # fallback: oldest in window
+            best = series[-1]
+        if not best:
+            return None, None
+        return float(best["value"]), best["date"]
+
+    for result in results:
         if isinstance(result, Exception) or not result:
             today_yields.append(None)
             historical_yields.append(None)
             hist_dates.append(None)
-        else:
-            live_n += 1
-            today_yields.append(result[0]["value"])
-            # Use last available observation in window as "historical" (not midpoint hack)
-            idx = min(len(result) - 1, limit - 1)
-            if idx > 0 and result[idx]:
-                historical_yields.append(result[idx]["value"])
-                hist_dates.append(result[idx]["date"])
-            else:
-                historical_yields.append(None)
-                hist_dates.append(None)
+            today_dates.append(None)
+            continue
+        live_n += 1
+        today_yields.append(result[0]["value"])
+        today_dates.append(result[0].get("date"))
+        hy, hd = _pick_near(result, target)
+        historical_yields.append(hy)
+        hist_dates.append(hd)
+
+    # Majority historical as_of for legend
+    compare_as_of = None
+    counted = Counter(d for d in hist_dates if d)
+    if counted:
+        compare_as_of = counted.most_common(1)[0][0]
+    today_as_of = None
+    counted_t = Counter(d for d in today_dates if d)
+    if counted_t:
+        today_as_of = counted_t.most_common(1)[0][0]
+
+    points = []
+    for lab, t, h in zip(labels, today_yields, historical_yields):
+        points.append({
+            "label": lab,
+            "today": t,
+            "historical": h,
+            "delta_bps": round((t - h) * 100.0, 1) if t is not None and h is not None else None,
+        })
 
     return {
         "labels": labels,
@@ -621,9 +671,15 @@ async def curve_history(periods: str = "1M"):
         "today": today_yields,
         "historical": historical_yields,
         "historical_dates": hist_dates,
+        "today_dates": today_dates,
+        "today_as_of": today_as_of,
+        "compare_as_of": compare_as_of,
+        "compare_label": f"UST CMT · {compare_as_of}" if compare_as_of else f"UST CMT · {periods} ago",
+        "points": points,
         "periods": periods,
         "as_of": datetime.now(timezone.utc).isoformat(),
         "source": f"FRED ({live_n}/{len(tenors)} tenors live)",
+        "note": f"Today vs ~{periods} ago constant-maturity Treasury yields. No synthetic points.",
     }
 
 @app.get("/api/rates/correlations")
