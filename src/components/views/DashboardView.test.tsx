@@ -31,7 +31,7 @@ describe('DashboardView', () => {
       liveAvailable: false,
       loading: false,
       lastUpdate: Date.now(),
-      activeTab: 'dashboard',
+      activeTab: 'home',
       displayMode: 'strike',
       selectedExpiry: null,
       playbackInterval: null,
@@ -58,7 +58,7 @@ describe('DashboardView', () => {
     // For SPY demo data the synthetic surface is arbitrage-clean.
     const badge = screen.getByTestId('arb-badge');
     expect(badge.getAttribute('data-arb-clean')).toBe('true');
-    expect(badge.textContent?.toLowerCase()).toContain('no arb');
+    expect(badge.textContent?.toLowerCase()).toContain('clean');
   });
 
   it('computes non-zero IV High / IV Low from historical frames', () => {
@@ -97,7 +97,7 @@ describe('DashboardView', () => {
 
     const badge = screen.getByTestId('arb-badge');
     expect(badge.getAttribute('data-arb-clean')).toBe('false');
-    expect(badge.textContent?.toLowerCase()).toContain('arb found');
+    expect(badge.textContent?.toLowerCase()).toContain('flags');
 
     // Counts rendered in MiniStats.
     const counts = screen.getAllByText(/^[0-9]+$/);

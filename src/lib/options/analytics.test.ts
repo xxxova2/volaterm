@@ -9,6 +9,10 @@ import {
   maxPainStrike,
   gammaExposure,
   ivRank,
+  dealerExposure,
+  scanParityEdges,
+  realizedVolCloseToClose,
+  inventoryByExpiry,
 } from './analytics';
 import type { VolSnapshot } from './types';
 
@@ -487,6 +491,9 @@ describe('Gamma Exposure', () => {
     
     expect(gex.points).toHaveLength(1);
     expect(gex.points[0]?.strike).toBe(100);
+    // Dealer convention: calls positive, puts negative.
+    expect(gex.points[0]!.callGEX).toBeGreaterThan(0);
+    expect(gex.points[0]!.putGEX).toBeLessThan(0);
     expect(gex.totalGEX).toBeGreaterThan(0);
     expect(gex.gammaFlip).toBeGreaterThanOrEqual(100);
   });
@@ -506,5 +513,81 @@ describe('Gamma Exposure', () => {
     expect(gex.points).toHaveLength(0);
     expect(gex.totalGEX).toBe(0);
     expect(gex.gammaFlip).toBeNull();
+  });
+});
+
+describe('dealerExposure stack', () => {
+  const snap: VolSnapshot = {
+    symbol: 'TEST',
+    spot: 100,
+    riskFreeRate: 0.05,
+    dividendYield: 0.01,
+    timestamp: Date.now(),
+    contractSize: 100,
+    expiries: [
+      {
+        expiry: '2026-08-01',
+        dte: 30,
+        atmIV: 0.2,
+        forward: 100,
+        calls: [
+          {
+            strike: 100, expiry: '2026-08-01', type: 'call',
+            bid: 2, ask: 2.2, last: 2.1, mid: 2.1, iv: 0.2,
+            delta: 0.5, gamma: 0.04, theta: -0.05, vega: 0.1,
+            vanna: 0.02, charm: -0.01, volga: 0.05, speed: 0, rho: 0.1,
+            veta: 0, color: 0, zomma: 0, ultima: 0,
+            openInterest: 1000, volume: 100,
+          },
+        ],
+        puts: [
+          {
+            strike: 100, expiry: '2026-08-01', type: 'put',
+            bid: 1.8, ask: 2.0, last: 1.9, mid: 1.9, iv: 0.2,
+            delta: -0.5, gamma: 0.04, theta: -0.05, vega: 0.1,
+            vanna: -0.02, charm: 0.01, volga: 0.05, speed: 0, rho: -0.1,
+            veta: 0, color: 0, zomma: 0, ultima: 0,
+            openInterest: 500, volume: 50,
+          },
+        ],
+      },
+    ],
+  };
+
+  it('computes GEX/DEX/VEX/Charm with OI weight', () => {
+    const d = dealerExposure(snap);
+    expect(d.points).toHaveLength(1);
+    expect(d.points[0]!.callGEX).toBeGreaterThan(0);
+    expect(d.points[0]!.putGEX).toBeLessThan(0);
+    expect(d.totalDEX).not.toBe(0);
+    expect(d.callWall).toBe(100);
+    expect(d.putWall).toBe(100);
+  });
+
+  it('unit weight differs from OI weight magnitude', () => {
+    const oi = dealerExposure(snap, { weight: 'oi' });
+    const unit = dealerExposure(snap, { weight: 'unit' });
+    expect(Math.abs(oi.totalGEX)).toBeGreaterThan(Math.abs(unit.totalGEX));
+  });
+
+  it('scanParityEdges returns rows near ATM', () => {
+    const rows = scanParityEdges(snap);
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows[0]!.strike).toBe(100);
+  });
+
+  it('inventoryByExpiry buckets greeks', () => {
+    const inv = inventoryByExpiry(snap);
+    expect(inv).toHaveLength(1);
+    expect(inv[0]!.callOI).toBe(1000);
+    expect(inv[0]!.putOI).toBe(500);
+  });
+
+  it('realizedVolCloseToClose needs enough samples', () => {
+    expect(realizedVolCloseToClose([100, 101])).toBeNull();
+    const series = Array.from({ length: 30 }, (_, i) => 100 * Math.exp(0.01 * Math.sin(i)));
+    const rv = realizedVolCloseToClose(series);
+    expect(rv).not.toBeNull();
+    expect(rv!).toBeGreaterThan(0);
   });
 });

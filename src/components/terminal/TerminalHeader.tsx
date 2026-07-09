@@ -27,43 +27,43 @@ export function TerminalHeader() {
 
   return (
     <>
-      <header className="flex h-11 items-center justify-between border-b border-border bg-card px-4 text-xs font-mono">
-        <div className="flex items-center gap-4">
-          <span className="text-primary font-bold text-sm tracking-wider">VOLATERM</span>
+      <header className="flex h-9 shrink-0 items-center justify-between border-b border-border bg-card px-2 text-[11px] font-mono sm:px-3">
+        <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+          <span className="shrink-0 text-primary font-bold text-xs tracking-wider sm:text-sm">VOLATERM</span>
           <button
             onClick={() => setDialogOpen(true)}
-            className="flex items-center gap-1.5 rounded px-2 py-1 bg-muted hover:bg-secondary transition-colors font-semibold"
+            className="flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 font-semibold transition-colors hover:bg-secondary"
           >
             <span className="text-amber">{symbol}</span>
-            <span className="text-muted-foreground">▼</span>
+            <span className="text-muted-foreground text-[9px]">▼</span>
           </button>
           {fmpQuote?.name && (
-            <span className="text-muted-foreground max-w-48 truncate">{fmpQuote.name}</span>
+            <span className="hidden max-w-36 truncate text-muted-foreground lg:inline">{fmpQuote.name}</span>
           )}
-          <span className="text-foreground tabular-nums">{fmtPrice(spot)}</span>
-          {loading && <span className="text-muted-foreground animate-pulse">⟳</span>}
+          <span className="tabular-nums text-foreground">{fmtPrice(spot)}</span>
+          {loading && <span className="animate-pulse text-muted-foreground">⟳</span>}
           {atmIV != null && (
-            <span className="text-muted-foreground">
+            <span className="hidden text-muted-foreground sm:inline">
               IV30: <span className="text-cyan">{fmtPrice(atmIV * 100, 1)}%</span>
             </span>
           )}
           {liveRFR != null && (
-            <span className="text-muted-foreground">
-              RFR: <span className="text-violet">{fmtPrice(liveRFR * 100, 2)}%</span>
+            <span className="hidden text-muted-foreground md:inline">
+              RFR: <span className="text-violet-400">{fmtPrice(liveRFR * 100, 2)}%</span>
             </span>
           )}
           {termSlope != null && (
-            <span className={termSlope > 0 ? 'text-up' : 'text-down'}>
+            <span className={`hidden md:inline ${termSlope > 0 ? 'text-up' : 'text-down'}`}>
               {termSlope > 0 ? '↑' : '↓'} {fmtPrice(Math.abs(termSlope), 2)}%
             </span>
           )}
-          <span className="text-muted-foreground">
-            {snapshot?.expiries.length ?? 0} expiries
+          <span className="hidden text-muted-foreground lg:inline">
+            {snapshot?.expiries.length ?? 0} exp
           </span>
         </div>
 
-        <div className="flex items-center gap-3">
-          <span className="text-muted-foreground tabular-nums">{fmtClock(clock)}</span>
+        <div className="flex shrink-0 items-center gap-2">
+          <span className="hidden tabular-nums text-muted-foreground sm:inline">{fmtClock(clock)}</span>
           <button
             onClick={() => setSource(source === 'demo' ? 'live' : 'demo')}
             className={`rounded px-2 py-0.5 text-xs font-medium ${

@@ -22,6 +22,7 @@ export const GLOSSARY: Record<string, GlossaryEntry> = {
     title: 'Theta (Θ)',
     body: 'Time decay: how much value the option loses per day. For a long option theta is usually negative (you pay for time). Shown per 1 day.',
   },
+  // vega shown per 1 vol point (market convention)
   vega: {
     title: 'Vega (ν)',
     body: 'How much the option price changes per 1-point (1%) move in implied volatility. Always positive for a long option. Bigger for longer expirations.',
@@ -104,7 +105,7 @@ export const GLOSSARY: Record<string, GlossaryEntry> = {
   },
   riskReversal: {
     title: 'Risk Reversal (25Δ RR)',
-    body: 'IV of the 25-delta call minus the 25-delta put. Positive = calls pricier than puts (bullish lean); negative = downside fear dominates. A key skew gauge.',
+    body: 'IV(25Δ put) − IV(25Δ call), equity-desk convention. Positive = put wing richer (downside fear); negative = call wing richer (upside demand). Quoted in vol points.',
   },
   butterfly: {
     title: 'Butterfly (25Δ Fly)',
@@ -131,14 +132,34 @@ export const GLOSSARY: Record<string, GlossaryEntry> = {
     body: 'Where today’s IV sits within its recent historical range, as a %. 100% = highest IV seen; 0% = lowest. High rank = options relatively expensive.',
   },
 
-  // ---- Gamma exposure -------------------------------------------------------
+  // ---- Gamma exposure / dealer stack ----------------------------------------
   gex: {
     title: 'Gamma Exposure (GEX)',
-    body: 'Dealers’ net gamma by strike, in $ per 1% move. Positive bars = dealers long gamma (they dampen moves, buy dips/sell rips); the chart shows where that pressure sits.',
+    body: 'Dealers’ net gamma by strike (γ · S · OI · mult). Positive = dealers long gamma (dampen moves); negative = short gamma (amplify). Assumes customers long listed OI.',
+  },
+  dex: {
+    title: 'Delta Exposure (DEX)',
+    body: 'Signed $ delta of listed open interest by strike (δ · S · OI · mult). Shows where dealer delta inventory (and hedge pressure) concentrates if customers are long options.',
+  },
+  vex: {
+    title: 'Vanna Exposure (VEX)',
+    body: 'Vanna · S · OI · mult by strike. How dealer delta changes when IV moves — important into vol spikes and skew rehedges.',
+  },
+  charmExposure: {
+    title: 'Charm Exposure',
+    body: 'Overnight delta bleed of listed OI: (charm/day) · S · OI · mult. Dealers rehedge as time passes even if spot is flat — pin risk into expiry weekends.',
+  },
+  dealerStack: {
+    title: 'Dealer Stack',
+    body: 'GEX + DEX + VEX + Charm together. One strike map of how market-maker hedging may respond to spot, vol, and time — not a free trade signal.',
+  },
+  parityEdge: {
+    title: 'Put–Call Parity Edge',
+    body: 'Residual of C−P vs cash-and-carry forward. Large residual vs bid/ask half-spreads can flag conversion/reversal opportunities — check American exercise, borrow, and dividends first.',
   },
   gammaFlip: {
     title: 'Gamma Flip',
-    body: 'The strike where dealers switch from net long gamma to net short gamma. Above it dealers may amplify moves (chopppy/volatile); below it they stabilize price.',
+    body: 'The strike where dealers switch from net long gamma to net short gamma. Above it dealers may amplify moves (choppy/volatile); below it they stabilize price.',
   },
   callWall: {
     title: 'Call Wall',
@@ -151,6 +172,10 @@ export const GLOSSARY: Record<string, GlossaryEntry> = {
   maxPain: {
     title: 'Max Pain',
     body: 'Strike where the most option contracts expire worthless — the point of least total payout to holders. A magnet some traders watch into expiration.',
+  },
+  keyLevels: {
+    title: 'Key Levels',
+    body: 'Price levels desks watch: dealer walls, max pain, gamma-flip (stabilizing vs amplifying flow), and expected-move bands — one glance before trading the underlier.',
   },
 
   // ---- Expected move --------------------------------------------------------
@@ -192,13 +217,9 @@ export const GLOSSARY: Record<string, GlossaryEntry> = {
     title: 'Synthetic Data',
     body: 'Not live market data. The terminal is showing a generated/demo surface (e.g. no API key or live feed unavailable). Switch to LIVE for real quotes.',
   },
-  keyLevels: {
-    title: 'Key Levels',
-    body: 'Price levels the market is watching: where dealers are heavy (walls), where max pain sits, and the gamma-flip line that separates stabilizing from amplifying dealer flow.',
-  },
   portfolioRisk: {
-    title: 'Portfolio Risk',
-    body: 'Net Greeks of the whole option book: directional (delta), curvature (gamma), volatility (vega) and time (theta) exposure summed across all strikes and expirations.',
+    title: 'Chain Inventory (not a book)',
+    body: 'Sum of listed option Greeks across the chain — NOT your position risk. Scales with how many strikes are quoted. Use MM Desk multi-leg tools for real book risk once you have a blotter.',
   },
 
   // ---- Market / chain columns ----------------------------------------------
@@ -257,5 +278,27 @@ export const GLOSSARY: Record<string, GlossaryEntry> = {
   bollinger: {
     title: 'Bollinger Bands (20,2)',
     body: 'Price bands 2 standard deviations above/below the 20-day average. Wide bands = high volatility; price hugging a band = a strong move.',
+  },
+
+  // ---- MM desk / Thalex-style tools ----------------------------------------
+  hedgePnl: {
+    title: 'Hedged PnL',
+    body: 'Mark-to-model P&L of the option plus its delta hedge (cash + stock/future). Shows the residual risk after rebalancing.',
+  },
+  nd2: {
+    title: 'N(d2)',
+    body: 'Black–Scholes risk-neutral probability the option finishes in-the-money. Related to digital pricing; 1/N(d2) is sometimes read as payoff-odds leverage.',
+  },
+  rollPnl: {
+    title: 'Roll / Funding PnL',
+    body: 'Carry from holding a forward/perp: notional × annualized funding × time. Positive funding pays longs; negative pays shorts (crypto perps).',
+  },
+  omega: {
+    title: 'Omega (elasticity)',
+    body: 'ω = Δ · S / V — percent change in option value per percent change in spot. High omega = leveraged directional exposure per premium dollar.',
+  },
+  vrp: {
+    title: 'Variance Risk Premium',
+    body: 'Gap between implied vol and your subjective realized-vol view. Positive VRP means you think options are rich → short vol edge.',
   },
 };

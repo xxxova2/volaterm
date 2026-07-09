@@ -3,6 +3,8 @@ import { computeGreeks } from './greeks';
 import { impliedVol } from './ivSolver';
 import { fitSVI, svi } from './svi';
 import { VALIDATION_CONFIG } from '../../config/constants';
+import { yearFractionToExpiry, calendarDte } from './time';
+import { estimateParityDividend, blendDividendYield } from './parity';
 
 export interface YahooRawOption {
   strike: number;
@@ -24,7 +26,22 @@ export interface YahooResponse {
   timestamp: number;
 }
 
+/** Optional build controls for per-tenor rates and parity dividend. */
+export interface BuildSnapshotOptions {
+  maxExpiries?: number;
+  now?: number;
+  /** Per-tenor risk-free rate r(T). Defaults to flat `r`. */
+  rateForT?: (T: number) => number;
+  /** When true (default), blend put–call parity implied dividend into q. */
+  useParityDividend?: boolean;
+}
+
 const { MIN_IV, MAX_IV } = VALIDATION_CONFIG.ranges;
+
+/** Reject markets wider than this relative spread (ask-bid)/mid. */
+const MAX_REL_SPREAD = 0.55;
+/** Absolute floor: always accept if abs spread is tiny (penny names). */
+const MAX_ABS_SPREAD_ALWAYS_OK = 0.05;
 
 function pickMid(raw: YahooRawOption): number | null {
   const hasBid = raw.bid > 0 && isFinite(raw.bid);
@@ -38,15 +55,27 @@ function pickMid(raw: YahooRawOption): number | null {
   return null;
 }
 
+/** True when the quote is too wide / crossed to trust for IV. */
+function isPoorLiquidity(raw: YahooRawOption, mid: number): boolean {
+  if (!(raw.bid > 0 && raw.ask > 0)) {
+    return !(raw.last > 0 && (raw.volume > 0 || raw.openInterest > 0));
+  }
+  if (raw.ask < raw.bid) return true;
+  const spread = raw.ask - raw.bid;
+  if (spread <= MAX_ABS_SPREAD_ALWAYS_OK) return false;
+  return spread / mid > MAX_REL_SPREAD;
+}
+
 function intrinsic(
   type: 'call' | 'put',
   spot: number,
   strike: number,
   T: number,
   r: number,
+  q: number,
 ): number {
-  if (type === 'call') return Math.max(spot - strike * Math.exp(-r * T), 0);
-  return Math.max(strike * Math.exp(-r * T) - spot, 0);
+  if (type === 'call') return Math.max(spot * Math.exp(-q * T) - strike * Math.exp(-r * T), 0);
+  return Math.max(strike * Math.exp(-r * T) - spot * Math.exp(-q * T), 0);
 }
 
 function solveIV(
@@ -68,18 +97,18 @@ function solveIV(
 function buildOptionQuote(
   raw: YahooRawOption,
   expiry: string,
-  dte: number,
+  _dte: number,
   spot: number,
+  T: number,
   r: number,
   q: number,
   iv: number,
 ): OptionQuote {
-  const T = dte / 365;
   const g = computeGreeks(raw.type, spot, raw.strike, T, r, q, iv);
   return {
     strike: raw.strike, expiry, type: raw.type,
     bid: raw.bid, ask: raw.ask, last: raw.last,
-    mid: pickMid(raw) ?? iv,
+    mid: pickMid(raw) ?? 0,
     iv, delta: g.delta, gamma: g.gamma, theta: g.theta, vega: g.vega,
     vanna: g.vanna, charm: g.charm, volga: g.volga, speed: g.speed,
     rho: g.rho, veta: g.veta, color: g.color, zomma: g.zomma, ultima: g.ultima,
@@ -95,15 +124,16 @@ function filterArbFreeQuotes(
   spot: number,
   T: number,
   r: number,
-  _q: number,
+  q: number,
 ): RawWithMid[] {
   const valid: RawWithMid[] = [];
   for (const raw of rawList) {
     const mid = pickMid(raw);
     if (mid == null || mid <= 0 || !isFinite(mid)) continue;
-    if (raw.bid > raw.ask) continue; // crossed market
-    const intr = intrinsic(type, spot, raw.strike, T, r);
-    if (mid < intr * 0.99) continue; // price below intrinsic
+    if (raw.bid > raw.ask && raw.bid > 0 && raw.ask > 0) continue;
+    if (isPoorLiquidity(raw, mid)) continue;
+    const intr = intrinsic(type, spot, raw.strike, T, r, q);
+    if (mid < intr * 0.99) continue;
     valid.push({ ...raw, mid });
   }
   return valid;
@@ -119,14 +149,77 @@ function computeIVs(
 ): (RawWithMid & { iv: number })[] {
   const out: (RawWithMid & { iv: number })[] = [];
   for (const raw of quotes) {
-    let iv = raw.iv;
-    if (iv == null || iv <= 0 || !isFinite(iv) || iv < MIN_IV || iv > MAX_IV) {
-      iv = solveIV(type, raw.mid, spot, raw.strike, T, r, q);
+    // Always invert mid when liquid — Yahoo IVs are often junk on wings.
+    // Keep feed IV only as a seed/fallback when the solver fails.
+    let iv = solveIV(type, raw.mid, spot, raw.strike, T, r, q);
+    if (iv == null || iv < MIN_IV || iv > MAX_IV) {
+      let feed = raw.iv;
+      // yfinance sometimes emits percent (e.g. 25.0) instead of decimal (0.25).
+      if (feed != null && feed > 1.5) feed = feed / 100;
+      if (feed != null && feed >= MIN_IV && feed <= MAX_IV && isFinite(feed)) {
+        iv = feed;
+      } else {
+        continue;
+      }
     }
-    if (iv == null || iv < MIN_IV || iv > MAX_IV) continue;
+    // Reject pathological wing IVs far from ATM (solver on near-zero mids).
+    const moneyness = Math.abs(Math.log(raw.strike / spot));
+    if (moneyness > 0.35 && iv > 1.2) continue;
     out.push({ ...raw, iv });
   }
   return out;
+}
+
+/**
+ * ATM IV via OTM wing interpolation:
+ *  - K >= spot → call IV
+ *  - K <= spot → put IV
+ * Linear interpolate in strike at K = spot.
+ */
+export function computeAtmIV(
+  calls: { strike: number; iv: number }[],
+  puts: { strike: number; iv: number }[],
+  spot: number,
+): number {
+  const points: { k: number; iv: number }[] = [];
+  for (const c of calls) {
+    if (c.strike >= spot * 0.999) points.push({ k: c.strike, iv: c.iv });
+  }
+  for (const p of puts) {
+    if (p.strike <= spot * 1.001) points.push({ k: p.strike, iv: p.iv });
+  }
+
+  if (points.length === 0) {
+    const nearest = (qs: { strike: number; iv: number }[]) => {
+      if (qs.length === 0) return null;
+      return qs.reduce((a, b) =>
+        Math.abs(a.strike - spot) <= Math.abs(b.strike - spot) ? a : b,
+      );
+    };
+    const nc = nearest(calls);
+    const np = nearest(puts);
+    if (nc && np) return (nc.iv + np.iv) / 2;
+    if (nc) return nc.iv;
+    if (np) return np.iv;
+    return 0.2;
+  }
+
+  points.sort((a, b) => a.k - b.k);
+  const dedup: { k: number; iv: number }[] = [];
+  for (const p of points) {
+    const last = dedup[dedup.length - 1];
+    if (last && Math.abs(last.k - p.k) < 1e-9) {
+      last.iv = (last.iv + p.iv) / 2;
+    } else {
+      dedup.push({ ...p });
+    }
+  }
+
+  const lo = [...dedup].reverse().find((p) => p.k <= spot) ?? dedup[0]!;
+  const hi = dedup.find((p) => p.k >= spot) ?? dedup[dedup.length - 1]!;
+  if (Math.abs(lo.k - hi.k) < 1e-9) return lo.iv;
+  const w = (spot - lo.k) / (hi.k - lo.k);
+  return lo.iv * (1 - w) + hi.iv * w;
 }
 
 function smoothWings(
@@ -136,22 +229,23 @@ function smoothWings(
   T: number,
   r: number,
   q: number,
+  expiry: string,
+  dte: number,
 ): OptionQuote[] {
   if (quotes.length === 0) return [];
 
-  const strikes = quotes.map(q => q.strike);
-  const ivs = quotes.map(q => q.iv);
+  const strikes = quotes.map((q) => q.strike);
+  const ivs = quotes.map((q) => q.iv);
   const fit = fitSVI(strikes, ivs, spot);
 
   const out: OptionQuote[] = [];
   for (const raw of quotes) {
     let iv = raw.iv;
     const k = Math.abs(Math.log(raw.strike / spot));
-    const isWing = k > 0.15; // deep OTM/ITM
+    const isWing = k > 0.15;
     if (fit && isWing) {
       const fitted = svi(fit.params, Math.log(raw.strike / spot));
       if (isFinite(fitted) && fitted > 0) {
-        // Clamp extreme wing outliers to a plausible SVI band
         const lo = Math.max(MIN_IV, fitted * 0.5);
         const hi = Math.min(MAX_IV, Math.max(fitted * 2, fitted + 0.15));
         if (iv < lo || iv > hi || iv > 1.0) {
@@ -159,18 +253,38 @@ function smoothWings(
         }
       }
     }
-    const dte = Math.round(T * 365);
-    out.push(buildOptionQuote(raw, raw.expiry, dte, spot, r, q, iv));
+    out.push(buildOptionQuote(raw, expiry, dte, spot, T, r, q, iv));
   }
   return out;
 }
 
+/**
+ * Build a volatility snapshot from a raw option chain.
+ * Uses per-tenor r(T) and put–call parity dividend when configured.
+ */
 export function buildYahooSnapshot(
   data: YahooResponse,
   r: number,
   q: number,
-  maxExpiries = 12,
+  maxExpiriesOrOpts: number | BuildSnapshotOptions = 12,
+  nowArg?: number,
 ): VolSnapshot | null {
+  // Backward-compatible overload: (data, r, q, maxExpiries, now)
+  let maxExpiries = 12;
+  let now = Date.now();
+  let rateForT: ((T: number) => number) | undefined;
+  let useParityDividend = true;
+
+  if (typeof maxExpiriesOrOpts === 'number') {
+    maxExpiries = maxExpiriesOrOpts;
+    if (nowArg != null) now = nowArg;
+  } else if (maxExpiriesOrOpts && typeof maxExpiriesOrOpts === 'object') {
+    maxExpiries = maxExpiriesOrOpts.maxExpiries ?? 12;
+    now = maxExpiriesOrOpts.now ?? Date.now();
+    rateForT = maxExpiriesOrOpts.rateForT;
+    useParityDividend = maxExpiriesOrOpts.useParityDividend !== false;
+  }
+
   if (!data.quotes || data.quotes.length < 5) return null;
 
   const expiryMap = new Map<string, { calls: YahooRawOption[]; puts: YahooRawOption[] }>();
@@ -183,75 +297,141 @@ export function buildYahooSnapshot(
     else bucket.puts.push(quote);
   }
 
-  const now = new Date();
   const slices: ExpirySlice[] = [];
+  const qSamples: number[] = [];
 
   for (const [expiry, bucket] of expiryMap) {
-    const dte = Math.max(1, Math.round((new Date(expiry).getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
-    const T = dte / 365;
-    if (T <= 0) continue;
+    const T = yearFractionToExpiry(expiry, now);
+    if (T == null || T <= 0) continue;
+    const dte = calendarDte(expiry, now);
+    if (dte <= 0 && T < 1 / (365 * 24)) continue;
 
-    const rawCalls = filterArbFreeQuotes('call', bucket.calls, data.spot, T, r, q);
-    const rawPuts = filterArbFreeQuotes('put', bucket.puts, data.spot, T, r, q);
+    const rT = rateForT ? rateForT(T) : r;
 
-    const callIVs = computeIVs('call', rawCalls, data.spot, T, r, q);
-    const putIVs = computeIVs('put', rawPuts, data.spot, T, r, q);
+    // Seed pass with profile/seed q to get liquid mids.
+    let qEff = q;
+    let rawCalls = filterArbFreeQuotes('call', bucket.calls, data.spot, T, rT, qEff);
+    let rawPuts = filterArbFreeQuotes('put', bucket.puts, data.spot, T, rT, qEff);
 
-    const calls = smoothWings('call', callIVs, data.spot, T, r, q);
-    const puts = smoothWings('put', putIVs, data.spot, T, r, q);
+    let forward: number | undefined;
+    if (useParityDividend) {
+      const parity = estimateParityDividend(rawCalls, rawPuts, data.spot, T, rT);
+      if (parity) {
+        qEff = blendDividendYield(q, parity);
+        forward = parity.forward;
+        qSamples.push(qEff);
+        // Re-filter with refined q (intrinsic bounds).
+        rawCalls = filterArbFreeQuotes('call', bucket.calls, data.spot, T, rT, qEff);
+        rawPuts = filterArbFreeQuotes('put', bucket.puts, data.spot, T, rT, qEff);
+      }
+    }
+
+    const callIVs = computeIVs('call', rawCalls, data.spot, T, rT, qEff);
+    const putIVs = computeIVs('put', rawPuts, data.spot, T, rT, qEff);
+
+    const calls = smoothWings('call', callIVs, data.spot, T, rT, qEff, expiry, dte);
+    const puts = smoothWings('put', putIVs, data.spot, T, rT, qEff, expiry, dte);
 
     if (calls.length > 0 || puts.length > 0) {
-      const allIVs = [...calls, ...puts].map(q => q.iv);
-      const atmIV = allIVs.length > 0
-        ? allIVs.reduce((sum: number, iv: number | null) => sum + (iv ?? 0), 0) / allIVs.length
-        : 0.2;
-      slices.push({ expiry, dte, calls, puts, atmIV });
+      const atmIV = computeAtmIV(callIVs, putIVs, data.spot);
+      slices.push({
+        expiry,
+        dte: Math.max(dte, 1),
+        calls,
+        puts,
+        atmIV,
+        forward,
+        riskFreeRate: rT,
+        dividendYield: qEff,
+      });
     }
   }
 
   slices.sort((a, b) => a.dte - b.dte);
 
+  // Snapshot-level q: median of parity-refined tenors, else seed.
+  let snapQ = q;
+  if (qSamples.length > 0) {
+    const sorted = [...qSamples].sort((a, b) => a - b);
+    snapQ = sorted[Math.floor(sorted.length / 2)]!;
+  }
+  // Snapshot-level r: front tenor (or seed).
+  const snapR = slices[0]?.riskFreeRate ?? r;
+
   return {
     symbol: data.symbol,
     spot: data.spot,
-    riskFreeRate: r,
-    dividendYield: q,
-    timestamp: data.timestamp,
+    riskFreeRate: snapR,
+    dividendYield: snapQ,
+    timestamp: data.timestamp || now,
     expiries: slices.slice(0, maxExpiries),
+    surfaceSource: 'live',
   };
 }
 
 // Client-side cache so the live refresh (every few seconds) doesn't re-hit the
-// Python/yfinance proxy each cycle. 60s is plenty for an options chain and
-// keeps load off the local Python runtime + the server rate limiter.
+// Python/yfinance proxy each cycle. Chain TTL is longer than spot — options
+// don't meaningfully update every few seconds on free feeds.
 interface YfChainCache {
   key: string;
   value: VolSnapshot | null;
   expiry: number;
+  fetchedAt: number;
 }
 let yfChainCache: YfChainCache | null = null;
-const YF_CHAIN_TTL = 60_000;
+const YF_CHAIN_TTL = 45_000;
+
+export function getYahooChainCacheAgeMs(): number | null {
+  if (!yfChainCache) return null;
+  return Date.now() - yfChainCache.fetchedAt;
+}
 
 export async function fetchYahooSnapshot(
   symbol: string,
   maxExpiries = 12,
   r = 0.0525,
   q = 0.013,
+  opts?: Omit<BuildSnapshotOptions, 'maxExpiries' | 'now'>,
 ): Promise<VolSnapshot | null> {
-  const key = `${symbol}:${maxExpiries}`;
+  const key = `${symbol.toUpperCase()}:${maxExpiries}:${r.toFixed(5)}:${q.toFixed(5)}:${opts?.rateForT ? 'term' : 'flat'}`;
   const now = Date.now();
   if (yfChainCache && yfChainCache.key === key && now < yfChainCache.expiry) {
     return yfChainCache.value;
   }
   try {
-    const res = await fetch(`/api/options/${symbol}?max=${maxExpiries * 20}`);
-    if (!res.ok) return null;
+    const res = await fetch(`/api/options/${encodeURIComponent(symbol)}?max=${maxExpiries}`);
+    if (!res.ok) {
+      // Brief negative cache so auto-refresh doesn't stampede a dead proxy,
+      // but long enough that a one-shot timeout doesn't stick for 45s.
+      yfChainCache = { key, value: null, expiry: now + 4_000, fetchedAt: now };
+      return null;
+    }
 
     const data: YahooResponse = await res.json();
-    const snap = buildYahooSnapshot(data, r, q, maxExpiries);
-    yfChainCache = { key, value: snap, expiry: now + YF_CHAIN_TTL };
-    return snap;
+    if (!data || !Array.isArray(data.quotes) || data.quotes.length < 5) {
+      yfChainCache = { key, value: null, expiry: now + 4_000, fetchedAt: now };
+      return null;
+    }
+    // Prefer chain-reported spot when present — critical for AAPL/QQQ IV solve.
+    if (!(data.spot > 0) && data.quotes[0]) {
+      data.spot = data.quotes[0].strike;
+    }
+    const snap = buildYahooSnapshot(data, r, q, {
+      maxExpiries,
+      rateForT: opts?.rateForT,
+      useParityDividend: opts?.useParityDividend,
+    });
+    // Only cache successful builds for the full TTL; empty/null gets a short TTL.
+    const ok = !!snap && snap.expiries.length > 0;
+    yfChainCache = {
+      key,
+      value: ok ? snap : null,
+      expiry: now + (ok ? YF_CHAIN_TTL : 4_000),
+      fetchedAt: now,
+    };
+    return ok ? snap : null;
   } catch {
+    yfChainCache = { key, value: null, expiry: now + 4_000, fetchedAt: now };
     return null;
   }
 }

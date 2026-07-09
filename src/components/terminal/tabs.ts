@@ -1,7 +1,21 @@
 import type { LucideIcon } from 'lucide-react';
-import { Activity, BarChart3, TrendingUp, Calculator, Zap, Table, LayoutDashboard, AlertTriangle, LineChart } from 'lucide-react';
+import {
+  LayoutDashboard, Activity, Layers, Calculator, Shield,
+  Bitcoin, Landmark,
+} from 'lucide-react';
 
-export type TabId = 'surface' | 'smile' | 'term' | 'greeks' | 'gex' | 'chain' | 'dashboard' | 'arbitrage' | 'market';
+/**
+ * Pro desk IA — 7 top-level tabs.
+ * Macro tools live under Macros & Rates (not a separate nav item).
+ */
+export type TabId =
+  | 'home'
+  | 'vol'
+  | 'positioning'
+  | 'greeks'
+  | 'desk'
+  | 'crypto'
+  | 'rates';
 
 export interface TabDef {
   id: TabId;
@@ -11,13 +25,11 @@ export interface TabDef {
 }
 
 export const TABS: TabDef[] = [
-  { id: 'surface', label: 'Vol Surface', hotkey: '1', icon: Activity },
-  { id: 'smile', label: 'Smile/Skew', hotkey: '2', icon: BarChart3 },
-  { id: 'term', label: 'Term Structure', hotkey: '3', icon: TrendingUp },
+  { id: 'home', label: 'Home', hotkey: '1', icon: LayoutDashboard },
+  { id: 'vol', label: 'Vol Structure', hotkey: '2', icon: Activity },
+  { id: 'positioning', label: 'Positioning', hotkey: '3', icon: Layers },
   { id: 'greeks', label: 'Greeks', hotkey: '4', icon: Calculator },
-  { id: 'gex', label: 'Gamma Exposure', hotkey: '5', icon: Zap },
-  { id: 'chain', label: 'Option Chain', hotkey: '6', icon: Table },
-  { id: 'dashboard', label: 'Dashboard', hotkey: '7', icon: LayoutDashboard },
-  { id: 'arbitrage', label: 'Arbitrage', hotkey: '8', icon: AlertTriangle },
-  { id: 'market', label: 'Quote', hotkey: '9', icon: LineChart },
+  { id: 'desk', label: 'MM Desk', hotkey: '5', icon: Shield },
+  { id: 'crypto', label: 'Crypto', hotkey: '6', icon: Bitcoin },
+  { id: 'rates', label: 'Macros & Rates', hotkey: '7', icon: Landmark },
 ];

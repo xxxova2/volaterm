@@ -41,7 +41,7 @@ describe('SmileView', () => {
       liveAvailable: false,
       loading: false,
       lastUpdate: Date.now(),
-      activeTab: 'smile',
+      activeTab: 'vol',
       displayMode: 'strike',
       selectedExpiry: null,
       playbackInterval: null,

@@ -92,16 +92,22 @@ export function useGreekSurfaceGeometry(greek: GreekKey): GreekSurfaceInfo | nul
     const xTicks = mapping.ticks;
     const xAxisLabel = mapping.axisLabel;
 
-    // Build the per-cell value grid. Prefer call quote, fall back to put.
+    // OTM market convention: put wing K < spot, call wing K ≥ spot.
+    // Mixing call+put deltas (or blindly preferring calls) makes 3D greek
+    // surfaces unreadable near ATM — same convention as the heatmap.
     const values: (number | null)[][] = [];
     for (let z = 0; z < nZ; z++) {
       const slice = slices[z]!;
       const row: (number | null)[] = [];
       for (let x = 0; x < nX; x++) {
         const strike = filteredStrikes[x]!;
-        const callQuote = slice.calls.find(q => q.strike === strike);
-        const putQuote = callQuote ? null : slice.puts.find(q => q.strike === strike);
-        const q = callQuote ?? putQuote;
+        const preferPut = strike < spot;
+        const primary = preferPut ? slice.puts : slice.calls;
+        const secondary = preferPut ? slice.calls : slice.puts;
+        const q =
+          primary.find(qq => qq.strike === strike)
+          ?? secondary.find(qq => qq.strike === strike)
+          ?? null;
         const v = q?.[greek] ?? null;
         row.push(v != null && Number.isFinite(v) ? v : null);
       }

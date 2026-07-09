@@ -1,159 +1,186 @@
+/**
+ * Bottom control strip — display mode, expiries, sources, help.
+ * Moved off the left rail to free horizontal space for desk content.
+ */
 import { useTerminalStore } from '../../store/terminalStore';
 import { fmtPrice, fmtPct, fmtInt } from '../../lib/format';
 import { cn } from '../../lib/utils';
 import type { DisplayMode } from '../../lib/options/types';
 
 export function SidePanel() {
-  const { snapshot, selectedExpiry, setSelectedExpiry, displayMode, setDisplayMode, source, liveAvailable, chainMode, setChainMode, explainHovers, toggleExplainHovers } = useTerminalStore();
+  const {
+    snapshot, selectedExpiry, setSelectedExpiry, displayMode, setDisplayMode,
+    source, liveAvailable, chainMode, setChainMode, explainHovers, toggleExplainHovers,
+    chainUsed, chainAvailable, spotSource,
+  } = useTerminalStore();
   const spot = snapshot?.spot ?? 0;
 
-  // Demo/Live badge: only show "Live" when the store is in live mode AND
-  // a live snapshot has actually been received. Otherwise this is demo data
-  // (synthetic or fallback). This avoids mis-labeling a live-mode attempt
-  // that hasn't yet connected as "Live".
   const sourceLabel = source === 'live' && liveAvailable ? 'Live' : 'Demo';
   const sourceDotClass = sourceLabel === 'Live' ? 'bg-emerald-400' : 'bg-amber';
 
+  const modes: { key: DisplayMode; label: string }[] = [
+    { key: 'strike', label: 'Strike' },
+    { key: 'moneyness', label: 'Mny' },
+    { key: 'delta', label: 'Δ' },
+  ];
+
   if (!snapshot) {
     return (
-      <aside className="w-56 border-r border-border bg-card p-3 flex flex-col gap-2">
-        <div className="text-xs text-muted-foreground animate-pulse">Loading...</div>
-      </aside>
+      <div
+        className="flex h-8 shrink-0 items-center border-t border-border bg-card px-2"
+        role="region"
+        aria-label="Display and data sources"
+      >
+        <div className="animate-pulse font-mono text-[10px] text-muted-foreground">Loading controls…</div>
+      </div>
     );
   }
 
-  const modes: { key: DisplayMode; label: string }[] = [
-    { key: 'strike', label: 'Strike' },
-    { key: 'moneyness', label: 'Moneyness' },
-    { key: 'delta', label: 'Delta' },
-  ];
+  const quoteCount = snapshot.expiries.reduce((s, e) => s + e.calls.length + e.puts.length, 0);
 
   return (
-    <aside className="w-56 border-r border-border bg-card flex flex-col overflow-y-auto">
-      <div className="p-2 border-b border-border">
-        <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Display</div>
-        <div className="flex gap-0.5">
-          {modes.map(m => (
-            <button
-              key={m.key}
-              onClick={() => setDisplayMode(m.key)}
-              className={cn(
-                'px-2 py-0.5 text-[10px] font-mono rounded',
-                displayMode === m.key
-                  ? 'bg-primary/20 text-primary'
-                  : 'text-muted-foreground hover:text-foreground',
-              )}
-            >
-              {m.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="p-2 border-b border-border">
-        <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Expiries</div>
-        <div className="flex flex-col gap-0.5 max-h-60 overflow-y-auto">
-          {snapshot.expiries.map(slice => (
-            <button
-              key={slice.expiry}
-              onClick={() => setSelectedExpiry(slice.expiry)}
-              className={cn(
-                'flex items-center justify-between px-2 py-1 text-[11px] font-mono rounded hover:bg-muted transition-colors',
-                selectedExpiry === slice.expiry ? 'bg-primary/10 text-primary' : 'text-foreground',
-              )}
-            >
-              <span>
-                {slice.dte}d
-                <span className="text-muted-foreground ml-1">{slice.expiry.slice(5)}</span>
-              </span>
-              <span className="tabular-nums">{slice.atmIV > 0 ? fmtPct(slice.atmIV, 1) : '—'}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="p-2 border-b border-border text-[10px] font-mono text-muted-foreground space-y-1">
-        <div className="flex justify-between">
-          <span>Spot</span>
-          <span className="tabular-nums text-foreground">{fmtPrice(spot)}</span>
-        </div>
-        <div className="flex justify-between">
-          <span>Rate</span>
-          <span className="tabular-nums">{fmtPct(snapshot.riskFreeRate)}</span>
-        </div>
-        <div className="flex justify-between">
-          <span>Div Yield</span>
-          <span className="tabular-nums">{fmtPct(snapshot.dividendYield)}</span>
-        </div>
-        <div className="flex justify-between">
-          <span>Expiries</span>
-          <span className="tabular-nums">{snapshot.expiries.length}</span>
-        </div>
-        <div className="flex justify-between">
-          <span>Quotes</span>
-          <span className="tabular-nums">{fmtInt(snapshot.expiries.reduce((s, e) => s + e.calls.length + e.puts.length, 0))}</span>
-        </div>
-      </div>
-
-      <div className="p-2 text-[10px] text-muted-foreground">
-        <div className="uppercase tracking-wider mb-1">Source</div>
-        <div className="flex items-center gap-1" data-testid="source-badge">
-          <span className={cn('inline-block w-1.5 h-1.5 rounded-full', sourceDotClass)} />
-          {sourceLabel}
-        </div>
-        {source === 'live' && (
-          <div className="mt-2">
-            <div className="uppercase tracking-wider mb-1">Chain</div>
-            <div className="flex gap-0.5">
+    <div
+      className="flex shrink-0 flex-col border-t border-border bg-card px-2 py-1 font-mono"
+      role="region"
+      aria-label="Display and data sources"
+    >
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+        {/* Display mode */}
+        <div className="flex items-center gap-1">
+          <span className="text-[9px] uppercase tracking-wider text-muted-foreground">Display</span>
+          <div className="flex gap-0.5">
+            {modes.map((m) => (
               <button
-                onClick={() => setChainMode('auto')}
+                key={m.key}
+                onClick={() => setDisplayMode(m.key)}
                 className={cn(
-                  'px-2 py-0.5 text-[10px] font-mono rounded',
-                  chainMode === 'auto' ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:text-foreground',
+                  'rounded px-1.5 py-0.5 text-[10px]',
+                  displayMode === m.key
+                    ? 'bg-primary/20 text-primary'
+                    : 'text-muted-foreground hover:text-foreground',
                 )}
               >
-                Auto
+                {m.label}
               </button>
-              <button
-                onClick={() => setChainMode('fmp')}
-                className={cn(
-                  'px-2 py-0.5 text-[10px] font-mono rounded',
-                  chainMode === 'fmp' ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:text-foreground',
-                )}
-              >
-                FMP
-              </button>
-              <button
-                onClick={() => setChainMode('yfinance')}
-                className={cn(
-                  'px-2 py-0.5 text-[10px] font-mono rounded',
-                  chainMode === 'yfinance' ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:text-foreground',
-                )}
-              >
-                yfinance
-              </button>
-            </div>
+            ))}
           </div>
-        )}
-      </div>
+        </div>
 
-      <div className="p-2 border-t border-border">
-        <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Help</div>
+        <span className="hidden h-3 w-px bg-border sm:block" aria-hidden />
+
+        {/* Expiries — horizontal scroll chips */}
+        <div className="flex min-w-0 flex-1 items-center gap-1">
+          <span className="shrink-0 text-[9px] uppercase tracking-wider text-muted-foreground">Exp</span>
+          <div className="flex max-w-full gap-0.5 overflow-x-auto scrollbar-none">
+            {snapshot.expiries.map((slice) => (
+              <button
+                key={slice.expiry}
+                onClick={() => setSelectedExpiry(slice.expiry)}
+                title={`${slice.expiry} · ATM IV ${slice.atmIV > 0 ? fmtPct(slice.atmIV, 1) : '—'}`}
+                className={cn(
+                  'shrink-0 rounded px-1.5 py-0.5 text-[10px] tabular-nums transition-colors',
+                  selectedExpiry === slice.expiry
+                    ? 'bg-primary/15 text-primary'
+                    : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                )}
+              >
+                {slice.dte}d
+                <span className="ml-0.5 opacity-70">{slice.expiry.slice(5)}</span>
+                {slice.atmIV > 0 && (
+                  <span className="ml-1 opacity-60">{fmtPct(slice.atmIV, 0)}</span>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <span className="hidden h-3 w-px bg-border md:block" aria-hidden />
+
+        {/* Snapshot metrics */}
+        <div className="flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground">
+          <span>
+            Spot <span className="tabular-nums text-foreground">{fmtPrice(spot)}</span>
+          </span>
+          <span>
+            r <span className="tabular-nums">{fmtPct(snapshot.riskFreeRate)}</span>
+          </span>
+          <span>
+            q <span className="tabular-nums">{fmtPct(snapshot.dividendYield)}</span>
+          </span>
+          {snapshot.expiries[0]?.forward != null && (
+            <span title="Put–call parity implied forward">
+              Fwd <span className="tabular-nums text-cyan">{fmtPrice(snapshot.expiries[0].forward)}</span>
+            </span>
+          )}
+          <span className="tabular-nums">
+            {snapshot.expiries.length}exp · {fmtInt(quoteCount)}q
+          </span>
+        </div>
+
+        <span className="hidden h-3 w-px bg-border lg:block" aria-hidden />
+
+        {/* Source / chain API */}
+        <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
+          <span className="text-[9px] uppercase tracking-wider text-muted-foreground">Source</span>
+          <span className="flex items-center gap-1" data-testid="source-badge">
+            <span className={cn('inline-block h-1.5 w-1.5 rounded-full', sourceDotClass)} />
+            {sourceLabel}
+          </span>
+          {source === 'live' && (
+            <>
+              {(['auto', 'fmp', 'yfinance', 'deribit'] as const).map((mode) => (
+                <button
+                  key={mode}
+                  onClick={() => setChainMode(mode)}
+                  title={
+                    mode === 'auto'
+                      ? 'Equities → yfinance, BTC/ETH → Deribit, FMP fallback'
+                      : mode === 'fmp'
+                        ? 'Financial Modeling Prep option chain'
+                        : mode === 'yfinance'
+                          ? 'Yahoo Finance via local Python proxy'
+                          : 'BTC/ETH only — Deribit public options'
+                  }
+                  className={cn(
+                    'rounded px-1.5 py-0.5 text-[10px]',
+                    chainMode === mode
+                      ? 'bg-primary/20 text-primary'
+                      : 'text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  {mode === 'yfinance' ? 'yf' : mode}
+                </button>
+              ))}
+              <span
+                className="text-muted-foreground"
+                data-testid="resolved-api"
+                title="Resolved from the last successful fetch"
+              >
+                chain:
+                <span className={cn('ml-0.5 tabular-nums', chainAvailable ? 'text-emerald-400' : 'text-amber')}>
+                  {chainAvailable ? chainUsed : 'synthetic'}
+                </span>
+                <span className="ml-1.5">spot:{spotSource}</span>
+              </span>
+            </>
+          )}
+        </div>
+
+        {/* Help */}
         <button
           onClick={toggleExplainHovers}
           data-testid="toggle-hints"
           className={cn(
-            'w-full flex items-center justify-between px-2 py-1 text-[11px] font-mono rounded hover:bg-muted transition-colors',
-            explainHovers ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:text-foreground',
+            'ml-auto shrink-0 rounded px-1.5 py-0.5 text-[10px]',
+            explainHovers
+              ? 'bg-primary/20 text-primary'
+              : 'text-muted-foreground hover:text-foreground',
           )}
+          title="Underlined labels show plain-English explanations on hover"
         >
-          <span>Hover hints</span>
-          <span>{explainHovers ? 'ON' : 'OFF'}</span>
+          Hints {explainHovers ? 'ON' : 'OFF'}
         </button>
-        <div className="text-[9px] text-muted-foreground mt-1 leading-snug">
-          Underlined labels show a plain-English explanation when you hover them.
-        </div>
       </div>
-    </aside>
+    </div>
   );
 }

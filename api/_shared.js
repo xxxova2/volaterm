@@ -78,8 +78,12 @@ export function mulberry32(seed) {
 // Memoized: the 30-year series is expensive to regenerate and should be
 // identical on every request, so compute it once and reuse.
 let spyHistoryCache = null;
+let spyHistoryLiveCache = null;
+let spyHistoryLiveAt = 0;
+const SPY_LIVE_TTL = 6 * 60 * 60 * 1000; // 6h
 
-export function buildSpyHistory() {
+/** Synthetic fallback (offline / no API key). */
+export function buildSpyHistorySynthetic() {
   if (spyHistoryCache) return spyHistoryCache;
   const rand = mulberry32(0x5dee5);
   const data = [];
@@ -102,6 +106,83 @@ export function buildSpyHistory() {
     });
   }
 
-  spyHistoryCache = { symbol: 'SPY', data };
+  spyHistoryCache = { symbol: 'SPY', data, source: 'synthetic' };
   return spyHistoryCache;
+}
+
+/** @deprecated use buildSpyHistory / buildSpyHistoryAsync */
+export function buildSpyHistory() {
+  return buildSpyHistorySynthetic();
+}
+
+/**
+ * Prefer real FMP SPY daily closes when an API key is available.
+ * Falls back to the deterministic synthetic series.
+ * Returns { symbol, data, source: 'fmp' | 'synthetic' }.
+ */
+export async function buildSpyHistoryAsync(apiKey, base = FMP_BASE) {
+  const now = Date.now();
+  if (spyHistoryLiveCache && now - spyHistoryLiveAt < SPY_LIVE_TTL) {
+    return spyHistoryLiveCache;
+  }
+  if (!apiKey) return buildSpyHistorySynthetic();
+
+  try {
+    // FMP free tier supports historical-price-eod/light; pull a long window.
+    const endpoint = 'historical-price-eod/light?symbol=SPY&limit=7500';
+    const { status, body } = await proxyFmp(endpoint, apiKey, base);
+    if (status !== 200 || !body) return buildSpyHistorySynthetic();
+
+    let bars = [];
+    if (Array.isArray(body)) bars = body;
+    else if (body && Array.isArray(body.historical)) bars = body.historical;
+    if (bars.length < 50) return buildSpyHistorySynthetic();
+
+    // FMP typically returns newest-first; sort ascending by date.
+    const sorted = bars
+      .map((b) => ({
+        date: String(b.date ?? ''),
+        close: Number(b.close),
+      }))
+      .filter((b) => b.date && isFinite(b.close) && b.close > 0)
+      .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+
+    if (sorted.length < 50) return buildSpyHistorySynthetic();
+
+    const data = [];
+    for (let i = 0; i < sorted.length; i++) {
+      const close = sorted[i].close;
+      const prev = i > 0 ? sorted[i - 1].close : close;
+      const ret = prev > 0 ? (close - prev) / prev : 0;
+      // Realized-vol proxy as a VIX-like stand-in (20d rolling, annualized).
+      let vix = 18;
+      if (i >= 20) {
+        let sum = 0;
+        let sum2 = 0;
+        for (let j = i - 19; j <= i; j++) {
+          const p0 = sorted[j - 1] ? sorted[j - 1].close : sorted[j].close;
+          const r = p0 > 0 ? Math.log(sorted[j].close / p0) : 0;
+          sum += r;
+          sum2 += r * r;
+        }
+        const n = 20;
+        const mean = sum / n;
+        const var_ = Math.max(0, sum2 / n - mean * mean);
+        vix = Math.min(80, Math.max(8, Math.sqrt(var_ * 252) * 100));
+      }
+      data.push({
+        date: sorted[i].date,
+        close: Math.round(close * 100) / 100,
+        return: Math.round(ret * 100000) / 100000,
+        logReturn: Math.round(Math.log(1 + ret) * 100000) / 100000,
+        vix: Math.round(vix * 10) / 10,
+      });
+    }
+
+    spyHistoryLiveCache = { symbol: 'SPY', data, source: 'fmp' };
+    spyHistoryLiveAt = now;
+    return spyHistoryLiveCache;
+  } catch {
+    return buildSpyHistorySynthetic();
+  }
 }

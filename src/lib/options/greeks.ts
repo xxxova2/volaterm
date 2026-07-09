@@ -56,24 +56,31 @@ export function computeGreeks(
 
   const delta = sign * eq * (type === 'call' ? normCdf(d1) : normCdf(-d1));
   const gamma = eq * pdf / (S * volSqrtT);
-  const vega = S * eq * pdf * sqrtT;
-  const theta = (-eq * S * pdf * vol / (2 * sqrtT)
+  // Raw mathematical vega (dV/dσ) and theta (dV/dT, T in years).
+  const vegaRaw = S * eq * pdf * sqrtT;
+  const thetaRaw = (-eq * S * pdf * vol / (2 * sqrtT)
     - r * K * ert * nd2
     + sign * q * S * eq * (type === 'call' ? normCdf(d1) : normCdf(-d1)));
+  // Market convention used across the terminal:
+  //   θ  → P&L per calendar day   (raw / 365)
+  //   ν  → P&L per 1 volatility point (raw / 100)
+  const vega = vegaRaw / 100;
+  const theta = thetaRaw / 365;
   const rho = sign * K * T * ert * (type === 'call' ? normCdf(d2) : normCdf(-d2));
 
   const price = type === 'call'
     ? S * eq * normCdf(d1) - K * ert * normCdf(d2)
     : K * ert * normCdf(-d2) - S * eq * normCdf(-d1);
 
+  // Higher-order greeks kept on the mathematical (raw-σ, year) scale of BS.
   const vanna = -eq * pdf * d2 / vol;
   const charm = eq * pdf * (2 * (r - q) * T - d2 * volSqrtT) / (2 * T * volSqrtT);
-  const volga = vega * d1 * d2 / vol;
+  const volga = vegaRaw * d1 * d2 / vol;
   const speed = -gamma * (d1 / volSqrtT + 1 / S);
   const veta = -S * eq * pdf * d1 * (r - q) / (volSqrtT * T);
   const color = -eq * pdf * (d1 / (volSqrtT * T) + (2 * (r - q) * T - d2 * volSqrtT) / (2 * T * volSqrtT)) / S;
   const zomma = gamma * (d1 * d2 - 1) / vol;
-  const ultima = -vega * (d1 * d2 * (1 - d1 * d2) + d1 * d1 + d2 * d2) / (vol * vol);
+  const ultima = -vegaRaw * (d1 * d2 * (1 - d1 * d2) + d1 * d1 + d2 * d2) / (vol * vol);
 
   return { price, delta, gamma, theta, vega, rho, vanna, charm, volga, speed, veta, color, zomma, ultima };
 }

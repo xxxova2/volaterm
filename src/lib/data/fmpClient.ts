@@ -135,7 +135,9 @@ function normalizePriceHistory(json: unknown): FmpPriceBar[] | null {
 }
 
 export async function fetchFmpQuote(symbol: string) {
-  const r = await fmpGet(`quote?symbol=${symbol}`, { ttl: 60_000 });
+  // Short TTL so live spot tracks the market; Free-tier still fine with
+  // adaptive closed-session intervals in the store.
+  const r = await fmpGet(`quote?symbol=${symbol}`, { ttl: 12_000 });
   return r.json as FmpQuote[] | null;
 }
 

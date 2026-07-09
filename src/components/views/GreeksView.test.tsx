@@ -94,24 +94,33 @@ describe('GreeksView heatmap selector', () => {
     expect(canvas).toBeInTheDocument();
 
     // All 5 sub-view buttons must be present.
-    for (const label of ['Heatmap', 'Profile', 'Sensitivity', 'By Expiry', '3D Surface']) {
+    for (const label of ['Heatmap', 'Profile', 'Sensitivity', 'By Expiry', '3D (visual)']) {
       expect(screen.getByText(label)).toBeInTheDocument();
     }
   });
 
-  it('clicking ATM ±10% reduces the number of strikes in the heatmap', () => {
+  it('clicking ATM ±10% tightens the moneyness band on the heatmap', () => {
     render(<GreeksView />);
 
     const canvas = document.querySelector('canvas');
     expect(canvas).toBeInTheDocument();
 
-    // Click ATM ±10% — the canvas should re-render (we check no error).
+    // Default is ATM ±20%; switch to ±10%.
     fireEvent.click(screen.getByText('ATM \u00b110%'));
     expect(screen.getByText('ATM \u00b110%').className).toContain('bg-amber');
 
-    // Restore to All.
+    // Expand to All.
     fireEvent.click(screen.getByText('All'));
     expect(screen.getByText('All').className).toContain('bg-amber');
+  });
+
+  it('renders OTM/Calls/Puts side selectors', () => {
+    render(<GreeksView />);
+    expect(screen.getByText('OTM')).toBeInTheDocument();
+    expect(screen.getByText('Calls')).toBeInTheDocument();
+    expect(screen.getByText('Puts')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Calls'));
+    expect(screen.getByText('Calls').className).toMatch(/bg-up|text-up/);
   });
 
   it('renders the diagnostics strip above the heatmap with seeded values', () => {

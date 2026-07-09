@@ -1,6 +1,6 @@
 # VOLATERM — AAA+ Options Trading Terminal
 
-Merged from three source projects into one unified institutional-grade options trading terminal.
+Institutional-grade options trading terminal: equity vol, positioning, Greeks, MM desk, crypto (Deribit), and macros & rates.
 
 ## Quick Start
 
@@ -8,44 +8,48 @@ Merged from three source projects into one unified institutional-grade options t
 npm run dev
 ```
 
-Launches Vite dev server (frontend) + Fastify API server (backend) concurrently.
+Launches Vite (frontend), Fastify API (`server.js`), and MacroVol Python API concurrently.
+
+Default ports: Vite `3000` (or `VITE_PORT`), API `3001` (or `PORT`), MacroVol `8765`.
 
 ## Features
 
-**Core Terminal (8 tabs)**
-- **Vol Surface** — 3D IV surface (Three.js, interactive OrbitControls, color-mapped by IV)
-- **Smile/Skew** — IV smile curves per expiry (Recharts, toggle moneyness/strike)
-- **Term Structure** — ATM IV vs DTE (sqrt scale, contango/backwardation indicators)
-- **Greeks** — Full Greeks heatmap (1st/2nd/3rd order: Delta, Gamma, Theta, Vega, Rho, Vanna, Charm, Volga, Speed, Veta, Color, Zomma, Ultima)
-- **Gamma Exposure** — Dealer GEX bar chart with flip point detection
-- **Option Chain** — Virtualized chain (react-window v2), calls/puts side-by-side
-- **Dashboard** — Portfolio Greeks, expected move, IV regime, key levels, OI by expiry
-- **SPY Dist** — 30-year SPY daily return distribution with normal overlay, VaR/CVaR, percentile markers, VIX regime coloring
+**Core desks (7 tabs)**
 
-**Analytics & Risk**
-- Portfolio Greeks aggregation
-- Scenario analysis (spot ±5% × IV ±20%)
-- Breakeven calculator
-- Expected Move (1SD from ATM straddle)
-- Max Pain calculation
-- IV Rank / IV Percentile
+| Hotkey | Desk | Contents |
+|--------|------|----------|
+| **1** | **Home** | Dashboard, portfolio strip, deep-links into desks |
+| **2** | **Vol Structure** | 3D IV surface, smile/skew, term structure, quality |
+| **3** | **Positioning** | Option chain, dealer GEX / γ-flip, key levels, parity edge |
+| **4** | **Greeks** | Heatmap, profile, sensitivity, by-expiry, 3D surface |
+| **5** | **MM Desk** | Blotter-first MM tools, scenarios, hedging |
+| **6** | **Crypto** | Dual BTC/ETH Deribit tape; optional 2× thin charts; full book for active underlier |
+| **7** | **Macros & Rates** | FRED/NYFed macro strip, STIR path, SERFF, UST curve, DV01 |
 
-**Data Sources**
-- **Synthetic demo data** — works fully offline with a realistic SVI-skewed surface. Used automatically whenever no live feed is reachable (no API key, or a live request fails).
-- **Live option chain** via **Yahoo Finance** (`yfinance` Python proxy at `/api/options`). This is the default live chain source on the Node/Docker server and the only working live chain source — FMP's `options/symbol` endpoint requires a *paid* FMP plan.
-- **Live enrichment** via **Financial Modeling Prep** (FMP): spot (`quote`), risk-free rates (`treasury-rates`), company profile, news, earnings calendar. The Free tier covers all of these. Requires `FMP_API_KEY`.
-- **yfinance history/info** (`/api/yf/history`, `/api/yf/info`) for price history and fundamentals on the local/Node server (FMP-primary with yfinance fallback).
+**Analytics & risk**
+- Portfolio Greeks, scenario analysis, breakeven, expected move, max pain
+- ATM IV from OTM-wing interpolation; dealer-style GEX; SVI readout / no-arb diagnostics
+
+**Data sources**
+- **Synthetic demo** — offline SVI surface when live feeds unavailable
+- **Live equity chain** — Yahoo Finance (`yfinance` proxy `/api/options`) on Node/Docker
+- **FMP enrichment** — spot, treasury, profile, news, earnings (`FMP_API_KEY`)
+- **Deribit public** — BTC/ETH options + funding
+- **MacroVol** — FRED / NY Fed / rates risk (`macrovol-api` on `:8765`)
+
+**UI system** (see `UI_UX_PLAN.md`, `DESIGN.md`)
+- Density dense/readable (**D**), desk section jump **[** **]**, LIVE/DELAYED/STALE freshness
+- Virtualized chain & STIR boards, CSV export, imply drawer, collapsible Rates sections
 
 ## Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
-| Frontend | React 19, TypeScript 6, Vite 8 |
-| 3D Charts | Three.js, @react-three/fiber, @react-three/drei |
-| 2D Charts | Recharts |
+| Frontend | React 19, TypeScript, Vite |
+| 3D / 2D | Three.js + R3F · Recharts |
 | State | Zustand |
-| Styling | Tailwind CSS v4, Bloomberg-terminal dark theme |
-| Backend | Fastify, Python (yfinance) |
+| Styling | Tailwind CSS v4, terminal dark theme |
+| Backend | Fastify, Python yfinance + MacroVol FastAPI |
 | Virtualization | react-window v2 |
 
 ## Architecture
@@ -53,62 +57,67 @@ Launches Vite dev server (frontend) + Fastify API server (backend) concurrently.
 ```
 src/
 ├── components/
-│   ├── terminal/     # Shell UI (Header, TabNav, Panel, PlaybackBar, StatusBar, Dialogs)
-│   ├── layout/       # Main layout + sidebar
-│   ├── views/        # 8 tab views (surface/, Smile, Term, Greeks, Gex, Chain, Dashboard, SpyDistribution)
-├── hooks/            # useKeyboardShortcuts
-├── store/            # Zustand stores (terminalStore, toastStore)
-├── lib/
-│   ├── options/      # Core: types, black-scholes, greeks, ivSolver, synthetic, analytics, svi, color, yahoo
-│   ├── data/        # Data providers (LiveProvider: yfinance chain + FMP/yfinance enrichment, demo provider)
-│   ├── format.ts     # Number formatting
-│   ├── utils.ts      # cn() classname utility
+│   ├── terminal/     # Shell (Header, TabNav, DeskSubNav, StatusBar, …)
+│   ├── layout/       # TerminalLayout + SidePanel
+│   ├── common/       # Freshness, VirtualRows, ImplyDrawer, CSV, …
+│   ├── macrovol/     # RatesPanel, MacroPanel, ApiSources
+│   └── views/        # Desk views (Home, Vol, Positioning, Greeks, Desk, Crypto, Rates)
+├── config/           # deskNav, constants
+├── hooks/            # keyboard, density, spot stream, …
+├── store/            # terminalStore, toastStore
+└── lib/
+    ├── options/      # BS, greeks, SVI, analytics, Deribit/Yahoo/FMP chain builders
+    ├── data/         # DataProvider (Live/Demo), FMP/yfinance/Deribit clients, freshness
+    └── macrovol/     # MacroVol HTTP client
 ```
+
+Product & frontend architecture design: **[`DESIGN.md`](DESIGN.md)**.
 
 ## Keybindings
 
 | Key | Action |
 |-----|--------|
-| 1-8 | Switch tabs |
-| R | Refresh data |
-| S | Search symbol |
-| Space | Play/pause historical playback |
-| ← → | Scrub frames |
-| L | Toggle Live/Demo |
-| ? | Toggle shortcuts overlay |
-| Tab | Cycle tabs |
+| `1`–`7` | Switch desks |
+| `Tab` | Next desk |
+| `[` `]` | Previous / next desk section |
+| `D` | Toggle dense / readable density |
+| `R` | Refresh data |
+| `S` | Symbol search |
+| `L` | Toggle Live / Demo |
+| `Space` | Play / pause playback |
+| `←` `→` | Scrub historical frames (when board unfocused) |
+| `↑` `↓` / `j` `k` | Board row focus (chain · SR3 · SERFF · calendars) |
+| `y` | Copy focused cell |
+| `c` | Focus option chain (Positioning desk) |
+| `Esc` | Clear board focus / close overlays |
+| `B` / `M` / `V` | Jump Crypto / MM / Vol |
+| `?` | Shortcuts overlay |
 
-## Keyboard Shortcuts
-
-Keys 1-8 switch between the 8 tab views. All data panels support:
-- Playback bar for scrubbing through 64 historical frames
-- Speed control (0.5x, 1x, 2x, 4x)
-- Live/Demo toggle
+Playback bar: scrub ~64 frames, speed 0.5×–4× when history is available.
 
 ## Environment Variables
 
-See `.env.example` — no API keys required by default.
+See `.env.example` — no API keys required for demo mode.
+
+Useful: `FMP_API_KEY`, `MACROVOL_API_URL`, `PORT`, `VITE_PORT`, `API_TARGET`.
+
+Optional OPRA skeleton (server only, off by default): `OPRA_ENABLED`, `OPRA_VENDOR` — see `DESIGN.md` PR-10.
 
 ## Deployment
 
-The app has **two deployment targets that share the same API logic** (see `api/_shared.js`):
+Two targets share API logic (`api/_shared.js`):
 
 | Target | How | What works |
 |--------|-----|------------|
-| **Vercel** | `vercel.json` builds the SPA; `api/` holds serverless functions (`health`, `fmp/stable/*`, `yf/history`, `yf/info`) | Synthetic demo + FMP enrichment (spot/treasury/profile/news/earnings). Set `FMP_API_KEY` in the Vercel project env. The live option chain is **not** available (no Python runtime). |
-| **Docker / Render / Node** | `Dockerfile` → `node server.js` | Everything above **plus** the live Yahoo option chain (via the Python `yfinance` proxy at `/api/options`). |
+| **Vercel** | SPA + serverless `api/` | Demo + FMP enrichment. No Python chain. |
+| **Docker / Node** | `Dockerfile` → `node server.js` | Full stack incl. Yahoo chain + MacroVol proxy |
 
-> Note: The live Yahoo Finance option chain requires a Python runtime (`yfinance`), so `/api/options`
-> only works on the Node/Docker server, not on Vercel's JS-only functions. On Vercel the
-> terminal runs in synthetic/demo mode (fully functional) and uses FMP (and `yf/*`) for enrichment.
-
-The Vercel FMP proxy and the Fastify proxy share the same endpoint allowlist
-(`quote`, `treasury-rates`, `etf/holdings`) defined in `api/_shared.js`.
+> Live Yahoo chain needs Python (`yfinance`). On Vercel the terminal runs synthetic surface + FMP enrichment.
 
 ## Merged From
 
 | Source | Strengths |
 |--------|-----------|
-| `/home/kalde/iv surface` (uivi) | Full Greeks (1st/2nd/3rd order), SVI parameterization, react-window chain, Plotly.js 3D surface |
-| `/home/kalde/newiv` | Polished UI shell, keyboard shortcuts, historical playback, Three.js 3D surface, analytics |
-| `trader-terminal-app.zip` | Design predecessor to newiv (no unique features beyond newiv) |
+| iv surface (uivi) | Full Greeks, SVI, react-window chain |
+| newiv | Shell, shortcuts, playback, Three.js surface |
+| trader-terminal-app | Design predecessor |

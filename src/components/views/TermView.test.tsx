@@ -41,7 +41,7 @@ describe('TermView', () => {
       liveAvailable: false,
       loading: false,
       lastUpdate: Date.now(),
-      activeTab: 'term',
+      activeTab: 'vol',
       displayMode: 'strike',
       selectedExpiry: null,
       playbackInterval: null,

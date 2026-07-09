@@ -7,38 +7,90 @@ import { useTerminalStore } from '../../store/terminalStore';
 describe('StatusBar', () => {
   it('renders source indicator and contract info', () => {
     useTerminalStore.setState({
-      symbol: 'SPY', source: 'demo', lastUpdate: Date.now(),
-      fmpQuote: null, liveRFR: null,
+      symbol: 'SPY',
+      source: 'demo',
+      lastUpdate: Date.now(),
+      lastSpotUpdate: 0,
+      lastChainUpdate: 0,
+      fmpQuote: null,
+      liveRFR: null,
       snapshot: null,
+      chainUsed: 'synthetic',
+      spotSource: 'synthetic',
+      chainAvailable: false,
+      streamConnected: false,
+      historyMode: 'synthetic',
+      historicalFrames: [],
+      session: { isOpen: false, phase: 'closed', minutesSinceOpen: null },
     });
     render(<StatusBar />);
     expect(screen.getByText(/SPY/)).toBeTruthy();
-    expect(screen.getByText('DEMO')).toBeTruthy();
+    // Dual chips: spot + chain may both show DEMO in demo mode
+    expect(screen.getAllByText('DEMO').length).toBeGreaterThanOrEqual(1);
   });
 
-  it('shows FMP price when available', () => {
+  it('shows spot price when available', () => {
     useTerminalStore.setState({
-      symbol: 'SPY', source: 'live', lastUpdate: Date.now(),
+      symbol: 'SPY',
+      source: 'live',
+      lastUpdate: Date.now(),
+      lastSpotUpdate: Date.now(),
+      lastChainUpdate: Date.now(),
       fmpQuote: {
-        symbol: 'SPY', name: '', price: 500.50,
-        changePercentage: 0, change: 0, dayLow: 0, dayHigh: 0,
-        yearHigh: 0, yearLow: 0, volume: 0, marketCap: 0,
-        priceAvg50: 0, priceAvg200: 0, exchange: '',
-        open: 0, previousClose: 0, timestamp: Date.now(),
+        symbol: 'SPY',
+        name: '',
+        price: 500.5,
+        changePercentage: 0,
+        change: 0,
+        dayLow: 0,
+        dayHigh: 0,
+        yearHigh: 0,
+        yearLow: 0,
+        volume: 0,
+        marketCap: 0,
+        priceAvg50: 0,
+        priceAvg200: 0,
+        exchange: '',
+        open: 0,
+        previousClose: 0,
+        timestamp: Date.now(),
       } as any,
-      liveRFR: null, snapshot: null,
+      liveRFR: null,
+      snapshot: null,
+      chainUsed: 'yfinance',
+      spotSource: 'fmp',
+      chainAvailable: true,
+      streamConnected: true,
+      historyMode: 'live',
+      historicalFrames: [{ snapshot: null as any, surface: null as any, timestamp: Date.now() }],
+      session: { isOpen: true, phase: 'open', minutesSinceOpen: 60 },
     });
     render(<StatusBar />);
-    expect(screen.getByText(/FMP/)).toBeTruthy();
+    expect(screen.getByText(/spot:500/)).toBeTruthy();
+    expect(screen.getByText(/chain:yfinance/)).toBeTruthy();
+    expect(screen.getByText('RTH')).toBeTruthy();
+    expect(screen.getByText('SSE')).toBeTruthy();
   });
 
   it('shows live RFR when available', () => {
     useTerminalStore.setState({
-      symbol: 'SPY', source: 'live', lastUpdate: Date.now(),
-      fmpQuote: null, liveRFR: 0.0398,
+      symbol: 'SPY',
+      source: 'live',
+      lastUpdate: Date.now(),
+      lastSpotUpdate: Date.now(),
+      lastChainUpdate: Date.now(),
+      fmpQuote: null,
+      liveRFR: 0.0398,
       snapshot: null,
+      chainUsed: 'synthetic',
+      spotSource: 'synthetic',
+      chainAvailable: false,
+      streamConnected: false,
+      historyMode: 'synthetic',
+      historicalFrames: [],
+      session: { isOpen: false, phase: 'after', minutesSinceOpen: 400 },
     });
     render(<StatusBar />);
-    expect(screen.getByText(/RFR/)).toBeTruthy();
+    expect(screen.getByText(/RFR:/)).toBeTruthy();
   });
 });

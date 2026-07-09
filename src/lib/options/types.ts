@@ -81,6 +81,24 @@ export interface SVIFit {
   samples: number;
 }
 
+/** Listed futures / perpetual mark (Deribit, etc.) for market basis. */
+export interface FuturesMark {
+  instrument: string;
+  /** ISO date YYYY-MM-DD; null for perpetual */
+  expiry: string | null;
+  /** Calendar days to expiry; null for perpetual */
+  dte: number | null;
+  /** Mark price in quote currency (USD for Deribit BTC/ETH) */
+  mark: number;
+  /** Index / spot at fetch */
+  index: number;
+  /** mark − index */
+  basis: number;
+  /** Annualized (mark/index − 1) / T when T known */
+  annCarry: number | null;
+  isPerp?: boolean;
+}
+
 export interface VolSnapshot {
   symbol: string;
   spot: number;
@@ -88,6 +106,17 @@ export interface VolSnapshot {
   dividendYield: number;
   timestamp: number;
   expiries: ExpirySlice[];
+  /** How the surface was built (live chain vs synthetic fallback). */
+  surfaceSource?: 'live' | 'synthetic';
+  /**
+   * Contract multiplier for GEX / notional (equities 100, Deribit crypto 1).
+   * Defaults to 100 when omitted.
+   */
+  contractSize?: number;
+  /** Optional annualized funding (crypto perps) for basis/carry tools. */
+  fundingAnn?: number;
+  /** Live futures / perp marks when available (Deribit). */
+  futuresMarks?: FuturesMark[];
 }
 
 export interface ExpirySlice {
@@ -96,6 +125,12 @@ export interface ExpirySlice {
   calls: OptionQuote[];
   puts: OptionQuote[];
   atmIV: number;
+  /** Implied forward from put–call parity (when available). */
+  forward?: number;
+  /** Tenor-matched risk-free rate used for this slice. */
+  riskFreeRate?: number;
+  /** Effective continuous dividend yield used for this slice. */
+  dividendYield?: number;
 }
 
 export interface HistoricalFrame {
@@ -105,7 +140,16 @@ export interface HistoricalFrame {
 }
 
 export type DisplayMode = 'strike' | 'moneyness' | 'delta';
-export type ActiveTab = 'surface' | 'smile' | 'term' | 'greeks' | 'gex' | 'chain' | 'dashboard' | 'arbitrage' | 'market';
+/** Top-level desk tabs — keep in sync with components/terminal/tabs.ts */
+export type ActiveTab =
+  | 'home'
+  | 'vol'
+  | 'positioning'
+  | 'greeks'
+  | 'desk'
+  | 'crypto'
+  | 'rates';
+
 
 export interface GreeksProfile {
   strikes: number[];

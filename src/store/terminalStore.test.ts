@@ -18,7 +18,7 @@ describe('terminalStore', () => {
       liveAvailable: false,
       loading: false,
       lastUpdate: Date.now(),
-      activeTab: 'surface',
+      activeTab: 'home',
       displayMode: 'strike',
       selectedExpiry: null,
       playbackInterval: null,

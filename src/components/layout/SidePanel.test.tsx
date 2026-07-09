@@ -35,7 +35,7 @@ function seedStore(overrides: Partial<ReturnType<typeof useTerminalStore.getStat
     liveAvailable: false,
     loading: false,
     lastUpdate: Date.now(),
-    activeTab: 'surface',
+    activeTab: 'home',
     displayMode: 'strike',
     selectedExpiry: null,
     playbackInterval: null,

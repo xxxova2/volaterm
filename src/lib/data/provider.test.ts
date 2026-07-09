@@ -7,28 +7,49 @@ const providerMod = await import('./provider');
 const fmpClient = await import('./fmpClient');
 const yahoo = await import('../options/yahoo');
 
+// Realistic ATM-centered strikes for SPY @ 500 so IV solve / intrinsic checks pass.
+const SPOT = 500;
+const STRIKES = [460, 480, 490, 500, 510, 520, 540];
+const EXPIRY = '2026-12-18';
+
+/** Rough BS-ish mid so quotes clear intrinsic + liquidity filters. */
+function roughMid(type: 'call' | 'put', strike: number): number {
+  const intrinsic = type === 'call' ? Math.max(SPOT - strike, 0) : Math.max(strike - SPOT, 0);
+  return Math.max(0.5, intrinsic + 8);
+}
+
 // Helper to build a minimal valid FMP option chain payload.
 function fmpChain() {
-  const mk = (type: 'call' | 'put', strike: number) => ({
-    optionType: type, strike, bid: 1, ask: 2, last: 1.5,
-    openInterest: 10, volume: 5, impliedVolatility: 0.2, expirationDate: '2026-08-10',
-  });
+  const mk = (type: 'call' | 'put', strike: number) => {
+    const mid = roughMid(type, strike);
+    return {
+      optionType: type, strike,
+      bid: mid * 0.95, ask: mid * 1.05, last: mid,
+      openInterest: 10, volume: 5, impliedVolatility: 0.2, expirationDate: EXPIRY,
+    };
+  };
   const data = [];
-  for (const s of [90, 95, 100, 105, 110]) {
+  for (const s of STRIKES) {
     data.push(mk('call', s));
     data.push(mk('put', s));
   }
-  return [{ expirationDate: '2026-08-10', data }];
+  return [{ expirationDate: EXPIRY, data }];
 }
 function yfChain() {
   const quotes = [];
-  for (const s of [90, 95, 100, 105, 110]) {
-    quotes.push({ strike: s, expiry: '2026-08-10', type: 'call', bid: 1, ask: 2, last: 1.5, iv: 0.2, volume: 5, openInterest: 10 });
-    quotes.push({ strike: s, expiry: '2026-08-10', type: 'put', bid: 1, ask: 2, last: 1.5, iv: 0.2, volume: 5, openInterest: 10 });
+  for (const s of STRIKES) {
+    for (const type of ['call', 'put'] as const) {
+      const mid = roughMid(type, s);
+      quotes.push({
+        strike: s, expiry: EXPIRY, type,
+        bid: mid * 0.95, ask: mid * 1.05, last: mid,
+        iv: 0.2, volume: 5, openInterest: 10,
+      });
+    }
   }
-  return { symbol: 'SPY', spot: 500, expirations: ['2026-08-10'], quotes, timestamp: 0 };
+  return { symbol: 'SPY', spot: SPOT, expirations: [EXPIRY], quotes, timestamp: 0 };
 }
-function quote(price: number) {
+function quote(price: number = SPOT) {
   return res([{ symbol: 'SPY', price }]);
 }
 function res(body: unknown, ok = true) {
@@ -91,5 +112,23 @@ describe('LiveProvider auto chain source', () => {
     const snap = await provider.getSnapshot('SPY', { chainMode: 'fmp' });
     expect(provider.lastChainSource).toBe('fmp');
     expect(snap!.spot).toBe(500);
+  });
+});
+
+describe('DataProvider seam (PR-07)', () => {
+  it('getProvider remains the store entry and serves snapshots', async () => {
+    const demo = providerMod.getProvider('demo');
+    expect(demo.id).toBe('demo');
+    const snap = await demo.getSnapshot('SPY');
+    expect(snap).not.toBeNull();
+    expect(snap!.symbol).toBe('SPY');
+    expect(providerMod.isStreamingProvider(demo)).toBe(false);
+  });
+
+  it('HttpSnapshotTransport returns null on failed fetch', async () => {
+    const transport = new providerMod.HttpSnapshotTransport(async () => {
+      throw new Error('network');
+    });
+    expect(await transport.getJson('http://x')).toBeNull();
   });
 });

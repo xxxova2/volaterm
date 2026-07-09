@@ -53,11 +53,13 @@ function computeSkewMetrics(snapshot: ReturnType<typeof useTerminalStore.getStat
   const iv25p = interpolateIV(putQuotes, -0.25);
   const iv10p = interpolateIV(putQuotes, -0.10);
 
+  // Equity desk convention: RR = put wing − call wing (rich puts → positive RR).
+  // Fly = average wing − ATM (smile curvature).
   return {
     atmIV,
-    rr25: iv25c != null && iv25p != null ? iv25c - iv25p : null,
+    rr25: iv25c != null && iv25p != null ? iv25p - iv25c : null,
     fly25: iv25c != null && iv25p != null ? (iv25c + iv25p) / 2 - atmIV : null,
-    rr10: iv10c != null && iv10p != null ? iv10c - iv10p : null,
+    rr10: iv10c != null && iv10p != null ? iv10p - iv10c : null,
   };
 }
 
@@ -214,7 +216,8 @@ export function SmileView() {
           <div className="flex gap-3 px-3 py-1 border-b border-border text-[10px] font-mono items-center">
             <span className="text-muted-foreground"><Explain term="atmIV">ATM</Explain>: <span className="text-foreground">{(skewMetrics.atmIV * 100).toFixed(1)}%</span></span>
             <span className="text-border">|</span>
-            <span className="text-muted-foreground"><Explain term="riskReversal">25Δ RR</Explain>:
+            <span className="text-muted-foreground" title="RR = IV(25Δ put) − IV(25Δ call); + = put wing richer">
+              <Explain term="riskReversal">25Δ RR</Explain>:
               <span className={skewMetrics.rr25 != null ? (skewMetrics.rr25 > 0 ? ' text-up' : ' text-down') : ' text-muted'}>
                 {skewMetrics.rr25 != null ? `${skewMetrics.rr25 > 0 ? '+' : ''}${(skewMetrics.rr25 * 100).toFixed(2)}%` : ' —'}
               </span>
@@ -222,7 +225,8 @@ export function SmileView() {
             <span className="text-border">|</span>
             <span className="text-muted-foreground"><Explain term="butterfly">25Δ Fly</Explain>: <span className="text-purple">{skewMetrics.fly25 != null ? `${(skewMetrics.fly25 * 100).toFixed(2)}%` : '—'}</span></span>
             <span className="text-border">|</span>
-            <span className="text-muted-foreground"><Explain term="riskReversal">10Δ RR</Explain>:
+            <span className="text-muted-foreground" title="RR = IV(10Δ put) − IV(10Δ call)">
+              <Explain term="riskReversal">10Δ RR</Explain>:
               <span className={skewMetrics.rr10 != null ? (skewMetrics.rr10 > 0 ? ' text-up' : ' text-down') : ' text-muted'}>
                 {skewMetrics.rr10 != null ? `${skewMetrics.rr10 > 0 ? '+' : ''}${(skewMetrics.rr10 * 100).toFixed(2)}%` : ' —'}
               </span>

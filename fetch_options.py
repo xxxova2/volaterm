@@ -1,9 +1,23 @@
+#!/usr/bin/env python3
+"""Fetch an option chain via yfinance and emit JSON on stdout.
+
+Usage:
+  python3 fetch_options.py SYMBOL [MAX_EXPIRIES]
+
+MAX_EXPIRIES defaults to 12. Spot prefers fast_info over the heavy info dict.
+"""
 import json
 import sys
 import time
 import yfinance as yf
 
 symbol = sys.argv[1] if len(sys.argv) > 1 else "SPY"
+try:
+    max_expiries = int(sys.argv[2]) if len(sys.argv) > 2 else 12
+except ValueError:
+    max_expiries = 12
+max_expiries = max(1, min(max_expiries, 24))
+
 
 def safe_int(v):
     try:
@@ -13,6 +27,7 @@ def safe_int(v):
     except Exception:
         return 0
 
+
 def safe_float(v):
     try:
         if v is None or v != v:
@@ -21,13 +36,40 @@ def safe_float(v):
     except Exception:
         return 0.0
 
+
+def resolve_spot(ticker):
+    """Prefer fast_info (cheap) then fall back to info fields."""
+    try:
+        fi = getattr(ticker, "fast_info", None)
+        if fi is not None:
+            for key in ("last_price", "lastPrice", "regular_market_price", "regularMarketPrice"):
+                try:
+                    v = fi[key] if hasattr(fi, "__getitem__") else getattr(fi, key, None)
+                except Exception:
+                    v = getattr(fi, key, None) if not hasattr(fi, "__getitem__") else None
+                if v is not None:
+                    f = safe_float(v)
+                    if f > 0:
+                        return f
+    except Exception:
+        pass
+    try:
+        info = ticker.info or {}
+        for key in ("regularMarketPrice", "currentPrice", "previousClose"):
+            f = safe_float(info.get(key))
+            if f > 0:
+                return f
+    except Exception:
+        pass
+    return 0.0
+
+
 try:
     ticker = yf.Ticker(symbol)
-    spot = ticker.info.get("regularMarketPrice") or ticker.info.get("previousClose", 0)
-    if not spot or spot != spot:
-        spot = 0
+    spot = resolve_spot(ticker)
 
-    expirations = ticker.options[:8]
+    all_exps = list(ticker.options or [])
+    expirations = all_exps[:max_expiries]
     quotes = []
 
     for exp in expirations:

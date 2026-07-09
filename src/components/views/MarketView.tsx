@@ -82,11 +82,24 @@ export function MarketView() {
       className="h-full"
       actions={
         <div className="flex items-center gap-1">
-          <SourceChip label="Spot" ok={spotSource === 'fmp'} source={spotSource === 'fmp' ? 'FMP' : 'Synthetic'} />
+          <SourceChip
+            label="Spot"
+            ok={spotSource !== 'synthetic'}
+            source={
+              spotSource === 'fmp' ? 'FMP'
+                : spotSource === 'yfinance' ? 'yfinance'
+                  : spotSource === 'deribit' ? 'Deribit'
+                    : 'Synthetic'
+            }
+          />
           <SourceChip
             label="Chain"
             ok={chainAvailable}
-            source={chainAvailable ? chainUsed : 'Synthetic'}
+            source={
+              chainAvailable
+                ? (chainMode === 'auto' ? `auto→${chainUsed}` : chainUsed)
+                : 'Synthetic'
+            }
           />
           <SourceChip label="Hist" ok={historySource !== 'none'} source={historySource === 'none' ? 'None' : historySource === 'fmp' ? 'FMP' : 'yfinance'} />
           <SourceChip label="Fund" ok={profileSource !== 'none'} source={profileSource === 'none' ? 'None' : profileSource === 'fmp' ? 'FMP' : 'yfinance'} />
@@ -119,6 +132,13 @@ export function MarketView() {
                 className={cn('px-1.5 py-0.5 rounded', chainMode === 'yfinance' ? 'bg-primary/20 text-primary' : 'text-muted-foreground')}
               >
                 yfinance
+              </button>
+              <button
+                onClick={() => setChainMode('deribit')}
+                className={cn('px-1.5 py-0.5 rounded', chainMode === 'deribit' ? 'bg-primary/20 text-primary' : 'text-muted-foreground')}
+                title="BTC/ETH Deribit public chain"
+              >
+                Deribit
               </button>
             </div>
           </div>

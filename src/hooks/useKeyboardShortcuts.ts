@@ -11,9 +11,39 @@ export function useKeyboardShortcuts(shortcuts: ShortcutMap) {
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
 
-      const key = e.key === ' ' ? 'space' : e.key.toLowerCase();
+      // Preserve [ ] before lowercasing (toLowerCase is fine for these)
+      const raw = e.key;
+      if (raw === '[' || raw === ']') {
+        e.preventDefault();
+        ref.current[raw]?.();
+        return;
+      }
+      const key = raw === ' ' ? 'space' : raw.toLowerCase();
       if (key >= '1' && key <= '9') {
         ref.current[`tab${key}`]?.();
+        return;
+      }
+      // Arrow keys
+      if (raw === 'ArrowLeft') {
+        ref.current.arrowleft?.();
+        return;
+      }
+      if (raw === 'ArrowRight') {
+        ref.current.arrowright?.();
+        return;
+      }
+      if (raw === 'ArrowUp') {
+        e.preventDefault();
+        ref.current.arrowup?.();
+        return;
+      }
+      if (raw === 'ArrowDown') {
+        e.preventDefault();
+        ref.current.arrowdown?.();
+        return;
+      }
+      if (raw === 'Escape') {
+        ref.current.escape?.();
         return;
       }
       ref.current[key]?.();

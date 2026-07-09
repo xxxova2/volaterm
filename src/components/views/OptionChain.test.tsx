@@ -39,7 +39,7 @@ describe('OptionChain', () => {
       liveAvailable: false,
       loading: false,
       lastUpdate: Date.now(),
-      activeTab: 'chain',
+      activeTab: 'positioning',
       displayMode: 'strike',
       selectedExpiry: null,
       playbackInterval: null,

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback, lazy, Suspense } from 'react';
 import { useTerminalStore } from '../../store/terminalStore';
 import { fmtPrice, fmtSigned } from '../../lib/format';
 import { cn } from '../../lib/utils';
@@ -11,22 +11,36 @@ import { DiagnosticsStrip } from './DiagnosticsStrip';
 import { GREEK_META, type GreekKey, type HeatmapCell } from './greeksTypes';
 import { computeHeatmapAggregates } from './greeksUtils';
 import { Explain } from '../common/Explain';
+import type { OptionQuote } from '../../lib/options/types';
 
+const Greeks10View = lazy(() =>
+  import('./Greeks10View').then((m) => ({ default: m.Greeks10View })),
+);
+
+type GreeksEdition = 'terminal' | 'greeks10';
 type SubView = 'heatmap' | 'profile' | 'sensitivity' | 'byexpiry' | 'surface3d';
 type MoneynessRange = 'all' | 'atm10' | 'atm20';
+/** Which side's greeks to plot. OTM = market convention (put K<S, call K≥S). */
+type QuoteSide = 'otm' | 'calls' | 'puts';
 
 const MONEYNESS_OPTIONS: { id: MoneynessRange; label: string }[] = [
-  { id: 'all', label: 'All' },
   { id: 'atm10', label: 'ATM ±10%' },
   { id: 'atm20', label: 'ATM ±20%' },
+  { id: 'all', label: 'All' },
 ];
 
-const SUB_VIEWS: { id: SubView; label: string }[] = [
-  { id: 'heatmap', label: 'Heatmap' },
-  { id: 'profile', label: 'Profile' },
-  { id: 'sensitivity', label: 'Sensitivity' },
-  { id: 'byexpiry', label: 'By Expiry' },
-  { id: 'surface3d', label: '3D Surface' },
+const QUOTE_SIDE_OPTIONS: { id: QuoteSide; label: string }[] = [
+  { id: 'otm', label: 'OTM' },
+  { id: 'calls', label: 'Calls' },
+  { id: 'puts', label: 'Puts' },
+];
+
+const SUB_VIEWS: { id: SubView; label: string; domId: string }[] = [
+  { id: 'heatmap', label: 'Heatmap', domId: 'greeks-sub-heatmap' },
+  { id: 'profile', label: 'Profile', domId: 'greeks-sub-profile' },
+  { id: 'sensitivity', label: 'Sensitivity', domId: 'greeks-sub-sensitivity' },
+  { id: 'byexpiry', label: 'By Expiry', domId: 'greeks-sub-byexpiry' },
+  { id: 'surface3d', label: '3D (visual)', domId: 'greeks-sub-surface3d' },
 ];
 
 function moneynessThreshold(range: MoneynessRange): number {
@@ -50,99 +64,229 @@ function cellColor(v: number, min: number, max: number, diverging: boolean): str
   return `rgba(77, 143, 240, ${0.08 + t * 0.85})`;
 }
 
+/**
+ * Build a dense strike axis near ATM by snapping a uniform moneyness grid
+ * onto real listed strikes. Avoids the sparse "union of all expiries" grid
+ * that left most heatmap cells empty on equity chains.
+ */
+function buildStrikeAxis(
+  allStrikes: number[],
+  spot: number,
+  range: MoneynessRange,
+  targetCols = 21,
+): number[] {
+  if (allStrikes.length === 0 || !(spot > 0)) return [];
+  const thr = moneynessThreshold(range);
+  const band = allStrikes.filter((k) => thr === Infinity || Math.abs(k - spot) / spot <= thr);
+  const pool = band.length >= 3 ? band : allStrikes;
+
+  // Uniform moneyness targets, then nearest listed strike (deduped).
+  const lo = thr === Infinity ? pool[0]! / spot : Math.max(pool[0]! / spot, 1 - thr);
+  const hi = thr === Infinity ? pool[pool.length - 1]! / spot : Math.min(pool[pool.length - 1]! / spot, 1 + thr);
+  const n = Math.min(targetCols, pool.length);
+  const out: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const m = n === 1 ? 1 : lo + (hi - lo) * (i / (n - 1));
+    const target = spot * m;
+    let best = pool[0]!;
+    let bestD = Math.abs(best - target);
+    for (const k of pool) {
+      const d = Math.abs(k - target);
+      if (d < bestD) {
+        best = k;
+        bestD = d;
+      }
+    }
+    if (out.length === 0 || out[out.length - 1] !== best) out.push(best);
+  }
+  return out;
+}
+
+/** OTM convention: put below spot, call at/above. Then nearest strike within tol. */
+function pickHeatmapQuote(
+  calls: OptionQuote[],
+  puts: OptionQuote[],
+  strike: number,
+  spot: number,
+  side: QuoteSide,
+  tol: number,
+): OptionQuote | null {
+  const preferPuts = side === 'puts' || (side === 'otm' && strike < spot);
+  const primary = preferPuts ? puts : calls;
+  const secondary = preferPuts ? calls : puts;
+
+  const nearest = (qs: OptionQuote[]): OptionQuote | null => {
+    let best: OptionQuote | null = null;
+    let bestD = Infinity;
+    for (const q of qs) {
+      const d = Math.abs(q.strike - strike);
+      if (d < bestD) {
+        bestD = d;
+        best = q;
+      }
+    }
+    return best != null && bestD <= tol ? best : null;
+  };
+
+  return nearest(primary) ?? nearest(secondary);
+}
+
+function greekValue(q: OptionQuote | null, key: GreekKey): number | null {
+  if (!q) return null;
+  const v = q[key];
+  return v != null && isFinite(v) ? v : null;
+}
+
 export function GreeksView() {
   const snapshot = useTerminalStore(s => s.snapshot);
   const sviReadout = useTerminalStore(s => s.sviReadout);
   const arbResult = useTerminalStore(s => s.arbResult);
+  // Default Terminal edition — in-process chain/snapshot Greeks (tests + desk keyboard path).
+  // Users can switch to MacroVol Greeks 1.0 from the edition toggle.
+  const [edition, setEdition] = useState<GreeksEdition>('terminal');
   const [subView, setSubView] = useState<SubView>('heatmap');
   const [selectedGreek, setSelectedGreek] = useState<GreekKey>('delta');
-  const [showPuts, setShowPuts] = useState(true);
-  const [moneynessRange, setMoneynessRange] = useState<MoneynessRange>('all');
+  const [quoteSide, setQuoteSide] = useState<QuoteSide>('otm');
+  const [moneynessRange, setMoneynessRange] = useState<MoneynessRange>('atm20');
   const [sortMode, setSortMode] = useState<'strike' | 'delta'>('strike');
   const [hoverCell, setHoverCell] = useState<HeatmapCell | null>(null);
   const [selectedCell, setSelectedCell] = useState<HeatmapCell | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [dim, setDim] = useState({ w: 600, h: 400 });
+  const setDeskContext = useTerminalStore((s) => s.setDeskContext);
+
+  useEffect(() => {
+    const meta = SUB_VIEWS.find((s) => s.id === subView);
+    setDeskContext({ id: meta?.domId ?? null, label: meta?.label ?? 'Heatmap', apis: [] });
+    return () => setDeskContext({ id: null, label: null, apis: [] });
+  }, [subView, setDeskContext]);
 
   const portfolio = useMemo(() => snapshot ? portfolioGreeks(snapshot) : null, [snapshot]);
   const move = useMemo(() => snapshot ? impliedMove(snapshot) : null, [snapshot]);
 
   const diverging = GREEK_META.find(g => g.key === selectedGreek)?.diverging ?? false;
 
-  const { rows, cols, cellMatrix, min, max } = useMemo<{
+  const { rows, cols, cellMatrix, min, max, fillPct } = useMemo<{
     rows: { expiry: string; dte: number }[];
     cols: number[];
     cellMatrix: HeatmapCell[][];
     min: number;
     max: number;
+    fillPct: number;
   }>(() => {
-    if (!snapshot) return { rows: [], cols: [], cellMatrix: [], min: 0, max: 0 };
-    const slices = snapshot.expiries.slice(0, 8);
-    const allStrikes = [...new Set(slices.flatMap(s => [...s.calls, ...s.puts].map(q => q.strike)))].sort((a, b) => a - b);
+    if (!snapshot) return { rows: [], cols: [], cellMatrix: [], min: 0, max: 0, fillPct: 0 };
+    const slices = snapshot.expiries.slice(0, 10);
+    const allStrikes = [...new Set(
+      slices.flatMap(s => [...s.calls, ...s.puts].map(q => q.strike)),
+    )].sort((a, b) => a - b);
 
-    const threshold = moneynessThreshold(moneynessRange);
-    const moneynessFiltered = threshold === Infinity
-      ? allStrikes
-      : allStrikes.filter(k => Math.abs(k - snapshot.spot) / snapshot.spot <= threshold);
-
-    const step = Math.max(1, Math.floor(moneynessFiltered.length / 25));
-    const filteredStrikes = moneynessFiltered.filter((_, i) => i % step === 0 || i === moneynessFiltered.length - 1);
+    const filteredStrikes = buildStrikeAxis(allStrikes, snapshot.spot, moneynessRange, 21);
+    // Match tolerance: half the median strike spacing (or 0.75% of spot).
+    let medGap = snapshot.spot * 0.0075;
+    if (allStrikes.length >= 2) {
+      const gaps: number[] = [];
+      for (let i = 1; i < allStrikes.length; i++) {
+        gaps.push(allStrikes[i]! - allStrikes[i - 1]!);
+      }
+      gaps.sort((a, b) => a - b);
+      medGap = Math.max(gaps[Math.floor(gaps.length / 2)]! * 0.6, snapshot.spot * 0.002);
+    }
 
     let minVal = Infinity, maxVal = -Infinity;
+    let filled = 0;
+    let total = 0;
     const rows: { expiry: string; dte: number }[] = [];
     const cellMatrix: HeatmapCell[][] = [];
 
     for (const slice of slices) {
       rows.push({ expiry: slice.expiry, dte: slice.dte });
       const cellRow: HeatmapCell[] = filteredStrikes.map(strike => {
-        const qs = [...(showPuts ? slice.puts : []), ...slice.calls];
-        const q = qs.find(x => x.strike === strike);
-        const v = q?.[selectedGreek] ?? null;
-        if (v != null && isFinite(v)) {
+        const q = pickHeatmapQuote(
+          slice.calls,
+          slice.puts,
+          strike,
+          snapshot.spot,
+          quoteSide,
+          medGap,
+        );
+        total += 1;
+        const v = greekValue(q, selectedGreek);
+        if (v != null) {
+          filled += 1;
           if (v < minVal) minVal = v;
           if (v > maxVal) maxVal = v;
         }
-        const callQuote = slice.calls.find(x => x.strike === strike) ?? null;
-        const putQuote = slice.puts.find(x => x.strike === strike) ?? null;
-        const quoteRef = callQuote ?? putQuote;
         return {
           strike,
           dte: slice.dte,
           expiry: slice.expiry,
           value: v,
-          quote: quoteRef
-            ? { type: quoteRef.type, mid: quoteRef.mid, iv: quoteRef.iv, delta: quoteRef.delta }
+          quote: q
+            ? { type: q.type, mid: q.mid, iv: q.iv, delta: q.delta }
             : undefined,
         };
       });
       cellMatrix.push(cellRow);
     }
 
+    if (!isFinite(minVal) || !isFinite(maxVal)) {
+      minVal = 0;
+      maxVal = 0;
+    }
+    // Winsorize color scale to p5–p95 so a few wing outliers don't flatten the map.
+    const vals: number[] = [];
+    for (const row of cellMatrix) {
+      for (const c of row) {
+        if (c.value != null && isFinite(c.value)) vals.push(c.value);
+      }
+    }
+    if (vals.length >= 8) {
+      vals.sort((a, b) => a - b);
+      const p = (q: number) => vals[Math.min(vals.length - 1, Math.floor(q * (vals.length - 1)))]!;
+      minVal = p(0.05);
+      maxVal = p(0.95);
+      if (minVal === maxVal) {
+        minVal = vals[0]!;
+        maxVal = vals[vals.length - 1]!;
+      }
+    }
+
     if (sortMode === 'delta' && filteredStrikes.length > 0) {
       const deltaByStrike = new Map<number, number>();
-      for (const slice of slices) {
-        for (const strike of filteredStrikes) {
-          const q = [...slice.calls, ...slice.puts]
-            .filter(x => x.strike === strike && x.delta != null)
-            .sort((a, b) => Math.abs(b.delta!) - Math.abs(a.delta!))[0];
-          if (q?.delta != null) {
-            const existing = deltaByStrike.get(strike) ?? 0;
-            deltaByStrike.set(strike, existing + Math.abs(q.delta));
+      for (const row of cellMatrix) {
+        for (const cell of row) {
+          const d = cell.quote?.delta;
+          if (d != null) {
+            deltaByStrike.set(cell.strike, (deltaByStrike.get(cell.strike) ?? 0) + Math.abs(d));
           }
         }
       }
       const sortedStrikes = [...filteredStrikes].sort((a, b) =>
-        (deltaByStrike.get(b) ?? 0) - (deltaByStrike.get(a) ?? 0)
+        (deltaByStrike.get(b) ?? 0) - (deltaByStrike.get(a) ?? 0),
       );
-      const reorderedMatrix: HeatmapCell[][] = cellMatrix.map(row => {
-        return sortedStrikes.map(s => row[filteredStrikes.indexOf(s)]!);
-      });
-      return { rows, cols: sortedStrikes, cellMatrix: reorderedMatrix, min: minVal, max: maxVal };
+      const reorderedMatrix: HeatmapCell[][] = cellMatrix.map(row =>
+        sortedStrikes.map(s => row[filteredStrikes.indexOf(s)]!),
+      );
+      return {
+        rows,
+        cols: sortedStrikes,
+        cellMatrix: reorderedMatrix,
+        min: minVal,
+        max: maxVal,
+        fillPct: total > 0 ? filled / total : 0,
+      };
     }
 
-    return { rows, cols: filteredStrikes, cellMatrix, min: minVal, max: maxVal };
-  }, [snapshot, selectedGreek, showPuts, moneynessRange, sortMode]);
+    return {
+      rows,
+      cols: filteredStrikes,
+      cellMatrix,
+      min: minVal,
+      max: maxVal,
+      fillPct: total > 0 ? filled / total : 0,
+    };
+  }, [snapshot, selectedGreek, quoteSide, moneynessRange, sortMode]);
 
   const aggregates = useMemo(() => computeHeatmapAggregates(cellMatrix), [cellMatrix]);
 
@@ -228,42 +372,34 @@ export function GreeksView() {
       ctx.fillText(`${rows[r]!.dte}d`, x0 - 3, y);
     }
 
-    // Column aggregate stats (right edge).
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'top';
+    // Row mean (left gutter under DTE labels) — by expiry.
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
     ctx.font = '7px "JetBrains Mono", monospace';
-    for (let c = 0; c < nCols; c++) {
-      const x = x0 + c * cellW;
-      const agg = aggregates.byExpiry[c];
-      if (agg) {
-        ctx.fillStyle = 'rgba(156, 163, 175, 0.4)';
-        const txt = `${agg.min?.toFixed(2) ?? '-'}/${agg.mean?.toFixed(2) ?? '-'}`;
-        ctx.fillText(txt, x, y0 + nRows * cellH + 11);
-      }
-    }
-
-    // Row aggregate stats (top of column).
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'bottom';
     for (let r = 0; r < nRows; r++) {
-      const y = y0 + r * cellH;
+      const y = y0 + r * cellH + cellH / 2;
       const agg = aggregates.byExpiry[r];
-      if (agg) {
-        ctx.fillStyle = 'rgba(156, 163, 175, 0.4)';
-        const mean = agg.mean;
-        const txt = mean != null ? fmtAggShort(mean, selectedGreek) : '-';
-        ctx.fillText(txt, x0 - 22, y + 10);
+      if (agg?.mean != null) {
+        ctx.fillStyle = 'rgba(156, 163, 175, 0.55)';
+        // Already showing DTE at this x — skip extra if cramped.
+        if (cellH >= 14) {
+          ctx.fillText(fmtAggShort(agg.mean, selectedGreek), x0 - 3, y + 8);
+        }
       }
     }
 
-    // Title.
+    // Title + fill quality.
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
-    ctx.fillStyle = 'rgba(156, 163, 175, 0.5)';
+    ctx.fillStyle = 'rgba(156, 163, 175, 0.65)';
     ctx.font = '8px "JetBrains Mono", monospace';
     const greekLabel = GREEK_META.find(g => g.key === selectedGreek)?.label ?? selectedGreek;
-    ctx.fillText(`${greekLabel} — ${fmtAggShort(min, selectedGreek)} to ${fmtAggShort(max, selectedGreek)}`, x0, 1);
-  }, [rows, cols, cellMatrix, min, max, diverging, selectedCell, dim, selectedGreek, aggregates]);
+    ctx.fillText(
+      `${greekLabel} (${quoteSide.toUpperCase()})  ${fmtAggShort(min, selectedGreek)}…${fmtAggShort(max, selectedGreek)}  fill ${(fillPct * 100).toFixed(0)}%`,
+      x0,
+      1,
+    );
+  }, [rows, cols, cellMatrix, min, max, diverging, selectedCell, dim, selectedGreek, aggregates, quoteSide, fillPct]);
 
   useEffect(() => { draw(); }, [draw]);
 
@@ -317,8 +453,51 @@ export function GreeksView() {
     }
   }, [posToCell, selectedCell]);
 
+  // MacroVol Greeks 1.0 — independent of terminal snapshot (uses MacroVol API)
+  if (edition === 'greeks10') {
+    return (
+      <div className="flex h-full flex-col">
+        <div className="flex items-center gap-1 border-b border-border px-1 py-0.5">
+          <button
+            type="button"
+            onClick={() => setEdition('greeks10')}
+            className="rounded bg-primary px-2 py-0.5 font-mono text-[10px] text-primary-foreground"
+          >
+            Greeks 1.0
+          </button>
+          <button
+            type="button"
+            onClick={() => setEdition('terminal')}
+            className="rounded px-2 py-0.5 font-mono text-[10px] text-muted-foreground hover:text-foreground"
+          >
+            Terminal Greeks
+          </button>
+          <span className="ml-2 font-mono text-[9px] text-muted-foreground">
+            MacroVol desk · ATM · 3D surfaces · GEX/Charm · IV surface
+          </span>
+        </div>
+        <div className="min-h-0 flex-1">
+          <Suspense fallback={<div className="flex h-full items-center justify-center font-mono text-xs text-muted-foreground animate-pulse">Loading Greeks 1.0…</div>}>
+            <Greeks10View />
+          </Suspense>
+        </div>
+      </div>
+    );
+  }
+
   if (!snapshot) {
-    return <div className="flex items-center justify-center h-full text-muted-foreground text-xs font-mono">No data</div>;
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-3 font-mono text-xs text-muted-foreground">
+        <div>No terminal chain data</div>
+        <button
+          type="button"
+          onClick={() => setEdition('greeks10')}
+          className="rounded bg-primary px-3 py-1.5 text-primary-foreground"
+        >
+          Open Greeks 1.0 (MacroVol API)
+        </button>
+      </div>
+    );
   }
 
   const greekRow1 = GREEK_META.slice(0, 7);
@@ -326,11 +505,24 @@ export function GreeksView() {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Compact sub-view tabs */}
-      <div className="flex items-center gap-0.5 px-1 py-0.5 border-b border-border">
+      {/* Edition + sub-view tabs — sticky for tall greek boards */}
+      <div className="sticky top-0 z-20 flex shrink-0 items-center gap-0.5 border-b border-border bg-background/95 px-1 py-0.5 backdrop-blur-sm">
+        <button
+          type="button"
+          onClick={() => setEdition('greeks10')}
+          className="mr-1 rounded px-2 py-0.5 font-mono text-[10px] text-muted-foreground hover:bg-primary/20 hover:text-primary"
+          title="MacroVol Greeks desk with IV surface"
+        >
+          Greeks 1.0
+        </button>
+        <span className="mx-0.5 text-border">|</span>
         {SUB_VIEWS.map(sv => (
           <button
             key={sv.id}
+            id={sv.domId}
+            type="button"
+            data-desk-section="1"
+            data-desk-section-active={subView === sv.id ? '1' : undefined}
             onClick={() => setSubView(sv.id)}
             className={cn('px-2 py-0.5 text-[10px] font-mono rounded transition-colors',
               subView === sv.id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
@@ -348,19 +540,41 @@ export function GreeksView() {
           {subView === 'profile' && <GreeksProfileView />}
           {subView === 'sensitivity' && <GreeksSensitivityView />}
           {subView === 'byexpiry' && <GreeksExpiryView />}
-          {subView === 'surface3d' && <GreeksSurface3D />}
+          {subView === 'surface3d' && (
+            <div className="flex h-full flex-col">
+              <div className="border-b border-border px-3 py-1 font-mono text-[9px] text-amber">
+                3D mesh = OTM-wing greeks (put K&lt;S, call K≥S), height-scaled min→max for visualization only —
+                not OI-weighted exposure. Prefer Greeks 1.0 surfaces / heatmap for desk work.
+              </div>
+              <div className="min-h-0 flex-1">
+                <GreeksSurface3D />
+              </div>
+            </div>
+          )}
         </div>
       ) : (
         <>
           {/* Compact tool bar */}
           <div className="flex items-center gap-1 px-1 py-0.5 border-b border-border text-[10px] font-mono flex-shrink-0">
-            <div className="flex gap-0.5">
-              <button
-                onClick={() => setShowPuts(p => !p)}
-                className={cn('px-1.5 py-0.5 rounded text-[9px]', showPuts ? 'bg-down/20 text-down' : 'bg-muted text-muted-foreground')}
-              >
-                Puts {showPuts ? 'ON' : 'OFF'}
-              </button>
+            <div className="flex gap-0.5" title="Which option side feeds the greek value">
+              {QUOTE_SIDE_OPTIONS.map(s => (
+                <button
+                  key={s.id}
+                  onClick={() => setQuoteSide(s.id)}
+                  className={cn(
+                    'px-1.5 py-0.5 rounded text-[9px]',
+                    quoteSide === s.id
+                      ? s.id === 'puts'
+                        ? 'bg-down/20 text-down'
+                        : s.id === 'calls'
+                          ? 'bg-up/20 text-up'
+                          : 'bg-primary/20 text-primary'
+                      : 'text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  {s.label}
+                </button>
+              ))}
             </div>
             <div className="flex gap-0.5">
               {MONEYNESS_OPTIONS.map(m => (
@@ -416,9 +630,15 @@ export function GreeksView() {
             <div className="flex-1" />
             <span className="text-[9px] text-muted-foreground">
               {hoverCell ? (
-                <span>K {fmtPrice(hoverCell.strike, 0)} · {hoverCell.dte}d · {fmtAggShort(hoverCell.value ?? 0, selectedGreek)}</span>
+                <span>
+                  K {fmtPrice(hoverCell.strike, 0)} · {hoverCell.dte}d · {fmtAggShort(hoverCell.value ?? 0, selectedGreek)}
+                  {hoverCell.quote ? ` · ${hoverCell.quote.type} mid ${fmtPrice(hoverCell.quote.mid)}` : ''}
+                </span>
               ) : (
-                <span>{cols.length}K × {rows.length}T</span>
+                <span>
+                  {cols.length}K × {rows.length}T · {(fillPct * 100).toFixed(0)}% filled
+                  {snapshot ? ` · spot ${fmtPrice(snapshot.spot)}` : ''}
+                </span>
               )}
             </span>
           </div>
@@ -478,7 +698,8 @@ export function GreeksView() {
                 <span className="text-muted-foreground">no quote</span>
               )}
               {portfolio && (
-                <span className="ml-auto flex items-center gap-3 text-[10px]">
+                <span className="ml-auto flex items-center gap-3 text-[10px]" title="Sum of all listed option greeks — not a position book">
+                  <span className="text-muted-foreground">chain Σ</span>
                   <span><Explain term="delta">Δ</Explain> <span className="tabular-nums text-cyan">{fmtSigned(portfolio.delta, 2)}</span></span>
                   <span><Explain term="gamma">Γ</Explain> <span className="tabular-nums text-up">{fmtSigned(portfolio.gamma, 4)}</span></span>
                   <span><Explain term="theta">Θ</Explain> <span className="tabular-nums text-down">{fmtSigned(portfolio.theta, 2)}</span></span>

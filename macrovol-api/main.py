@@ -1,0 +1,1259 @@
+import asyncio
+import os
+from datetime import datetime, timezone
+
+from fastapi import FastAPI, Query
+from fastapi.middleware.cors import CORSMiddleware
+
+from services.fred_client import fetch_series, get_latest, get_meta, source_label
+from services.iv_calculator import build_iv_surface
+from services.greeks_calculator import build_greeks_surface, build_interpolated_surface, build_gex_grid, build_charm_exposure_grid
+from services import rate_risk
+from services import cache as ttl_cache
+
+# TTLs for the expensive yfinance-backed endpoints (seconds).
+GREEKS_CACHE_TTL = 120
+SURFACE_CACHE_TTL = 120
+STIR_CACHE_TTL = 60
+
+app = FastAPI(title="MacroVol API")
+
+print(f"FRED_API_KEY loaded: {'YES' if os.getenv('FRED_API_KEY') else 'NO'}")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+SERIES_MAP = {
+    "SOFR": "sofr",
+    "DFF": "effr",
+    "DGS2": "usy2",
+    "DGS10": "usy10",
+    "T10Y2Y": "spread_2s10s",
+    "T10Y3M": "spread_3m10y",
+}
+
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
+@app.get("/api/rates/sofr")
+async def get_sofr():
+    data = await fetch_series("SOFR", limit=90)
+    return {
+        "series": "SOFR",
+        "data": data,
+        "as_of": datetime.now(timezone.utc).isoformat(),
+        "source": "FRED",
+    }
+
+@app.get("/api/rates/summary")
+async def rates_summary():
+    """
+    Key rates snapshot.
+    T10Y2Y / T10Y3M from FRED are already yield spreads in percentage points
+    (e.g. 0.35 = 35 bps). Frontend multiplies by 100 for bps display.
+    """
+    from services.fred_client import FALLBACK_DATA
+    keys = ["SOFR", "DFF", "DGS2", "DGS10", "T10Y2Y", "T10Y3M"]
+    results = await asyncio.gather(
+        *[get_latest(k) for k in keys],
+        return_exceptions=True
+    )
+    values = []
+    field_src = {}
+    obs_dates = {}
+    for i, r in enumerate(results):
+        k = keys[i]
+        if isinstance(r, Exception) or r is None:
+            values.append(FALLBACK_DATA.get(k))
+            field_src[k] = "fallback" if FALLBACK_DATA.get(k) is not None else "unavailable"
+        else:
+            values.append(r)
+            meta = get_meta(k)
+            field_src[k] = meta.get("source", "FRED")
+            if meta.get("obs_date"):
+                obs_dates[k] = meta["obs_date"]
+    return {
+        "sofr": values[0],
+        "effr": values[1],
+        "usy2": values[2],
+        "usy10": values[3],
+        # percentage points (NOT bps) — FRED convention for T10Y2Y / T10Y3M
+        "spread_2s10s": values[4],
+        "spread_3m10y": values[5],
+        "spread_unit": "percentage_points",
+        "spread_note": "FRED T10Y2Y/T10Y3M are in percentage points. ×100 = bps.",
+        "field_source": field_src,
+        "obs_dates": obs_dates,
+        "risk_free_rate": round((values[0] or 0.0) / 100.0, 6) if values[0] is not None else None,
+        "as_of": datetime.now(timezone.utc).isoformat(),
+        "source": source_label(keys),
+    }
+
+
+async def _default_r() -> float:
+    """SOFR as decimal risk-free; fall back to 0.04 if unavailable."""
+    sofr = await get_latest("SOFR")
+    if sofr is None:
+        return 0.04
+    return round(float(sofr) / 100.0, 6)
+
+
+async def _term_curve_points() -> list:
+    """Live Treasury CMT points as (T_years, r_decimal) for piecewise r(T)."""
+    try:
+        _, yields, _, _ = await _load_curve_map()
+        return rate_risk.curve_to_points(CURVE_LABELS, yields)
+    except Exception:
+        return []
+
+@app.get("/api/surface/{ticker}")
+async def get_surface(
+    ticker: str,
+    r: float | None = Query(None, description="Risk-free rate decimal; default = live SOFR"),
+    q: float = Query(0.0),
+    strike_range: float = Query(0.3),
+):
+    r_eff = r if r is not None else await _default_r()
+    # When r not overridden, price each expiry with piecewise Treasury r(T)
+    curve_pts = None if r is not None else await _term_curve_points()
+    r_mode = "flat" if r is not None else ("term_structure" if curve_pts else "SOFR")
+    key = f"surface:{ticker}:{r_eff}:{q}:{strike_range}:{r_mode}"
+    hit = ttl_cache.get_cached(key, SURFACE_CACHE_TTL)
+    if not ttl_cache.is_miss(hit):
+        return hit
+    try:
+        result = await asyncio.to_thread(build_iv_surface, ticker, r_eff, q, strike_range, curve_pts)
+        result["as_of"] = datetime.now(timezone.utc).isoformat()
+        result["source"] = "yfinance"
+        result["r"] = r_eff
+        result["q"] = q
+        result["r_source"] = "query" if r is not None else ("treasury_term + SOFR anchor" if curve_pts else "SOFR")
+        result["r_mode"] = r_mode
+        ttl_cache.set_cached(key, result)
+        return result
+    except Exception as e:
+        from fastapi.responses import JSONResponse
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+@app.get("/api/surface/{ticker}/preview")
+async def get_surface_preview(
+    ticker: str,
+    r: float | None = Query(None),
+    q: float = Query(0.0),
+):
+    r_eff = r if r is not None else await _default_r()
+    curve_pts = None if r is not None else await _term_curve_points()
+    key = f"surface_preview:{ticker}:{r_eff}:{q}"
+    hit = ttl_cache.get_cached(key, SURFACE_CACHE_TTL)
+    if not ttl_cache.is_miss(hit):
+        return hit
+    try:
+        result = await asyncio.to_thread(build_iv_surface, ticker, r_eff, q, 0.15, curve_pts)
+        result["expiries"] = result["expiries"][:4]
+        result["iv_grid"] = result["iv_grid"][:4]
+        result["as_of"] = datetime.now(timezone.utc).isoformat()
+        result["source"] = "yfinance"
+        result["r"] = r_eff
+        result["q"] = q
+        ttl_cache.set_cached(key, result)
+        return result
+    except Exception as e:
+        from fastapi.responses import JSONResponse
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+# FRED constant-maturity Treasury IDs — short end uses MO suffix (DGS1MO not DGS1M).
+CURVE_IDS = ["DGS1MO", "DGS3MO", "DGS6MO", "DGS1", "DGS2", "DGS5", "DGS10", "DGS20", "DGS30"]
+CURVE_LABELS = ["1M", "3M", "6M", "1Y", "2Y", "5Y", "10Y", "20Y", "30Y"]
+
+@app.get("/api/rates/curve")
+async def get_rates_curve():
+    tasks = [fetch_series(sid, limit=5) for sid in CURVE_IDS]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    yields = []
+    obs_dates = []
+    live_n = 0
+    for r in results:
+        if isinstance(r, Exception) or not r:
+            yields.append(None)
+            obs_dates.append(None)
+        else:
+            yields.append(r[0]["value"])
+            obs_dates.append(r[0]["date"])
+            live_n += 1
+    return {
+        "labels": CURVE_LABELS,
+        "series_ids": CURVE_IDS,
+        "yields": yields,
+        "obs_dates": obs_dates,
+        "as_of": datetime.now(timezone.utc).isoformat(),
+        "source": f"FRED ({live_n}/{len(CURVE_IDS)} tenors live)",
+        "note": "Constant maturity Treasury yields. Short end: DGS1MO/DGS3MO/DGS6MO.",
+    }
+
+
+async def _load_curve_map() -> tuple[dict[str, float | None], list, list, str]:
+    """Fetch live curve → label→yield map + arrays + source string."""
+    tasks = [fetch_series(sid, limit=5) for sid in CURVE_IDS]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    yields: list[float | None] = []
+    obs_dates: list[str | None] = []
+    live_n = 0
+    for r in results:
+        if isinstance(r, Exception) or not r:
+            yields.append(None)
+            obs_dates.append(None)
+        else:
+            yields.append(r[0]["value"])
+            obs_dates.append(r[0]["date"])
+            live_n += 1
+    by_label = {lab: y for lab, y in zip(CURVE_LABELS, yields)}
+    source = f"FRED ({live_n}/{len(CURVE_IDS)} tenors live)"
+    return by_label, yields, obs_dates, source
+
+
+@app.get("/api/rates/shape")
+async def rates_shape(history: int = Query(60, ge=10, le=260)):
+    """
+    Curve shape desk: live spreads + sparklines for 2s10s / 5s30s / fly 2s5s10s.
+    History built from FRED daily CMTs (aligned dates only — no invented points).
+    """
+    by_label, yields, obs_dates, source = await _load_curve_map()
+    shape = rate_risk.compute_shape(by_label)
+
+    # Historical sparklines — fetch only tenors we need
+    dgs2, dgs5, dgs10, dgs30 = await asyncio.gather(
+        fetch_series("DGS2", limit=history + 20),
+        fetch_series("DGS5", limit=history + 20),
+        fetch_series("DGS10", limit=history + 20),
+        fetch_series("DGS30", limit=history + 20),
+    )
+
+    hist_2s10s = rate_risk.align_spread_history(dgs10, dgs2, max_points=history)
+    hist_5s30s = rate_risk.align_spread_history(dgs30, dgs5, max_points=history)
+
+    # Butterfly history: need 2,5,10 on same dates
+    m5 = {r["date"]: r["value"] for r in dgs5}
+    m10 = {r["date"]: r["value"] for r in dgs10}
+    fly_hist = []
+    for r in dgs2:
+        d = r["date"]
+        if d not in m5 or d not in m10:
+            continue
+        fly_pp = 2 * m5[d] - r["value"] - m10[d]
+        fly_hist.append({"date": d, "spread_bps": round(fly_pp * 100.0, 1)})
+        if len(fly_hist) >= history:
+            break
+    fly_hist.reverse()
+
+    def _spark(series: list[dict], key: str = "spread_bps") -> list[float]:
+        return [float(p[key]) for p in series if p.get(key) is not None]
+
+    return {
+        **shape,
+        "curve": {"labels": CURVE_LABELS, "yields": yields, "obs_dates": obs_dates},
+        "history": {
+            "2s10s": hist_2s10s,
+            "5s30s": hist_5s30s,
+            "fly_2s5s10s": fly_hist,
+            "spark_2s10s": _spark(hist_2s10s),
+            "spark_5s30s": _spark(hist_5s30s),
+            "spark_fly": _spark(fly_hist),
+        },
+        "as_of": datetime.now(timezone.utc).isoformat(),
+        "source": source,
+    }
+
+
+@app.get("/api/rates/dv01")
+async def rates_dv01(
+    n2: float = Query(1.0, description="2Y notional $mm (neg = short)"),
+    n5: float = Query(1.0, description="5Y notional $mm"),
+    n10: float = Query(1.0, description="10Y notional $mm"),
+    n30: float = Query(1.0, description="30Y notional $mm"),
+    shock_2: float = Query(0.0, description="2Y key-rate shock bp"),
+    shock_5: float = Query(0.0, description="5Y key-rate shock bp"),
+    shock_10: float = Query(0.0, description="10Y key-rate shock bp"),
+    shock_30: float = Query(0.0, description="30Y key-rate shock bp"),
+):
+    """Generic par-Treasury DV01 book + optional diagonal key-rate scenario P&L."""
+    by_label, yields, obs_dates, source = await _load_curve_map()
+    notionals = {"2Y": n2, "5Y": n5, "10Y": n10, "30Y": n30}
+    book = rate_risk.build_dv01_book(by_label, notionals)
+    shocks = {"2Y": shock_2, "5Y": shock_5, "10Y": shock_10, "30Y": shock_30}
+    scenario = rate_risk.key_rate_shock_pnl(by_label, notionals, shocks)
+    return {
+        **book,
+        "scenario": scenario,
+        "curve_yields": {k: by_label.get(k) for k in ("2Y", "5Y", "10Y", "30Y")},
+        "obs_dates": obs_dates,
+        "as_of": datetime.now(timezone.utc).isoformat(),
+        "source": source,
+    }
+
+
+@app.get("/api/rates/term-structure")
+async def rates_term_structure(T: float = Query(0.25, ge=0.01, le=40.0)):
+    """
+    Interpolated risk-free rate r(T) from live Treasury CMTs (decimal).
+    Used by options pricing when term-structure mode is on.
+    """
+    by_label, yields, _, source = await _load_curve_map()
+    pts = rate_risk.curve_to_points(CURVE_LABELS, yields)
+    r = rate_risk.interpolate_r(pts, T)
+    sofr = await get_latest("SOFR")
+    sofr_dec = round(float(sofr) / 100.0, 6) if sofr is not None else None
+    # For very short T prefer SOFR when available
+    r_used = r
+    r_source = "treasury_curve"
+    if T <= 0.25 and sofr_dec is not None:
+        # blend: T→0 use SOFR, T→0.25 use 3M tsy
+        w = min(max(T / 0.25, 0.0), 1.0)
+        r_used = sofr_dec * (1 - w) + r * w
+        r_source = "sofr_blend_3m"
+    return {
+        "T": T,
+        "r": round(r_used, 6),
+        "r_pct": round(r_used * 100.0, 4),
+        "r_source": r_source,
+        "curve_points": [{"T": t, "r": round(rv, 6), "r_pct": round(rv * 100, 4)} for t, rv in pts],
+        "sofr": sofr,
+        "as_of": datetime.now(timezone.utc).isoformat(),
+        "source": source,
+    }
+
+
+RSS_FEEDS = {
+    "conks": "https://conkstack.substack.com/feed",
+    "alphapicks": "https://alphapicks.substack.com/feed",
+}
+
+@app.get("/api/feed/{source}")
+async def get_feed(source: str):
+    url = RSS_FEEDS.get(source)
+    if not url:
+        return {"error": "Unknown source", "posts": []}
+    try:
+        import xmltodict
+        import httpx
+        async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+            r = await client.get(url, headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                "Accept": "application/rss+xml, application/xml, text/xml, */*"
+            })
+            text = r.text.strip()
+            if not text.startswith("<?xml") and not text.startswith("<rss"):
+                return {"error": f"Not XML: {text[:100]}", "posts": []}
+            parsed = xmltodict.parse(text)
+            items = parsed["rss"]["channel"]["item"]
+            if isinstance(items, dict):
+                items = [items]
+            posts = []
+            for item in items[:10]:
+                description = item.get("description", "") or ""
+                if "paid subscriber" in description.lower():
+                    continue
+                posts.append({
+                    "title": item.get("title", ""),
+                    "link": item.get("link", ""),
+                    "date": item.get("pubDate", "")[:16],
+                    "description": description[:200].strip(),
+                })
+            return {
+                "source": source,
+                "posts": posts[:5],
+                "as_of": datetime.now(timezone.utc).isoformat(),
+            }
+    except Exception as e:
+        return {"error": str(e), "posts": []}
+
+@app.get("/api/rates/plumbing")
+async def rates_plumbing():
+    results = await asyncio.gather(
+        get_latest("IORB"),
+        get_latest("SOFR"),
+        get_latest("DFF"),
+        fetch_series("RRPONTSYD", limit=500),
+        fetch_series("WRESBAL", limit=365),
+        return_exceptions=True
+    )
+
+    iorb = results[0] if isinstance(results[0], (int, float)) else 3.65
+    sofr = results[1] if isinstance(results[1], (int, float)) else 3.62
+    effr = results[2] if isinstance(results[2], (int, float)) else 3.62
+
+    rrp_data = results[3] if isinstance(results[3], list) else []
+    rrp_latest = rrp_data[0]["value"] if rrp_data else None
+
+    wresbal_data = results[4] if isinstance(results[4], list) else []
+
+    rrp_override = os.getenv("RATES_RRP_OVERRIDE")
+    if rrp_override is not None:
+        try:
+            rrp_rate = float(rrp_override)
+            rrp_rate_source = "override"
+            rrp_rate_note = "Manual override via RATES_RRP_OVERRIDE env var."
+        except ValueError:
+            rrp_rate = None
+            rrp_rate_source = "unavailable"
+            rrp_rate_note = "RATES_RRP_OVERRIDE env var is not a valid float."
+    elif iorb is not None:
+        rrp_rate = round((iorb or 0) - 0.10, 2)
+        rrp_rate_source = "derived_iorb_minus_10bps"
+        rrp_rate_note = "RRP offering rate = IORB - 10 bps (NY Fed convention). No direct FRED series."
+    else:
+        rrp_rate = None
+        rrp_rate_source = "unavailable"
+        rrp_rate_note = "FRED IORB unavailable and no override set."
+
+    def fmt_rrp(d):
+        return {"date": d["date"], "volume": round(d["value"], 2)}
+
+    def fmt_wresbal(d):
+        return {"date": d["date"], "reserves": round(d["value"], 1)}
+
+    return {
+        "iorb": iorb,
+        "sofr": sofr,
+        "effr": effr,
+        "rrp_rate": rrp_rate,
+        "rrp_rate_source": rrp_rate_source,
+        "rrp_rate_note": rrp_rate_note,
+        "rrp_volume_latest": round(rrp_latest, 2) if rrp_latest else None,
+        "rrp_volume_unit": "USD_billions",
+        "rrp_volume_history": [fmt_rrp(d) for d in reversed(rrp_data[-90:])] if rrp_data else [],
+        "wresbal_history": [fmt_wresbal(d) for d in reversed(wresbal_data[-365:])] if wresbal_data else [],
+        "wresbal_unit": "USD_millions",
+        "obs_dates": {
+            "IORB": get_meta("IORB").get("obs_date"),
+            "SOFR": get_meta("SOFR").get("obs_date"),
+            "DFF": get_meta("DFF").get("obs_date"),
+            "RRPONTSYD": rrp_data[0]["date"] if rrp_data else None,
+            "WRESBAL": wresbal_data[0]["date"] if wresbal_data else None,
+        },
+        "as_of": datetime.now(timezone.utc).isoformat(),
+        "source": source_label(["IORB", "SOFR", "DFF"]),
+    }
+
+@app.get("/api/rates/basis")
+async def rates_basis():
+    results = await asyncio.gather(
+        get_latest("SOFR"),
+        get_latest("DFF"),
+        get_latest("IORB"),
+        return_exceptions=True
+    )
+    sofr = results[0] if isinstance(results[0], (int, float)) else 3.62
+    effr = results[1] if isinstance(results[1], (int, float)) else 3.62
+    iorb = results[2] if isinstance(results[2], (int, float)) else 3.65
+
+    sofr_effr = round((sofr - effr) * 100, 1)
+    sofr_iorb = round((sofr - iorb) * 100, 1)
+    effr_iorb = round((effr - iorb) * 100, 1)
+    # Regime diagnostics for floor system (post-ample-reserves / drained RRP era)
+    if sofr_iorb < -25:
+        regime = "wide_discount"
+        regime_note = "SOFR well below IORB — unusual; check data quality or quarter-end effects."
+    elif sofr_iorb > 5:
+        regime = "above_floor"
+        regime_note = "SOFR above IORB — reserve scarcity / balance-sheet pressure signal."
+    else:
+        regime = "corridor_normal"
+        regime_note = "SOFR near IORB — typical ample-reserves corridor."
+    return {
+        "sofr": sofr,
+        "effr": effr,
+        "iorb": iorb,
+        "sofr_effr": sofr_effr,
+        "sofr_iorb": sofr_iorb,
+        "effr_iorb": effr_iorb,
+        "unit": "bps",
+        "regime": regime,
+        "regime_note": regime_note,
+        "context": {
+            "sofr_effr": "Secured (SOFR) vs unsecured (EFFR) overnight. Typical: about −5 to +5 bps.",
+            "sofr_iorb": "SOFR vs interest on reserves. Typical ample-reserves: about −15 to +5 bps (NOT −50/−80). Rising toward 0 / positive can signal tighter plumbing.",
+            "effr_iorb": "EFFR vs IORB floor. Usually slightly below IORB (corridor width).",
+        },
+        "as_of": datetime.now(timezone.utc).isoformat(),
+        "source": source_label(["SOFR", "DFF", "IORB"]),
+        "obs_dates": {
+            "SOFR": get_meta("SOFR").get("obs_date"),
+            "DFF": get_meta("DFF").get("obs_date"),
+            "IORB": get_meta("IORB").get("obs_date"),
+        },
+    }
+
+@app.get("/api/rates/basis-history")
+async def rates_basis_history(limit: int = 90):
+    """SOFR−EFFR / SOFR−IORB / EFFR−IORB history in bps + rolling z-scores."""
+    lim = max(30, min(int(limit), 400))
+    results = await asyncio.gather(
+        fetch_series("SOFR", limit=lim),
+        fetch_series("DFF", limit=lim),
+        fetch_series("IORB", limit=lim),
+        return_exceptions=True,
+    )
+    sofr_s = results[0] if isinstance(results[0], list) else []
+    effr_s = results[1] if isinstance(results[1], list) else []
+    iorb_s = results[2] if isinstance(results[2], list) else []
+
+    def by_date(series: list) -> dict:
+        return {d["date"]: d["value"] for d in series if d.get("date") is not None}
+
+    s_map, e_map, i_map = by_date(sofr_s), by_date(effr_s), by_date(iorb_s)
+    dates = sorted(set(s_map) & set(e_map) & set(i_map))
+    history = []
+    for d in dates:
+        sofr, effr, iorb = s_map[d], e_map[d], i_map[d]
+        history.append({
+            "date": d,
+            "sofr": sofr,
+            "effr": effr,
+            "iorb": iorb,
+            "sofr_effr_bps": round((sofr - effr) * 100, 2),
+            "sofr_iorb_bps": round((sofr - iorb) * 100, 2),
+            "effr_iorb_bps": round((effr - iorb) * 100, 2),
+        })
+
+    def zscore(vals: list[float]) -> float | None:
+        if len(vals) < 10:
+            return None
+        import statistics
+        try:
+            mu = statistics.mean(vals)
+            sd = statistics.pstdev(vals)
+            if sd < 1e-9:
+                return 0.0
+            return round((vals[-1] - mu) / sd, 2)
+        except Exception:
+            return None
+
+    se = [h["sofr_effr_bps"] for h in history]
+    si = [h["sofr_iorb_bps"] for h in history]
+    ei = [h["effr_iorb_bps"] for h in history]
+    latest = history[-1] if history else None
+    return {
+        "history": history[-lim:],
+        "latest": latest,
+        "zscore": {
+            "sofr_effr": zscore(se),
+            "sofr_iorb": zscore(si),
+            "effr_iorb": zscore(ei),
+            "window": len(history),
+        },
+        "unit": "bps",
+        "note": "Spreads in basis points. Z-score vs full returned window (population).",
+        "as_of": datetime.now(timezone.utc).isoformat(),
+        "source": source_label(["SOFR", "DFF", "IORB"]),
+    }
+
+
+@app.get("/api/rates/curve-history")
+async def curve_history(periods: str = "1M"):
+    tenors = list(CURVE_IDS)
+    labels = list(CURVE_LABELS)
+
+    # Approx trading-day lookbacks (Treasury yields are daily on business days)
+    limit_map = {"1W": 10, "1M": 25, "3M": 70, "6M": 140, "1Y": 260}
+    limit = limit_map.get(periods, 25)
+
+    results = await asyncio.gather(
+        *[fetch_series(t, limit=limit + 5) for t in tenors],
+        return_exceptions=True
+    )
+
+    today_yields = []
+    historical_yields = []
+    hist_dates = []
+    live_n = 0
+
+    for i, result in enumerate(results):
+        if isinstance(result, Exception) or not result:
+            today_yields.append(None)
+            historical_yields.append(None)
+            hist_dates.append(None)
+        else:
+            live_n += 1
+            today_yields.append(result[0]["value"])
+            # Use last available observation in window as "historical" (not midpoint hack)
+            idx = min(len(result) - 1, limit - 1)
+            if idx > 0 and result[idx]:
+                historical_yields.append(result[idx]["value"])
+                hist_dates.append(result[idx]["date"])
+            else:
+                historical_yields.append(None)
+                hist_dates.append(None)
+
+    return {
+        "labels": labels,
+        "series_ids": tenors,
+        "today": today_yields,
+        "historical": historical_yields,
+        "historical_dates": hist_dates,
+        "periods": periods,
+        "as_of": datetime.now(timezone.utc).isoformat(),
+        "source": f"FRED ({live_n}/{len(tenors)} tenors live)",
+    }
+
+@app.get("/api/rates/correlations")
+async def rates_correlations(window: int = Query(30, ge=5, le=252), period: str = Query("1y")):
+    try:
+        from services.correlations import compute_correlation_matrix
+        result = await compute_correlation_matrix(window=window, period=period)
+        if not result.get("as_of"):
+            result["as_of"] = datetime.now(timezone.utc).isoformat()
+        return result
+    except Exception as e:
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"{type(e).__name__}: {str(e)}", "as_of": datetime.now(timezone.utc).isoformat()},
+        )
+
+MACRO_FALLBACKS = {
+    "cpi_yoy": 2.3,
+    "core_cpi_yoy": 3.0,
+    "core_pce_yoy": 2.6,
+    "nfp_mom": 177.0,
+    "unemployment": 4.2,
+    "retail_sales": 724000.0,
+    "housing_starts": 1310.0,
+    "fed_balance_sheet": 6800.0,
+}
+
+@app.get("/api/macro/summary")
+async def get_macro_summary():
+    results = await asyncio.gather(
+        fetch_series("CPIAUCSL", limit=14),
+        fetch_series("PCEPILFE", limit=14),
+        fetch_series("PAYEMS", limit=2),
+        fetch_series("UNRATE", limit=1),
+        fetch_series("RSAFS", limit=1),
+        fetch_series("HOUST", limit=1),
+        fetch_series("WALCL", limit=1),
+        fetch_series("CPILFESL", limit=14),
+        return_exceptions=True,
+    )
+
+    def get(ix: int):
+        r = results[ix]
+        return r if not isinstance(r, Exception) and r else None
+
+    cpi_data = get(0)
+    pce_data = get(1)
+    core_cpi_data = get(7)
+
+    def yoY(data):
+        if not data or len(data) < 2:
+            return None
+        latest = data[0]
+        try:
+            latest_date = datetime.strptime(latest["date"], "%Y-%m-%d")
+            target_date = latest_date.replace(year=latest_date.year - 1)
+        except (KeyError, ValueError, TypeError):
+            return None
+        year_ago = None
+        min_diff = None
+        for d in data:
+            try:
+                d_date = datetime.strptime(d["date"], "%Y-%m-%d")
+            except (KeyError, ValueError, TypeError):
+                continue
+            diff = abs((d_date - target_date).days)
+            if min_diff is None or diff < min_diff:
+                min_diff = diff
+                year_ago = d
+        if year_ago is None or min_diff is None or min_diff > 45:
+            return None
+        try:
+            latest_val = float(latest["value"])
+            year_ago_val = float(year_ago["value"])
+        except (KeyError, ValueError, TypeError):
+            return None
+        if year_ago_val == 0:
+            return None
+        return round(((latest_val - year_ago_val) / year_ago_val) * 100, 2)
+
+    def val_or(v, fb):
+        return v if v is not None else fb
+
+    cpi_yoy = yoY(cpi_data)
+    core_pce_yoy = yoY(pce_data)
+    core_cpi_yoy = yoY(core_cpi_data)
+    nfp_raw = (
+        round(results[2][0]["value"] - results[2][1]["value"], 1)
+        if not isinstance(results[2], Exception) and results[2] and len(results[2]) >= 2
+        else None
+    )
+    unrate = results[3][0]["value"] if not isinstance(results[3], Exception) and results[3] else None
+    retail = results[4][0]["value"] if not isinstance(results[4], Exception) and results[4] else None
+    housing = results[5][0]["value"] if not isinstance(results[5], Exception) and results[5] else None
+    fed_bs = results[6][0]["value"] if not isinstance(results[6], Exception) and results[6] else None
+
+    used_fallback = []
+    if cpi_yoy is None:
+        used_fallback.append("cpi_yoy")
+    if core_pce_yoy is None:
+        used_fallback.append("core_pce_yoy")
+    if core_cpi_yoy is None:
+        used_fallback.append("core_cpi_yoy")
+    if nfp_raw is None:
+        used_fallback.append("nfp_mom")
+    if unrate is None:
+        used_fallback.append("unemployment")
+
+    def _obs(data):
+        return data[0]["date"] if data else None
+
+    return {
+        "cpi_yoy": val_or(cpi_yoy, MACRO_FALLBACKS["cpi_yoy"]),
+        "core_pce_yoy": val_or(core_pce_yoy, MACRO_FALLBACKS["core_pce_yoy"]),
+        "core_cpi_yoy": val_or(core_cpi_yoy, MACRO_FALLBACKS["core_cpi_yoy"]),
+        "nfp_mom": val_or(nfp_raw, MACRO_FALLBACKS["nfp_mom"]),
+        "unemployment": val_or(unrate, MACRO_FALLBACKS["unemployment"]),
+        "retail_sales": val_or(retail, MACRO_FALLBACKS["retail_sales"]),
+        "housing_starts": val_or(housing, MACRO_FALLBACKS["housing_starts"]),
+        "fed_balance_sheet": val_or(fed_bs, MACRO_FALLBACKS["fed_balance_sheet"]),
+        "units": {
+            "cpi_yoy": "percent_yoy",
+            "core_cpi_yoy": "percent_yoy",
+            "core_pce_yoy": "percent_yoy",
+            "nfp_mom": "thousands_jobs",
+            "unemployment": "percent",
+            "retail_sales": "USD_millions",
+            "housing_starts": "thousands_units_saar",
+            "fed_balance_sheet": "USD_millions",
+        },
+        "obs_dates": {
+            "cpi": _obs(cpi_data),
+            "core_cpi": _obs(core_cpi_data),
+            "core_pce": _obs(pce_data),
+            "nfp": _obs(get(2)),
+            "unemployment": _obs(get(3)),
+            "retail_sales": _obs(get(4)),
+            "housing_starts": _obs(get(5)),
+            "fed_balance_sheet": _obs(get(6)),
+        },
+        "fallback_fields": used_fallback,
+        "as_of": datetime.now(timezone.utc).isoformat(),
+        "source": "FRED+fallback" if used_fallback else "FRED",
+        "note": "CPI/PCE release dates lag; obs_dates show last published observation, not request time.",
+    }
+
+@app.get("/api/macro/series/{series_id}")
+async def get_macro_series(series_id: str, limit: int = Query(500)):
+    data = await fetch_series(series_id, limit)
+    return {
+        "series": series_id,
+        "data": data,
+        "as_of": datetime.now(timezone.utc).isoformat(),
+        "source": "FRED",
+    }
+
+@app.get("/api/debug/fred")
+async def debug_fred():
+    import httpx
+    import os
+    api_key = os.getenv("FRED_API_KEY")
+    url = "https://api.stlouisfed.org/fred/series/observations"
+    params = {
+        "series_id": "DFF",
+        "api_key": api_key,
+        "file_type": "json",
+        "sort_order": "desc",
+        "limit": 1
+    }
+    async with httpx.AsyncClient(timeout=30) as client:
+        r = await client.get(url, params=params)
+        return {
+            "status_code": r.status_code,
+            "api_key_present": bool(api_key),
+            "api_key_length": len(api_key) if api_key else 0,
+            "response": r.json()
+        }
+
+@app.get("/api/debug/clear-cache")
+async def clear_cache():
+    import services.fred_client as fc
+    fred_n = len(fc._cache)
+    fc._cache.clear()
+    ttl_n = ttl_cache.clear_all()
+    return {"message": "Caches cleared", "fred_cache_size": fred_n, "ttl_cache_size": ttl_n}
+
+@app.get("/api/debug/sofr")
+async def debug_sofr():
+    import services.fred_client as fc
+    fc._cache.clear()
+    result = await fc.get_latest("SOFR")
+    return {"sofr": result, "cache_size": len(fc._cache)}
+
+@app.get("/api/stir/strip")
+async def get_stir_strip():
+    """
+    CME-style STIR desk strip:
+      - 3M SOFR (SFR/SR3), 1M SOFR (SR1), Fed Funds (ZQ)
+      - Treasury futures front (ZT/ZF/ZN/TN/ZB)
+      - NY Fed reference prints (percentiles, volume, target)
+      - Desk spreads: calendars, flies, packs, SERFF, inter, cash
+    Free data: yfinance (delayed) + NY Fed Markets API + FRED (IORB).
+    """
+    key = "stir_strip:v4"
+    hit = ttl_cache.get_cached(key, STIR_CACHE_TTL)
+    if not ttl_cache.is_miss(hit):
+        return hit
+    import yfinance as yf
+    from datetime import datetime
+    import asyncio
+    from services.nyfed_client import fetch_reference_rates
+
+    # 3M SOFR (CME SR3) — board tickers often shown as SFRM6 / SFRZ6 etc.
+    SR3_CONTRACTS = [
+        {"symbol": "SR3H26.CME", "label": "SR3H6", "ticker": "SFRH6", "month": "Mar 26"},
+        {"symbol": "SR3M26.CME", "label": "SR3M6", "ticker": "SFRM6", "month": "Jun 26"},
+        {"symbol": "SR3U26.CME", "label": "SR3U6", "ticker": "SFRU6", "month": "Sep 26"},
+        {"symbol": "SR3Z26.CME", "label": "SR3Z6", "ticker": "SFRZ6", "month": "Dec 26"},
+        {"symbol": "SR3H27.CME", "label": "SR3H7", "ticker": "SFRH7", "month": "Mar 27"},
+        {"symbol": "SR3M27.CME", "label": "SR3M7", "ticker": "SFRM7", "month": "Jun 27"},
+        {"symbol": "SR3U27.CME", "label": "SR3U7", "ticker": "SFRU7", "month": "Sep 27"},
+        {"symbol": "SR3Z27.CME", "label": "SR3Z7", "ticker": "SFRZ7", "month": "Dec 27"},
+        {"symbol": "SR3H28.CME", "label": "SR3H8", "ticker": "SFRH8", "month": "Mar 28"},
+        {"symbol": "SR3M28.CME", "label": "SR3M8", "ticker": "SFRM8", "month": "Jun 28"},
+        {"symbol": "SR3U28.CME", "label": "SR3U8", "ticker": "SFRU8", "month": "Sep 28"},
+        {"symbol": "SR3Z28.CME", "label": "SR3Z8", "ticker": "SFRZ8", "month": "Dec 28"},
+    ]
+
+    # 1M SOFR (CME SR1) — months that yfinance usually quotes
+    SR1_CONTRACTS = [
+        {"symbol": "SR1M26.CME", "label": "SR1M6", "ticker": "SR1M6", "month": "Jun 26"},
+        {"symbol": "SR1N26.CME", "label": "SR1N6", "ticker": "SR1N6", "month": "Jul 26"},
+        {"symbol": "SR1Q26.CME", "label": "SR1Q6", "ticker": "SR1Q6", "month": "Aug 26"},
+        {"symbol": "SR1U26.CME", "label": "SR1U6", "ticker": "SR1U6", "month": "Sep 26"},
+        {"symbol": "SR1V26.CME", "label": "SR1V6", "ticker": "SR1V6", "month": "Oct 26"},
+        {"symbol": "SR1X26.CME", "label": "SR1X6", "ticker": "SR1X6", "month": "Nov 26"},
+        {"symbol": "SR1Z26.CME", "label": "SR1Z6", "ticker": "SR1Z6", "month": "Dec 26"},
+        {"symbol": "SR1F27.CME", "label": "SR1F7", "ticker": "SR1F7", "month": "Jan 27"},
+        {"symbol": "SR1G27.CME", "label": "SR1G7", "ticker": "SR1G7", "month": "Feb 27"},
+        {"symbol": "SR1H27.CME", "label": "SR1H7", "ticker": "SR1H7", "month": "Mar 27"},
+        {"symbol": "SR1M27.CME", "label": "SR1M7", "ticker": "SR1M7", "month": "Jun 27"},
+        {"symbol": "SR1Z27.CME", "label": "SR1Z7", "ticker": "SR1Z7", "month": "Dec 27"},
+    ]
+
+    # Fed Funds futures (ZQ) — often missing on yfinance; keep a short list for when live
+    ZQ_CONTRACTS = [
+        {"symbol": "ZQM26.CME", "label": "ZQM6", "ticker": "ZQM6", "month": "Jun 26"},
+        {"symbol": "ZQN26.CME", "label": "ZQN6", "ticker": "ZQN6", "month": "Jul 26"},
+        {"symbol": "ZQQ26.CME", "label": "ZQQ6", "ticker": "ZQQ6", "month": "Aug 26"},
+        {"symbol": "ZQU26.CME", "label": "ZQU6", "ticker": "ZQU6", "month": "Sep 26"},
+        {"symbol": "ZQV26.CME", "label": "ZQV6", "ticker": "ZQV6", "month": "Oct 26"},
+        {"symbol": "ZQX26.CME", "label": "ZQX6", "ticker": "ZQX6", "month": "Nov 26"},
+        {"symbol": "ZQZ26.CME", "label": "ZQZ6", "ticker": "ZQZ6", "month": "Dec 26"},
+        {"symbol": "ZQH27.CME", "label": "ZQH7", "ticker": "ZQH7", "month": "Mar 27"},
+    ]
+
+    # CME Treasury futures — core rates complex (front continuous)
+    TSY_FUTURES = [
+        {"symbol": "ZT=F", "label": "ZT", "ticker": "ZT", "month": "2Y", "product": "2-Year T-Note"},
+        {"symbol": "ZF=F", "label": "ZF", "ticker": "ZF", "month": "5Y", "product": "5-Year T-Note"},
+        {"symbol": "ZN=F", "label": "ZN", "ticker": "ZN", "month": "10Y", "product": "10-Year T-Note"},
+        {"symbol": "TN=F", "label": "TN", "ticker": "TN", "month": "10Y Ultra", "product": "Ultra 10-Year"},
+        {"symbol": "ZB=F", "label": "ZB", "ticker": "ZB", "month": "30Y", "product": "U.S. Treasury Bond"},
+        {"symbol": "UB=F", "label": "UB", "ticker": "UB", "month": "Ultra Bond", "product": "Ultra T-Bond"},
+    ]
+
+    allow_fb = os.getenv("ALLOW_STIR_FALLBACK", "0") == "1"
+    SR3_FALLBACK = {
+        "SR3H6": 3.535, "SR3M6": 3.340,
+        "SR3U6": 3.205, "SR3Z6": 3.165, "SR3H7": 3.170,
+        "SR3M7": 3.195, "SR3U7": 3.235, "SR3Z7": 3.285,
+        "SR3H8": 3.335, "SR3M8": 3.38, "SR3U8": 3.42, "SR3Z8": 3.485,
+    } if allow_fb else {}
+    SR1_FALLBACK = {} if not allow_fb else {}
+    ZQ_FALLBACK = {} if not allow_fb else {
+        "ZQM6": 3.65, "ZQU6": 3.59, "ZQZ6": 3.62,
+        "ZQH7": 3.62, "ZQM7": 3.61, "ZQZ7": 3.60,
+    }
+
+    _semaphore = asyncio.Semaphore(8)
+
+    def _yf_fetch_quote(symbol: str) -> dict:
+        """CME board fields: last, settlement≈prev, high, low, open, volume."""
+        empty = {
+            "last": None, "prev": None, "high": None, "low": None,
+            "open": None, "volume": None,
+        }
+        try:
+            ticker = yf.Ticker(symbol)
+            info = ticker.fast_info
+
+            def g(*keys):
+                for k in keys:
+                    if hasattr(info, "get"):
+                        v = info.get(k)
+                    else:
+                        v = getattr(info, k, None)
+                    if v is not None:
+                        return v
+                return None
+
+            last = g("lastPrice", "last_price")
+            prev = g("previousClose", "previous_close")
+            high = g("dayHigh", "day_high")
+            low = g("dayLow", "day_low")
+            opn = g("open", "regularMarketOpen", "open")
+            vol = g("lastVolume", "last_volume", "regularMarketVolume", "threeMonthAverageVolume")
+            # Volume often missing on fast_info — pull last bar from history
+            if vol is None:
+                try:
+                    hist = ticker.history(period="5d")
+                    if hist is not None and len(hist) > 0 and "Volume" in hist.columns:
+                        v = hist["Volume"].iloc[-1]
+                        if v == v and float(v) > 0:  # not NaN
+                            vol = float(v)
+                        if high is None and "High" in hist.columns:
+                            high = float(hist["High"].iloc[-1])
+                        if low is None and "Low" in hist.columns:
+                            low = float(hist["Low"].iloc[-1])
+                        if opn is None and "Open" in hist.columns:
+                            opn = float(hist["Open"].iloc[-1])
+                        if last is None and "Close" in hist.columns:
+                            last = float(hist["Close"].iloc[-1])
+                except Exception:
+                    pass
+            if last is None and prev is not None:
+                last = prev
+            return {
+                "last": float(last) if last is not None else None,
+                "prev": float(prev) if prev is not None else None,
+                "high": float(high) if high is not None else None,
+                "low": float(low) if low is not None else None,
+                "open": float(opn) if opn is not None else None,
+                "volume": int(vol) if vol is not None else None,
+            }
+        except Exception:
+            return empty
+
+    async def fetch_quote(symbol: str) -> dict:
+        async with _semaphore:
+            try:
+                return await asyncio.wait_for(
+                    asyncio.to_thread(_yf_fetch_quote, symbol),
+                    timeout=14,
+                )
+            except Exception:
+                return {
+                    "last": None, "prev": None, "high": None, "low": None,
+                    "open": None, "volume": None,
+                }
+
+    async def process_contracts(contracts, fallbacks, *, rate_style: bool = True):
+        """rate_style=True → IMM index (100−price); False → price-only (Tsy futures)."""
+        async def process_one(c):
+            quote = await fetch_quote(c["symbol"])
+            last_px = quote.get("last")
+            prev_px = quote.get("prev")
+            rate = None
+            source = "unavailable"
+            if rate_style:
+                if last_px is not None and last_px > 50:
+                    rate = round(100.0 - float(last_px), 4)
+                    source = "live"
+                elif c["label"] in fallbacks:
+                    rate = fallbacks[c["label"]]
+                    last_px = round(100.0 - float(rate), 4)
+                    source = "fallback"
+            else:
+                if last_px is not None:
+                    source = "live"
+
+            net = None
+            if last_px is not None and prev_px is not None:
+                net = round(float(last_px) - float(prev_px), 4)
+
+            ticker = c.get("ticker") or c["label"]
+            if c["label"].startswith("SR3") and not str(ticker).startswith("SFR"):
+                ticker = "SFR" + c["label"][3:]
+
+            row = {
+                "contract": c["label"],
+                "ticker": ticker,
+                "month": c["month"],
+                "product": c.get("product"),
+                "implied_rate": rate,
+                "last_price": round(float(last_px), 4) if last_px is not None else (
+                    round(100.0 - float(rate), 4) if rate is not None else None
+                ),
+                "prev_close": round(float(prev_px), 4) if prev_px is not None else None,
+                "settlement": round(float(prev_px), 4) if prev_px is not None else None,
+                "high": round(float(quote["high"]), 4) if quote.get("high") is not None else None,
+                "low": round(float(quote["low"]), 4) if quote.get("low") is not None else None,
+                "open": round(float(quote["open"]), 4) if quote.get("open") is not None else None,
+                "volume": quote.get("volume"),
+                "net": net,
+                "change": net,
+                "source": source,
+                "historical_1w": None,
+                "historical_1m": None,
+                "historical_3m": None,
+            }
+            return row
+
+        tasks = [process_one(c) for c in contracts]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        return [r for r in results if not isinstance(r, Exception)]
+
+    sr3_results, sr1_results, zq_results, tsy_results, nyfed = await asyncio.gather(
+        process_contracts(SR3_CONTRACTS, SR3_FALLBACK),
+        process_contracts(SR1_CONTRACTS, SR1_FALLBACK),
+        process_contracts(ZQ_CONTRACTS, ZQ_FALLBACK),
+        process_contracts(TSY_FUTURES, {}, rate_style=False),
+        fetch_reference_rates(),
+        return_exceptions=True,
+    )
+    if isinstance(sr3_results, Exception):
+        sr3_results = []
+    if isinstance(sr1_results, Exception):
+        sr1_results = []
+    if isinstance(zq_results, Exception):
+        zq_results = []
+    if isinstance(tsy_results, Exception):
+        tsy_results = []
+    if isinstance(nyfed, Exception):
+        nyfed = {"rates": {}, "error": str(nyfed)}
+
+    live_count = sum(1 for r in sr3_results if r.get("source") == "live")
+    live_sr1 = sum(1 for r in sr1_results if r.get("source") == "live")
+    live_zq = sum(1 for r in zq_results if r.get("source") == "live")
+    live_tsy = sum(1 for r in tsy_results if r.get("source") == "live")
+    fallback_count = sum(
+        1 for r in sr3_results + sr1_results + zq_results if r.get("source") == "fallback"
+    )
+    unavailable_count = sum(
+        1 for r in sr3_results + sr1_results + zq_results if r.get("source") == "unavailable"
+    )
+
+    # Prefer NY Fed official prints for SOFR/EFFR; FRED for IORB
+    ny_rates = (nyfed or {}).get("rates") or {}
+    sofr_v = ny_rates.get("SOFR", {}).get("rate")
+    effr_v = ny_rates.get("EFFR", {}).get("rate")
+    iorb = await get_latest("IORB")
+    iorb_v = iorb if isinstance(iorb, (int, float)) else None
+    # FRED backup if NY Fed missing
+    if sofr_v is None:
+        s = await get_latest("SOFR")
+        sofr_v = s if isinstance(s, (int, float)) else None
+    if effr_v is None:
+        e = await get_latest("DFF")
+        effr_v = e if isinstance(e, (int, float)) else None
+
+    path = rate_risk.stir_path_analysis(sr3_results, sofr_v)
+    spreads = rate_risk.stir_spreads(
+        sr3_results,
+        sr1_results,
+        zq_results,
+        sofr=sofr_v,
+        effr=effr_v,
+        iorb=iorb_v,
+    )
+
+    # SERFF board rows in CME ICS style (matching prop boards):
+    # CC · Description · Last (bps) · Change · for SR1−ZQ / synth
+    serff_board = []
+    for s in (spreads.get("by_kind") or {}).get("serff") or []:
+        serff_board.append({
+            "cc": "SR1/ZQ" if "SERFF1" in (s.get("name") or "") else "SR3/FF",
+            "name": s.get("name"),
+            "description": s.get("note") or "",
+            "last_bps": s.get("rate_bps"),
+            "price_spread": s.get("price_spread"),
+            "legs": s.get("legs"),
+            "kind": "serff",
+            "imply": s.get("imply"),
+        })
+    for s in (spreads.get("by_kind") or {}).get("inter") or []:
+        name = s.get("name") or ""
+        if "ZQ" in name or "SR1" in name:
+            serff_board.append({
+                "cc": "Inter",
+                "name": name,
+                "description": s.get("note") or "",
+                "last_bps": s.get("rate_bps"),
+                "price_spread": s.get("price_spread"),
+                "legs": s.get("legs"),
+                "kind": "inter",
+                "imply": s.get("imply"),
+            })
+
+    chart = [
+        {
+            "x": p.get("month") or p.get("contract"),
+            "contract": p.get("contract"),
+            "implied_rate": p.get("implied_rate"),
+            "source": p.get("source"),
+            "vs_sofr_bps": p.get("vs_sofr_bps"),
+        }
+        for p in (path.get("points") or [])
+    ]
+
+    # Compact reference-rate print for UI (CME/NYFed style)
+    ref_print = []
+    for code in ("SOFR", "EFFR", "OBFR", "TGCR", "BGCR"):
+        row = ny_rates.get(code)
+        if not row:
+            continue
+        ref_print.append({
+            "code": code,
+            "rate": row.get("rate"),
+            "p1": row.get("p1"),
+            "p25": row.get("p25"),
+            "p75": row.get("p75"),
+            "p99": row.get("p99"),
+            "volume_bn": row.get("volume_bn"),
+            "effective_date": row.get("effective_date"),
+            "target_from": row.get("target_from"),
+            "target_to": row.get("target_to"),
+        })
+
+    result = {
+        "sr3": sr3_results,
+        "sr1": sr1_results,
+        "zq": zq_results,
+        "treasury_futures": tsy_results,
+        "live_count": live_count,
+        "live_sr1": live_sr1,
+        "live_zq": live_zq,
+        "live_tsy": live_tsy,
+        "total_sr3": len(sr3_results),
+        "fallback_count": fallback_count,
+        "unavailable_count": unavailable_count,
+        "history_available": 0,
+        "history_note": (
+            "CME-style board: Last · Change/Net · Settlement(prev) · High · Low · Volume. "
+            "Delayed yfinance quotes; volume from last session bar when available."
+        ),
+        "quality_note": (
+            "Modeled after CME STIR delivery: outrights grid + ICS spreads (SERFF) + packs/flies. "
+            "SFR = SR3 3M SOFR. SERFFxx = SOFR fut − cash EFFR when ZQ offline. "
+            "NY Fed = official overnight prints + percentiles + $bn volume + FOMC target. "
+            "ALLOW_STIR_FALLBACK=0 by default."
+        ),
+        "path": path,
+        "chart": chart,
+        "spreads": spreads,
+        "serff_board": serff_board,
+        "nyfed": {
+            "rates": ny_rates,
+            "sofr_avg": (nyfed or {}).get("sofr_avg"),
+            "target": (nyfed or {}).get("target"),
+            "corridor": (nyfed or {}).get("corridor"),
+            "as_of": (nyfed or {}).get("as_of"),
+            "source": (nyfed or {}).get("source"),
+            "note": (nyfed or {}).get("note"),
+            "ref_print": ref_print,
+        },
+        "sofr": sofr_v,
+        "effr": effr_v,
+        "iorb": iorb_v,
+        "as_of": datetime.now(timezone.utc).isoformat(),
+        "source": "yfinance+NYFed+FRED",
+        "delivery_note": (
+            "Inspired by CME rates UX: (1) outright strip with H/L/Vol, "
+            "(2) intermarket SERFF board, (3) calendar/fly/pack pack, "
+            "(4) cash reference print, (5) Treasury futures continuum."
+        ),
+    }
+    ttl_cache.set_cached(key, result)
+    return result
+
+@app.get("/api/greeks/{ticker}")
+async def get_greeks(
+    ticker: str,
+    r: float | None = Query(None, description="Risk-free decimal; default = live SOFR"),
+    q: float = Query(0.013, description="Dividend yield decimal"),
+):
+    r_eff = r if r is not None else await _default_r()
+    curve_pts = None if r is not None else await _term_curve_points()
+    r_mode = "flat" if r is not None else ("term_structure" if curve_pts else "SOFR")
+    key = f"greeks:{ticker}:{r_eff}:{q}:{r_mode}"
+    hit = ttl_cache.get_cached(key, GREEKS_CACHE_TTL)
+    if not ttl_cache.is_miss(hit):
+        return hit
+    try:
+        result = await asyncio.to_thread(build_greeks_surface, ticker, r_eff, q, curve_pts)
+        surfaces = {}
+        for greek in ["delta", "gamma", "vega", "theta", "vanna", "charm"]:
+            surfaces[greek] = build_interpolated_surface(result["points"], greek)
+        result["surfaces"] = surfaces
+        result["gex_grid"] = build_gex_grid(result["points"], result["spot"])
+        result["charm_grid"] = build_charm_exposure_grid(result["points"], result["spot"])
+        result["as_of"] = datetime.now(timezone.utc).isoformat()
+        result["source"] = "yfinance"
+        result["r"] = r_eff
+        result["q"] = q
+        result["r_source"] = "query" if r is not None else ("treasury_term + SOFR anchor" if curve_pts else "SOFR")
+        result["r_mode"] = r_mode
+        result["charm_note"] = "Charm is per calendar day (Δ delta / day). Exposure grid = charm × OI × 100 × S."
+        ttl_cache.set_cached(key, result)
+        return result
+    except ValueError as e:
+        from fastapi.responses import JSONResponse
+        return JSONResponse(status_code=400, content={"error": str(e)})
+    except Exception as e:
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"{type(e).__name__}: {str(e)}"},
+        )
+
+@app.get("/api/greeks/{ticker}/history")
+async def get_greeks_history(ticker: str, period: str = "1mo"):
+    key = f"greeks_history:{ticker}:{period}"
+    hit = ttl_cache.get_cached(key, GREEKS_CACHE_TTL)
+    if not ttl_cache.is_miss(hit):
+        return hit
+    try:
+        import yfinance as yf
+        import pandas as pd
+        stock = yf.Ticker(ticker)
+        hist = stock.history(period=period)
+        if hist.empty:
+            return {
+                "ticker": ticker,
+                "data": [],
+                "as_of": datetime.now(timezone.utc).isoformat(),
+                "source": "yfinance",
+            }
+        data = []
+        for idx, row in hist.iterrows():
+            data.append({
+                "date": idx.strftime("%Y-%m-%d") if hasattr(idx, "strftime") else str(idx),
+                "open": round(float(row["Open"]), 2),
+                "high": round(float(row["High"]), 2),
+                "low": round(float(row["Low"]), 2),
+                "close": round(float(row["Close"]), 2),
+                "volume": int(row["Volume"]) if "Volume" in row else 0,
+            })
+        result = {
+            "ticker": ticker,
+            "data": data,
+            "as_of": datetime.now(timezone.utc).isoformat(),
+            "source": "yfinance",
+        }
+        ttl_cache.set_cached(key, result)
+        return result
+    except Exception as e:
+        return {
+            "ticker": ticker,
+            "data": [],
+            "error": str(e),
+            "as_of": datetime.now(timezone.utc).isoformat(),
+        }
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

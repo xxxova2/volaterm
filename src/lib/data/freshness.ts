@@ -1,0 +1,136 @@
+/**
+ * Domain-aware data freshness — all thresholds in milliseconds.
+ * UI chips (Freshness / DataBadge / StatusBar) should prefer this module.
+ */
+
+export type FreshnessDomain = 'spot' | 'chain' | 'macro' | 'crypto' | 'stream';
+
+export type FreshnessKind =
+  | 'live'
+  | 'delayed'
+  | 'stale'
+  | 'expired'
+  | 'demo'
+  | 'down'
+  | 'unknown';
+
+export interface FreshnessThresholds {
+  delayedMs: number;
+  staleMs: number;
+  expiredMs: number;
+}
+
+/** Domain defaults (ms). Macro matches DataBadge 15m/30m. */
+export const FRESHNESS_THRESHOLDS: Record<FreshnessDomain, FreshnessThresholds> = {
+  spot: { delayedMs: 45_000, staleMs: 90_000, expiredMs: 600_000 },
+  chain: { delayedMs: 60_000, staleMs: 180_000, expiredMs: 900_000 },
+  crypto: { delayedMs: 45_000, staleMs: 120_000, expiredMs: 600_000 },
+  macro: { delayedMs: 900_000, staleMs: 1_800_000, expiredMs: 14_400_000 },
+  stream: { delayedMs: 5_000, staleMs: 30_000, expiredMs: 120_000 },
+};
+
+export interface DataProvenance {
+  domain: FreshnessDomain;
+  source: string;
+  asOfMs: number | null;
+  fetchedAtMs: number;
+  kind: FreshnessKind;
+  label?: string;
+}
+
+export type StoreProvenance = {
+  spot: DataProvenance | null;
+  chain: DataProvenance | null;
+  cryptoBtc: DataProvenance | null;
+  cryptoEth: DataProvenance | null;
+  macro: DataProvenance | null;
+};
+
+export const EMPTY_PROVENANCE: StoreProvenance = {
+  spot: null,
+  chain: null,
+  cryptoBtc: null,
+  cryptoEth: null,
+  macro: null,
+};
+
+/**
+ * Classify age with optional hysteresis when leaving LIVE:
+ * stay LIVE until age > delayedMs * leaveLiveFactor (default 1.2).
+ */
+export function classifyDomainFreshness(
+  asOfMs: number | null | undefined,
+  domain: FreshnessDomain,
+  opts?: {
+    demo?: boolean;
+    down?: boolean;
+    previousKind?: FreshnessKind;
+    leaveLiveFactor?: number;
+    nowMs?: number;
+  },
+): FreshnessKind {
+  if (opts?.down) return 'down';
+  if (opts?.demo) return 'demo';
+  if (asOfMs == null || !Number.isFinite(asOfMs) || asOfMs <= 0) return 'unknown';
+
+  const now = opts?.nowMs ?? Date.now();
+  const age = Math.max(0, now - asOfMs);
+  const t = FRESHNESS_THRESHOLDS[domain];
+  const leaveLive = (opts?.leaveLiveFactor ?? 1.2) * t.delayedMs;
+
+  if (opts?.previousKind === 'live' && age <= leaveLive) return 'live';
+  if (age < t.delayedMs) return 'live';
+  if (age < t.staleMs) return 'delayed';
+  if (age < t.expiredMs) return 'stale';
+  return 'expired';
+}
+
+/** Build a provenance record for store / StatusBar. */
+export function makeProvenance(
+  domain: FreshnessDomain,
+  source: string,
+  asOfMs: number | null,
+  opts?: { demo?: boolean; down?: boolean; label?: string; fetchedAtMs?: number; previousKind?: FreshnessKind },
+): DataProvenance {
+  const fetchedAtMs = opts?.fetchedAtMs ?? Date.now();
+  const kind = classifyDomainFreshness(asOfMs, domain, {
+    demo: opts?.demo,
+    down: opts?.down,
+    previousKind: opts?.previousKind,
+  });
+  return {
+    domain,
+    source,
+    asOfMs,
+    fetchedAtMs,
+    kind,
+    label: opts?.label,
+  };
+}
+
+/**
+ * Legacy ISO / minute-based classifier (DataBadge / macro widgets).
+ * Defaults: delayed 15m, stale **30m** (aligned with DataBadge, not the old 60).
+ */
+export function classifyFreshnessFromIso(
+  asOf: string | null | undefined,
+  opts?: {
+    delayedMin?: number;
+    staleMin?: number;
+    demo?: boolean;
+    down?: boolean;
+  },
+): FreshnessKind {
+  if (opts?.down) return 'down';
+  if (opts?.demo) return 'demo';
+  if (!asOf) return 'unknown';
+  const date = new Date(asOf);
+  if (isNaN(date.getTime())) return 'unknown';
+  const delayedMin = opts?.delayedMin ?? 15;
+  const staleMin = opts?.staleMin ?? 30;
+  const ageMin = (Date.now() - date.getTime()) / 60_000;
+  if (ageMin < delayedMin) return 'live';
+  if (ageMin < staleMin) return 'delayed';
+  if (ageMin < staleMin * 4) return 'stale';
+  return 'expired';
+}

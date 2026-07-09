@@ -34,7 +34,7 @@ describe('ArbitrageView', () => {
       liveAvailable: false,
       loading: false,
       lastUpdate: Date.now(),
-      activeTab: 'surface',
+      activeTab: 'vol',
       displayMode: 'strike',
       selectedExpiry: null,
       playbackInterval: null,

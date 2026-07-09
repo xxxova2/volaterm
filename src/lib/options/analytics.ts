@@ -132,16 +132,22 @@ export function impliedMove(snap: VolSnapshot) {
   const calls = front.calls;
   const puts = front.puts;
 
+  // Prefer the ATM straddle (strike closest to spot with both call + put mids).
   let straddle = 0;
+  let bestDist = Infinity;
   for (const c of calls) {
-    const p = puts.find(p => p.strike === c.strike);
-    if (p && c.mid > 0 && p.mid > 0) {
+    if (!(c.mid > 0)) continue;
+    const p = puts.find((pp) => pp.strike === c.strike);
+    if (!p || !(p.mid > 0)) continue;
+    const dist = Math.abs(c.strike - snap.spot);
+    if (dist < bestDist) {
+      bestDist = dist;
       straddle = c.mid + p.mid;
-      break;
     }
   }
 
-  const move = straddle * 0.8;
+  // 1σ approx: straddle ≈ 0.8 * expected move for near-term (rule of thumb).
+  const move = straddle > 0 ? straddle * 0.8 : snap.spot * front.atmIV * Math.sqrt(front.dte / 365);
   const movePct = move / snap.spot;
   const probTouch = 0.5;
 
@@ -186,9 +192,9 @@ export function maxPainStrike(snap: VolSnapshot): number | null {
 }
 
 /**
- * Calculates aggregate portfolio Greeks across all expiries
- * @param snap - Volatility snapshot containing option data
- * @returns Object containing total portfolio delta, gamma, theta, and vega
+ * Sum of listed option Greeks across the full chain (inventory scan).
+ * This is NOT position / book risk — it scales with how many strikes are quoted.
+ * Prefer multi-leg portfolio tools for real desk risk.
  */
 export function portfolioGreeks(snap: VolSnapshot) {
   let delta = 0, gamma = 0, theta = 0, vega = 0;
@@ -233,55 +239,319 @@ export function ivRank(frames: { snapshot: VolSnapshot }[], currentIdx: number):
   return { rank: Math.max(0, Math.min(1, rank)), percentile };
 }
 
+/** Weight for dealer exposure aggregates. */
+export type ExposureWeight = 'oi' | 'unit';
+
+export type DealerMetric = 'gex' | 'dex' | 'vex' | 'charm';
+
+export interface DealerPoint {
+  strike: number;
+  callGEX: number;
+  putGEX: number;
+  netGEX: number;
+  /** $ delta notional (customer long OI): δ · S · w · mult */
+  callDEX: number;
+  putDEX: number;
+  netDEX: number;
+  /** Vanna × S × w × mult (vol×spot cross) */
+  callVEX: number;
+  putVEX: number;
+  netVEX: number;
+  /** Charm per day × S × w × mult ($ delta bleed / day) */
+  callCharm: number;
+  putCharm: number;
+  netCharm: number;
+}
+
+export interface DealerExposure {
+  points: DealerPoint[];
+  totalGEX: number;
+  totalDEX: number;
+  totalVEX: number;
+  totalCharm: number;
+  gammaFlip: number | null;
+  callWall: number | null;
+  putWall: number | null;
+  weight: ExposureWeight;
+  unitNote: string;
+}
+
+function weightOf(q: { openInterest: number }, mode: ExposureWeight): number {
+  if (mode === 'unit') return q.openInterest > 0 ? 1 : 0;
+  return Math.max(0, q.openInterest);
+}
+
+function flipFromSeries(points: { strike: number; net: number }[]): number | null {
+  if (points.length === 0) return null;
+  let cumulative = 0;
+  let prevCum = 0;
+  let flip: number | null = null;
+  for (const p of points) {
+    prevCum = cumulative;
+    cumulative += p.net;
+    if (flip === null && prevCum < 0 && cumulative >= 0) flip = p.strike;
+  }
+  if (flip !== null) return flip;
+  let best = points[0]!;
+  let run = 0;
+  let bestAbs = Infinity;
+  for (const p of points) {
+    run += p.net;
+    if (Math.abs(run) < bestAbs) {
+      bestAbs = Math.abs(run);
+      best = p;
+    }
+  }
+  return best.strike;
+}
+
 /**
- * Calculates gamma exposure (GEX) by strike
- * GEX measures the sensitivity of market makers' delta hedging requirements to price changes
- * Positive GEX indicates dealers must buy when price drops (stabilizing)
- * Negative GEX indicates dealers must sell when price drops (destabilizing)
- * @param snap - Volatility snapshot containing option data
- * @param maxDte - Optional maximum DTE to include in calculation
- * @returns Object containing GEX points by strike, total GEX, and gamma flip point
+ * Full dealer stack: GEX / DEX / VEX / Charm by strike.
+ *
+ * Convention (customer long listed OI → dealers short):
+ *   call GEX = +γ·S·w·mult, put GEX = −γ·S·w·mult
+ *   DEX = δ·S·w·mult (δ already signed)
+ *   VEX = vanna·S·w·mult
+ *   Charm = (charm/365)·S·w·mult  ($ delta change per calendar day)
+ *
+ * weight 'oi' = open interest (default); 'unit' = 1 per listed contract with OI>0.
+ */
+export function dealerExposure(
+  snap: VolSnapshot,
+  opts?: { maxDte?: number; weight?: ExposureWeight },
+): DealerExposure {
+  const weight = opts?.weight ?? 'oi';
+  const maxDte = opts?.maxDte;
+  const mult = snap.contractSize ?? 100;
+  const S = snap.spot;
+
+  type Acc = {
+    callGEX: number; putGEX: number;
+    callDEX: number; putDEX: number;
+    callVEX: number; putVEX: number;
+    callCharm: number; putCharm: number;
+  };
+  const map = new Map<number, Acc>();
+
+  for (const slice of snap.expiries) {
+    if (maxDte != null && slice.dte > maxDte) continue;
+    for (const q of [...slice.calls, ...slice.puts]) {
+      const w = weightOf(q, weight);
+      if (w <= 0) continue;
+      const acc = map.get(q.strike) ?? {
+        callGEX: 0, putGEX: 0,
+        callDEX: 0, putDEX: 0,
+        callVEX: 0, putVEX: 0,
+        callCharm: 0, putCharm: 0,
+      };
+      const scale = S * w * mult;
+      const gamma = q.gamma ?? 0;
+      const delta = q.delta ?? 0;
+      const vanna = q.vanna ?? 0;
+      // greeks.charm is dΔ/dT (year); convert to per calendar day
+      const charmDay = (q.charm ?? 0) / 365;
+
+      if (q.type === 'call') {
+        acc.callGEX += gamma * scale;
+        acc.callDEX += delta * scale;
+        acc.callVEX += vanna * scale;
+        acc.callCharm += charmDay * scale;
+      } else {
+        acc.putGEX -= gamma * scale; // dealer-style put GEX negative
+        acc.putDEX += delta * scale; // put δ already ≤ 0
+        acc.putVEX += vanna * scale;
+        acc.putCharm += charmDay * scale;
+      }
+      map.set(q.strike, acc);
+    }
+  }
+
+  const sorted = [...map.entries()].sort((a, b) => a[0] - b[0]);
+  const points: DealerPoint[] = sorted.map(([strike, g]) => ({
+    strike,
+    callGEX: g.callGEX,
+    putGEX: g.putGEX,
+    netGEX: g.callGEX + g.putGEX,
+    callDEX: g.callDEX,
+    putDEX: g.putDEX,
+    netDEX: g.callDEX + g.putDEX,
+    callVEX: g.callVEX,
+    putVEX: g.putVEX,
+    netVEX: g.callVEX + g.putVEX,
+    callCharm: g.callCharm,
+    putCharm: g.putCharm,
+    netCharm: g.callCharm + g.putCharm,
+  }));
+
+  let totalGEX = 0, totalDEX = 0, totalVEX = 0, totalCharm = 0;
+  for (const p of points) {
+    totalGEX += p.netGEX;
+    totalDEX += p.netDEX;
+    totalVEX += p.netVEX;
+    totalCharm += p.netCharm;
+  }
+
+  const gammaFlip = flipFromSeries(points.map((p) => ({ strike: p.strike, net: p.netGEX })));
+  const callWall = points.length
+    ? [...points].sort((a, b) => b.callGEX - a.callGEX)[0]!.strike
+    : null;
+  const putWall = points.length
+    ? [...points].sort((a, b) => a.putGEX - b.putGEX)[0]!.strike
+    : null;
+
+  return {
+    points,
+    totalGEX,
+    totalDEX,
+    totalVEX,
+    totalCharm,
+    gammaFlip,
+    callWall,
+    putWall,
+    weight,
+    unitNote: weight === 'oi'
+      ? 'OI-weighted · $ notional (greek × S × OI × mult)'
+      : 'Unit weight (1 per listed OI>0) · compare structure not size',
+  };
+}
+
+/**
+ * Calculates gamma exposure (GEX) by strike (backward-compatible wrapper).
+ * Prefer dealerExposure() for DEX / VEX / Charm.
  */
 export function gammaExposure(
   snap: VolSnapshot,
   maxDte?: number,
 ): { points: { strike: number; callGEX: number; putGEX: number; netGEX: number }[]; totalGEX: number; gammaFlip: number | null } {
-  const gexMap = new Map<number, { callGEX: number; putGEX: number }>();
+  const d = dealerExposure(snap, { maxDte });
+  return {
+    points: d.points.map((p) => ({
+      strike: p.strike,
+      callGEX: p.callGEX,
+      putGEX: p.putGEX,
+      netGEX: p.netGEX,
+    })),
+    totalGEX: d.totalGEX,
+    gammaFlip: d.gammaFlip,
+  };
+}
+
+export interface ParityEdgeRow {
+  expiry: string;
+  dte: number;
+  strike: number;
+  callMid: number;
+  putMid: number;
+  /** C − P − (S e^{-qT} − K e^{-rT}) */
+  residual: number;
+  residualPctSpot: number;
+  /** Bid/ask edge proxy: residual vs half-spread sum */
+  tradeable: boolean;
+  halfSpread: number;
+}
+
+/**
+ * Put–call parity residual scan (European approximation).
+ * residual > 0 ⇒ synthetic long stock (C−P) rich vs cash; < 0 ⇒ cheap.
+ * tradeable only when |residual| > call/put half-spread sum (rough costs).
+ */
+export function scanParityEdges(
+  snap: VolSnapshot,
+  opts?: { maxDte?: number; bandPct?: number; maxRows?: number },
+): ParityEdgeRow[] {
+  const band = opts?.bandPct ?? 0.06;
+  const maxDte = opts?.maxDte ?? 120;
+  const maxRows = opts?.maxRows ?? 40;
+  const rows: ParityEdgeRow[] = [];
+  const r = snap.riskFreeRate;
+  const q = snap.dividendYield;
 
   for (const slice of snap.expiries) {
-    if (maxDte && slice.dte > maxDte) continue;
-    for (const q of [...slice.calls, ...slice.puts]) {
-      if (q.gamma == null || q.openInterest <= 0) continue;
-      const gex = q.gamma * snap.spot * q.openInterest * 100;
-      const existing = gexMap.get(q.strike) ?? { callGEX: 0, putGEX: 0 };
-      if (q.type === 'call') {
-        existing.callGEX += gex;
-      } else {
-        existing.putGEX += gex;
-      }
-      gexMap.set(q.strike, existing);
+    if (slice.dte > maxDte || slice.dte <= 0) continue;
+    const T = slice.dte / 365;
+    const discS = snap.spot * Math.exp(-q * T);
+    const putByK = new Map(slice.puts.map((p) => [p.strike, p]));
+    for (const c of slice.calls) {
+      if (Math.abs(c.strike / snap.spot - 1) > band) continue;
+      const p = putByK.get(c.strike);
+      if (!p || !(c.mid > 0) || !(p.mid > 0)) continue;
+      const theo = discS - c.strike * Math.exp(-r * T);
+      const residual = (c.mid - p.mid) - theo;
+      const halfSpread =
+        Math.max(0, (c.ask - c.bid) / 2) + Math.max(0, (p.ask - p.bid) / 2);
+      rows.push({
+        expiry: slice.expiry,
+        dte: slice.dte,
+        strike: c.strike,
+        callMid: c.mid,
+        putMid: p.mid,
+        residual,
+        residualPctSpot: residual / snap.spot,
+        tradeable: Math.abs(residual) > halfSpread + 1e-9 && halfSpread > 0,
+        halfSpread,
+      });
     }
   }
 
-  const sorted = [...gexMap.entries()].sort((a, b) => a[0] - b[0]);
-  const points = sorted.map(([strike, g]) => ({
-    strike,
-    callGEX: g.callGEX,
-    putGEX: g.putGEX,
-    netGEX: g.callGEX + g.putGEX,
-  }));
+  rows.sort((a, b) => Math.abs(b.residual) - Math.abs(a.residual));
+  return rows.slice(0, maxRows);
+}
 
-  let totalGEX = 0;
-  for (const p of points) totalGEX += p.netGEX;
-
-  let gammaFlip: number | null = null;
-  let cumulative = 0;
-  for (const p of points) {
-    cumulative += p.netGEX;
-    if (cumulative >= 0 && gammaFlip === null) {
-      gammaFlip = p.strike;
+/** Listed inventory by expiry (MM scan — not a position book). */
+export function inventoryByExpiry(snap: VolSnapshot) {
+  return snap.expiries.map((slice) => {
+    let delta = 0, gamma = 0, vega = 0, theta = 0, callOI = 0, putOI = 0;
+    for (const q of slice.calls) {
+      delta += q.delta ?? 0;
+      gamma += q.gamma ?? 0;
+      vega += q.vega ?? 0;
+      theta += q.theta ?? 0;
+      callOI += q.openInterest;
     }
-  }
+    for (const q of slice.puts) {
+      delta += q.delta ?? 0;
+      gamma += q.gamma ?? 0;
+      vega += q.vega ?? 0;
+      theta += q.theta ?? 0;
+      putOI += q.openInterest;
+    }
+    return {
+      expiry: slice.expiry,
+      dte: slice.dte,
+      atmIV: slice.atmIV,
+      delta,
+      gamma,
+      vega,
+      theta,
+      callOI,
+      putOI,
+      pcr: callOI > 0 ? putOI / callOI : null,
+    };
+  });
+}
 
-  return { points, totalGEX, gammaFlip };
+/**
+ * Close-to-close annualized realized vol (simple log returns).
+ * needs ≥5 closes; returns null otherwise.
+ */
+export function realizedVolCloseToClose(closes: number[], periodsPerYear = 252): number | null {
+  if (closes.length < 5) return null;
+  const rets: number[] = [];
+  for (let i = 1; i < closes.length; i++) {
+    const a = closes[i - 1]!;
+    const b = closes[i]!;
+    if (a > 0 && b > 0) rets.push(Math.log(b / a));
+  }
+  if (rets.length < 4) return null;
+  const mean = rets.reduce((s, x) => s + x, 0) / rets.length;
+  let v = 0;
+  for (const x of rets) v += (x - mean) ** 2;
+  const std = Math.sqrt(v / (rets.length - 1));
+  return std * Math.sqrt(periodsPerYear);
+}
+
+/** IV − RV premium (positive = IV rich vs realized). */
+export function volRiskPremium(atmIV: number | null | undefined, rv: number | null): number | null {
+  if (atmIV == null || rv == null || !(atmIV > 0) || !(rv > 0)) return null;
+  return atmIV - rv;
 }

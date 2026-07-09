@@ -1,0 +1,273 @@
+/**
+ * Multi-leg portfolio builder — combo greeks and mark PnL (Thalex-style).
+ */
+
+import { computeGreeks, type GreeksResult } from './greeks';
+import { blackScholes } from './black-scholes';
+import type { VolSnapshot, OptionQuote } from './types';
+
+export type LegSide = 'long' | 'short';
+export type LegKind = 'call' | 'put' | 'future' | 'spot';
+
+export interface PortfolioLeg {
+  id: string;
+  kind: LegKind;
+  /** call/put only */
+  side: LegSide;
+  qty: number;
+  strike?: number;
+  expiry?: string;
+  /** Entry premium (per unit) for options; entry price for spot/future */
+  entryPrice: number;
+  /** Override IV (decimal); else taken from snapshot */
+  iv?: number;
+}
+
+export interface ComboGreeks {
+  price: number;
+  delta: number;
+  gamma: number;
+  theta: number;
+  vega: number;
+  rho: number;
+  vanna: number;
+  volga: number;
+  charm: number;
+}
+
+export interface ComboMark {
+  mark: number;
+  pnl: number;
+  greeks: ComboGreeks;
+}
+
+const ZERO: ComboGreeks = {
+  price: 0, delta: 0, gamma: 0, theta: 0, vega: 0, rho: 0, vanna: 0, volga: 0, charm: 0,
+};
+
+function signOf(side: LegSide): number {
+  return side === 'long' ? 1 : -1;
+}
+
+function findQuote(
+  snap: VolSnapshot,
+  type: 'call' | 'put',
+  strike: number,
+  expiry: string,
+): OptionQuote | null {
+  const slice = snap.expiries.find(e => e.expiry === expiry);
+  if (!slice) return null;
+  const list = type === 'call' ? slice.calls : slice.puts;
+  let best: OptionQuote | null = null;
+  let bestDist = Infinity;
+  for (const q of list) {
+    const d = Math.abs(q.strike - strike);
+    if (d < bestDist) {
+      bestDist = d;
+      best = q;
+    }
+  }
+  return best;
+}
+
+function dteYears(snap: VolSnapshot, expiry: string): number {
+  const slice = snap.expiries.find(e => e.expiry === expiry);
+  if (!slice) return 30 / 365;
+  return Math.max(1 / 365 / 24, slice.dte / 365);
+}
+
+/**
+ * Aggregate combo greeks / mark at a given spot (and optional vol shock / time decay).
+ * @param opts.daysElapsed — calendar days since snapshot; reduces residual T (theta path).
+ */
+export function evaluateCombo(
+  legs: PortfolioLeg[],
+  snap: VolSnapshot,
+  opts: { spot?: number; volShock?: number; daysElapsed?: number } = {},
+): ComboMark {
+  const S = opts.spot ?? snap.spot;
+  const volShock = opts.volShock ?? 0;
+  const daysElapsed = Math.max(0, opts.daysElapsed ?? 0);
+  const r = snap.riskFreeRate;
+  const q = snap.dividendYield;
+  const acc = { ...ZERO };
+  let entryCost = 0;
+
+  for (const leg of legs) {
+    const sgn = signOf(leg.side) * leg.qty;
+    entryCost += sgn * leg.entryPrice;
+
+    if (leg.kind === 'spot' || leg.kind === 'future') {
+      const mark = S;
+      acc.price += sgn * mark;
+      acc.delta += sgn * 1;
+      continue;
+    }
+
+    if (leg.strike == null || !leg.expiry) continue;
+    const T0 = dteYears(snap, leg.expiry);
+    const T = Math.max(1e-8, T0 - daysElapsed / 365);
+    const qte = findQuote(snap, leg.kind, leg.strike, leg.expiry);
+    let vol = leg.iv ?? qte?.iv ?? null;
+    if (vol == null || vol <= 0) {
+      // Fallback: nearest ATM IV on that expiry
+      const slice = snap.expiries.find(e => e.expiry === leg.expiry);
+      vol = slice?.atmIV ?? 0.25;
+    }
+    vol = Math.max(0.01, vol + volShock);
+
+    // Expired: intrinsic only
+    if (T <= 1e-8 || daysElapsed / 365 >= T0) {
+      const intrinsic = leg.kind === 'call'
+        ? Math.max(0, S - leg.strike)
+        : Math.max(0, leg.strike - S);
+      acc.price += sgn * intrinsic;
+      acc.delta += sgn * (leg.kind === 'call' ? (S > leg.strike ? 1 : 0) : (S < leg.strike ? -1 : 0));
+      continue;
+    }
+
+    const g: GreeksResult = computeGreeks(leg.kind, S, leg.strike, T, r, q, vol);
+    acc.price += sgn * g.price;
+    acc.delta += sgn * g.delta;
+    acc.gamma += sgn * g.gamma;
+    acc.theta += sgn * g.theta;
+    acc.vega += sgn * g.vega;
+    acc.rho += sgn * g.rho;
+    acc.vanna += sgn * g.vanna;
+    acc.volga += sgn * g.volga;
+    acc.charm += sgn * g.charm;
+  }
+
+  return {
+    mark: acc.price,
+    pnl: acc.price - entryCost,
+    greeks: acc,
+  };
+}
+
+/** Combo greeks as a function of spot (for profile charts). */
+export function comboGreeksProfile(
+  legs: PortfolioLeg[],
+  snap: VolSnapshot,
+  spots: number[],
+): { spot: number; mark: number; pnl: number; delta: number; gamma: number; theta: number; vega: number }[] {
+  return spots.map(spot => {
+    const m = evaluateCombo(legs, snap, { spot });
+    return {
+      spot,
+      mark: m.mark,
+      pnl: m.pnl,
+      delta: m.greeks.delta,
+      gamma: m.greeks.gamma,
+      theta: m.greeks.theta,
+      vega: m.greeks.vega,
+    };
+  });
+}
+
+/** Spot grid around current (±pct). */
+export function spotGrid(spot: number, pct = 0.15, n = 61): number[] {
+  const lo = spot * (1 - pct);
+  const hi = spot * (1 + pct);
+  const out: number[] = [];
+  for (let i = 0; i < n; i++) {
+    out.push(lo + (hi - lo) * (i / (n - 1)));
+  }
+  return out;
+}
+
+/** Build common multi-leg templates from a snapshot. */
+export function templateLegs(
+  name: 'long_straddle' | 'short_straddle' | 'long_call' | 'short_put' | 'risk_reversal' | 'call_spread',
+  snap: VolSnapshot,
+  expiryIdx = 0,
+): PortfolioLeg[] {
+  const slice = snap.expiries[expiryIdx] ?? snap.expiries[0];
+  if (!slice) return [];
+  const atm = slice.calls.reduce((b, q) =>
+    Math.abs(q.strike - snap.spot) < Math.abs(b.strike - snap.spot) ? q : b
+  , slice.calls[0]!);
+  const atmPut = slice.puts.find(p => p.strike === atm.strike) ?? slice.puts[0]!;
+  const otmCall = slice.calls.find(c => c.strike > snap.spot * 1.05) ?? atm;
+  const otmPut = slice.puts.find(p => p.strike < snap.spot * 0.95) ?? atmPut;
+
+  const id = () => Math.random().toString(36).slice(2, 9);
+  switch (name) {
+    case 'long_straddle':
+      return [
+        { id: id(), kind: 'call', side: 'long', qty: 1, strike: atm.strike, expiry: slice.expiry, entryPrice: atm.mid || atm.last },
+        { id: id(), kind: 'put', side: 'long', qty: 1, strike: atmPut.strike, expiry: slice.expiry, entryPrice: atmPut.mid || atmPut.last },
+      ];
+    case 'short_straddle':
+      return [
+        { id: id(), kind: 'call', side: 'short', qty: 1, strike: atm.strike, expiry: slice.expiry, entryPrice: atm.mid || atm.last },
+        { id: id(), kind: 'put', side: 'short', qty: 1, strike: atmPut.strike, expiry: slice.expiry, entryPrice: atmPut.mid || atmPut.last },
+      ];
+    case 'long_call':
+      return [
+        { id: id(), kind: 'call', side: 'long', qty: 1, strike: atm.strike, expiry: slice.expiry, entryPrice: atm.mid || atm.last },
+      ];
+    case 'short_put':
+      return [
+        { id: id(), kind: 'put', side: 'short', qty: 1, strike: atmPut.strike, expiry: slice.expiry, entryPrice: atmPut.mid || atmPut.last },
+      ];
+    case 'risk_reversal':
+      return [
+        { id: id(), kind: 'call', side: 'long', qty: 1, strike: otmCall.strike, expiry: slice.expiry, entryPrice: otmCall.mid || otmCall.last },
+        { id: id(), kind: 'put', side: 'short', qty: 1, strike: otmPut.strike, expiry: slice.expiry, entryPrice: otmPut.mid || otmPut.last },
+      ];
+    case 'call_spread':
+      return [
+        { id: id(), kind: 'call', side: 'long', qty: 1, strike: atm.strike, expiry: slice.expiry, entryPrice: atm.mid || atm.last },
+        { id: id(), kind: 'call', side: 'short', qty: 1, strike: otmCall.strike, expiry: slice.expiry, entryPrice: otmCall.mid || otmCall.last },
+      ];
+    default:
+      return [];
+  }
+}
+
+/** Intrinsic at expiry for BE analysis. */
+export function comboPayoffAtExpiry(legs: PortfolioLeg[], S: number): number {
+  let pnl = 0;
+  for (const leg of legs) {
+    const sgn = signOf(leg.side) * leg.qty;
+    if (leg.kind === 'spot' || leg.kind === 'future') {
+      pnl += sgn * (S - leg.entryPrice);
+      continue;
+    }
+    if (leg.strike == null) continue;
+    const intrinsic = leg.kind === 'call'
+      ? Math.max(0, S - leg.strike)
+      : Math.max(0, leg.strike - S);
+    pnl += sgn * (intrinsic - leg.entryPrice);
+  }
+  return pnl;
+}
+
+export function breakEvenSpots(legs: PortfolioLeg[], spot: number, loMult = 0.5, hiMult = 1.5, n = 400): number[] {
+  const lo = spot * loMult;
+  const hi = spot * hiMult;
+  const bes: number[] = [];
+  let prev = comboPayoffAtExpiry(legs, lo);
+  for (let i = 1; i <= n; i++) {
+    const S = lo + (hi - lo) * (i / n);
+    const v = comboPayoffAtExpiry(legs, S);
+    if (prev === 0) bes.push(lo + (hi - lo) * ((i - 1) / n));
+    else if (prev * v < 0) {
+      // Linear interpolate zero
+      const S0 = lo + (hi - lo) * ((i - 1) / n);
+      const t = Math.abs(prev) / (Math.abs(prev) + Math.abs(v) || 1);
+      bes.push(S0 + t * (S - S0));
+    }
+    prev = v;
+  }
+  return bes;
+}
+
+/** BS mid for a single option (utility). */
+export function theoreticalPrice(
+  type: 'call' | 'put',
+  S: number, K: number, T: number, r: number, q: number, vol: number,
+): number {
+  return blackScholes(type, S, K, T, r, q, vol).price;
+}

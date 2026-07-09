@@ -34,14 +34,28 @@ function buildStrikes(spot: number): number[] {
   return strikes.filter(s => s > 0);
 }
 
+function isCrypto(symbol: string): boolean {
+  const s = symbol.toUpperCase();
+  return s === 'BTC' || s === 'ETH' || s === 'IBIT' || s === 'BITO' || s === 'MSTR' || s === 'COIN' || s === 'GBTC';
+}
+
 function modelIV(
   expiryIdx: number,
   totalExpiries: number,
   strike: number,
   spot: number,
   atmIV: number,
+  crypto = false,
 ): number {
   const k = Math.log(strike / spot);
+  if (crypto) {
+    // Crypto smile: higher wings, mild risk-reversal that can flip with regime.
+    // Put skew softer than equities; OTM calls often rich (upside chase).
+    const wing = 0.12 * k * k;
+    const rr = -0.04 * k; // slight put wing still, but weaker than SPX
+    const term = 0.04 * (1 - expiryIdx / totalExpiries) * k;
+    return Math.max(0.05, atmIV + wing + rr + term);
+  }
   const termSkew = 0.08 * (1 - expiryIdx / totalExpiries);
   const smirk = 0.02 * k * k;
   const skew = termSkew * k;
@@ -56,17 +70,21 @@ export function buildSnapshot(
   eventVol: number,
 ): VolSnapshot {
   const preset = defaultFor(symbol);
+  const crypto = isCrypto(symbol);
   const r = DATA_CONFIG.market.RISK_FREE_RATE;
-  const q = DATA_CONFIG.market.DIVIDEND_YIELD;
+  // Crypto has no dividend; carry comes from funding / futures basis.
+  const q = crypto ? 0 : DATA_CONFIG.market.DIVIDEND_YIELD;
 
   const expiries = buildExpiries();
   const slices: ExpirySlice[] = [];
 
   const baseIV = preset.iv30 + eventVol;
   const atmIVs = expiries.map((_, i) => {
-    const termPremium = 0.02 * Math.exp(-i / 2);
-    const earnings = symbol === 'SPY' ? 0 : 0.03 * Math.exp(-i / 3);
-    return Math.max(0.01, baseIV + termPremium + earnings);
+    const termPremium = (crypto ? 0.04 : 0.02) * Math.exp(-i / 2);
+    const earnings = symbol === 'SPY' || crypto ? 0 : 0.03 * Math.exp(-i / 3);
+    // Crypto: inverted-ish short-term vol spike
+    const frontBump = crypto && i < 2 ? 0.03 : 0;
+    return Math.max(0.01, baseIV + termPremium + earnings + frontBump);
   });
 
   for (let ei = 0; ei < expiries.length; ei++) {
@@ -80,7 +98,7 @@ export function buildSnapshot(
     const puts: OptionQuote[] = [];
 
     for (const strike of expStrikes) {
-      const iv = modelIV(ei, expiries.length, strike, spot, atmIV);
+      const iv = modelIV(ei, expiries.length, strike, spot, atmIV, crypto);
       const g = computeGreeks('call', spot, strike, T, r, q, iv);
       const putG = computeGreeks('put', spot, strike, T, r, q, iv);
 
@@ -122,6 +140,23 @@ export function buildSnapshot(
   };
 }
 
+/**
+ * Pick the OTM quote for surface construction:
+ *  K ≥ S → call IV (OTM / ATM call)
+ *  K < S → put IV  (OTM put)
+ * Falls back to the other side when the preferred wing is missing.
+ */
+function pickSurfaceQuote(
+  slice: ExpirySlice,
+  strike: number,
+  spot: number,
+): OptionQuote | null {
+  const call = slice.calls.find(q => q.strike === strike) ?? null;
+  const put = slice.puts.find(q => q.strike === strike) ?? null;
+  if (strike >= spot) return call ?? put;
+  return put ?? call;
+}
+
 export function buildSurfaceGrid(snapshot: VolSnapshot): SurfaceGrid {
   if (snapshot.expiries.length === 0) {
     return { expiries: [], dtes: [], strikes: [], iv: [], bid: [], ask: [], delta: [] };
@@ -129,7 +164,15 @@ export function buildSurfaceGrid(snapshot: VolSnapshot): SurfaceGrid {
 
   const expiries = snapshot.expiries.map(e => e.expiry);
   const dtes = snapshot.expiries.map(e => e.dte);
-  const strikes = [...new Set(snapshot.expiries.flatMap(e => [...e.calls, ...e.puts].map(q => q.strike)))].sort((a, b) => a - b);
+  const spot = snapshot.spot;
+  // Keep strikes in a usable moneyness band so deep-OTM junk doesn't warp SVI.
+  const allStrikes = [...new Set(
+    snapshot.expiries.flatMap(e => [...e.calls, ...e.puts].map(q => q.strike)),
+  )].sort((a, b) => a - b);
+  const lo = spot * 0.70;
+  const hi = spot * 1.35;
+  let strikes = allStrikes.filter(k => k >= lo && k <= hi);
+  if (strikes.length < 5) strikes = allStrikes;
 
   const iv: (number | null)[][] = [];
   const bid: (number | null)[][] = [];
@@ -143,10 +186,8 @@ export function buildSurfaceGrid(snapshot: VolSnapshot): SurfaceGrid {
     const deltaRow: (number | null)[] = [];
 
     for (const strike of strikes) {
-      const call = slice.calls.find(q => q.strike === strike);
-      const put = slice.puts.find(q => q.strike === strike);
-      const q = call ?? put;
-      if (q) {
+      const q = pickSurfaceQuote(slice, strike, spot);
+      if (q && q.iv != null && isFinite(q.iv) && q.iv > 0) {
         ivRow.push(q.iv);
         bidRow.push(q.bid);
         askRow.push(q.ask);

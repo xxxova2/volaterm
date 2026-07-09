@@ -39,6 +39,13 @@ export const DATA_CONFIG = {
     AAPL: { spot: 220, iv30: 0.22 },
     NVDA: { spot: 125, iv30: 0.35 },
     TSLA: { spot: 350, iv30: 0.45 },
+    /** Crypto underlyings — high vol, no dividend; chain often synthetic */
+    BTC: { spot: 95_000, iv30: 0.55 },
+    ETH: { spot: 3_400, iv30: 0.65 },
+    IBIT: { spot: 55, iv30: 0.50 },
+    BITO: { spot: 18, iv30: 0.55 },
+    MSTR: { spot: 350, iv30: 0.70 },
+    COIN: { spot: 220, iv30: 0.55 },
   },
   
   /** Default market parameters */
@@ -85,8 +92,19 @@ export const API_CONFIG = {
 export const REFRESH_CONFIG = {
   /** Data refresh intervals */
   DEMO_INTERVAL_MS: 3000,
-  LIVE_INTERVAL_MS: 5000,
-  
+  /** Default live poll tick (orchestrator). Spot/chain have their own cadences. */
+  LIVE_INTERVAL_MS: 10_000,
+  /** Spot quote refresh while the US equity session is open. */
+  LIVE_SPOT_OPEN_MS: 12_000,
+  /** Spot quote refresh outside regular hours. */
+  LIVE_SPOT_CLOSED_MS: 120_000,
+  /** Full option-chain refresh while the session is open. */
+  LIVE_CHAIN_OPEN_MS: 45_000,
+  /** Full option-chain refresh outside regular hours. */
+  LIVE_CHAIN_CLOSED_MS: 300_000,
+  /** Age (ms) after which StatusBar flags data as stale. */
+  STALE_AFTER_MS: 90_000,
+
   /** Playback speed settings */
   PLAYBACK_INTERVAL_MS: 700,
   SPEEDS: [0.5, 1, 2, 4],
@@ -100,11 +118,11 @@ export const FMP_CONFIG = {
 } as const;
 
 export const VALIDATION_CONFIG = {
-  /** Symbol validation */
+  /** Symbol validation (equity tickers + short crypto aliases like BTC/ETH) */
   symbol: {
     MIN_LENGTH: 1,
-    MAX_LENGTH: 5,
-    PATTERN: /^[A-Z]+$/,
+    MAX_LENGTH: 6,
+    PATTERN: /^[A-Z][A-Z0-9.-]*$/,
   },
   
   /** Input validation ranges */
