@@ -7,6 +7,8 @@ describe('UI_COPY', () => {
     expect(UI_COPY.load.surface).toBe('Fitting surface…');
     expect(UI_COPY.load.rates).toBe('Loading rates… FRED · NYFed · MacroVol');
     expect(UI_COPY.load.crypto).toBe('Loading crypto books… Deribit');
+    expect(UI_COPY.load.view).toBe('Loading view…');
+    expect(UI_COPY.load.greeks).toBe('Loading Greeks 1.0…');
   });
 
   it('exposes LIVE-only empty strings without demo CTAs', () => {

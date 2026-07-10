@@ -56,7 +56,8 @@ export function VolStructureView() {
       <div className="flex h-full items-center justify-center p-4">
         <EmptyState
           kind="no-data"
-          title={UI_COPY.empty.chain}
+          title="No live surface"
+          body={UI_COPY.empty.chain}
         />
       </div>
     );

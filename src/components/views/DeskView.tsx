@@ -132,7 +132,8 @@ export function DeskView() {
       <Panel title="MM Desk" apis={['yfinance', 'FMP', 'Deribit']} className="h-full">
         <EmptyState
           kind="no-data"
-          title={UI_COPY.empty.chain}
+          title="No surface data"
+          body={`${UI_COPY.empty.chain} Inventory blotter needs a snapshot.`}
         />
       </Panel>
     );
@@ -230,7 +231,7 @@ export function DeskView() {
       </div>
 
       <div className="flex-1 min-h-0">
-        <SectionErrorBoundary name={`MM ${tool}`}>
+        <SectionErrorBoundary key={tool} name={`MM ${tool}`}>
           {tool === 'sim' && <SimTool />}
           {tool === 'combopnl' && <ComboPnlTool />}
           {tool === 'straddle' && <StraddleTool />}

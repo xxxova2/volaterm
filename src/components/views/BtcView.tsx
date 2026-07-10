@@ -391,10 +391,12 @@ export function BtcView() {
 
       {/* Optional dual-pane thin charts (PR-06 full charts path) */}
       {cryptoDualCharts && (
-        <div className="flex shrink-0 flex-col gap-1 sm:flex-row" style={{ minHeight: 132 }}>
-          <ThinBookPane book={books.btc} active={symbol === 'BTC'} onSelect={selectCcy} />
-          <ThinBookPane book={books.eth} active={symbol === 'ETH'} onSelect={selectCcy} />
-        </div>
+        <SectionErrorBoundary name="Dual charts">
+          <div className="flex shrink-0 flex-col gap-1 sm:flex-row" style={{ minHeight: 132 }}>
+            <ThinBookPane book={books.btc} active={symbol === 'BTC'} onSelect={selectCcy} />
+            <ThinBookPane book={books.eth} active={symbol === 'ETH'} onSelect={selectCcy} />
+          </div>
+        </SectionErrorBoundary>
       )}
 
       {/* Header strip — active book metrics */}

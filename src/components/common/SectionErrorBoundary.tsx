@@ -32,6 +32,7 @@ export class SectionErrorBoundary extends Component<Props, State> {
         <EmptyState
           kind="error"
           compact
+          className="h-full min-h-0"
           title={this.props.name ? `${this.props.name} failed` : 'Section failed'}
           body={this.state.message}
           action={

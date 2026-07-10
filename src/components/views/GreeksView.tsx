@@ -482,7 +482,7 @@ export function GreeksView() {
         </div>
         <div className="min-h-0 flex-1">
           <SectionErrorBoundary name="Greeks 1.0">
-            <Suspense fallback={<DeskLoading message={UI_COPY.load.surface} />}>
+            <Suspense fallback={<DeskLoading message={UI_COPY.load.greeks} />}>
               <Greeks10View />
             </Suspense>
           </SectionErrorBoundary>
@@ -496,7 +496,8 @@ export function GreeksView() {
       <div className="flex h-full flex-col items-center justify-center gap-3 p-4">
         <EmptyState
           kind="no-data"
-          title={UI_COPY.empty.chain}
+          title="No terminal chain data"
+          body={UI_COPY.empty.chain}
           action={
             <button
               type="button"

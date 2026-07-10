@@ -12,7 +12,7 @@ const COPY: Record<EmptyKind, { title: string; body: string }> = {
   },
   'no-data': {
     title: 'No live data',
-    body: UI_COPY.empty.chain,
+    body: 'Upstream returned empty. Check source / session / symbol.',
   },
   'api-down': {
     title: 'API unavailable',

@@ -9,6 +9,7 @@ export const UI_COPY = {
     rates: 'Loading rates… FRED · NYFed · MacroVol',
     crypto: 'Loading crypto books… Deribit',
     view: 'Loading view…',
+    greeks: 'Loading Greeks 1.0…',
   },
   empty: {
     chain: 'No live surface — awaiting yfinance/FMP/Deribit chain',
