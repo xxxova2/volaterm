@@ -34,4 +34,20 @@ describe('FreshnessChip', () => {
     render(<FreshnessChip kind="live" />);
     expect(screen.getByText('LIVE')).toBeInTheDocument();
   });
+
+  it('DELAYED uses info token classes (not cyan-400 / brand amber)', () => {
+    const { container } = render(<FreshnessChip kind="delayed" />);
+    expect(screen.getByText('DELAYED')).toBeInTheDocument();
+    const chip = container.querySelector('span');
+    expect(chip?.className).toMatch(/text-info/);
+    expect(chip?.className).toMatch(/border-info\/30/);
+    expect(chip?.className).not.toMatch(/cyan-400/);
+    expect(chip?.className).not.toMatch(/text-amber/);
+  });
+
+  it('accepts title override for hover tooltip', () => {
+    render(<FreshnessChip kind="down" title="Spot: down · Chain: down" />);
+    expect(screen.getByTitle('Spot: down · Chain: down')).toBeInTheDocument();
+    expect(screen.getByText('API DOWN')).toBeInTheDocument();
+  });
 });

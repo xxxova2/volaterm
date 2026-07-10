@@ -3,6 +3,7 @@ import { useTerminalStore } from '../../store/terminalStore';
 import { DiagnosticsStrip } from './DiagnosticsStrip';
 import { fmtPrice } from '../../lib/format';
 import { cn } from '../../lib/utils';
+import { colorWithAlpha, resolveCanvasColors } from '../../lib/chartTheme';
 import type { NoArbResult } from '../../lib/options/noarb';
 import { Explain } from '../common/Explain';
 
@@ -87,6 +88,7 @@ export function ArbitrageView() {
 
     ctx.clearRect(0, 0, w, h);
 
+    const colors = resolveCanvasColors();
     const rows = violationMatrix.rows;
     const cols = violationMatrix.cols;
     const labelW = 60;
@@ -96,18 +98,20 @@ export function ArbitrageView() {
     const x0 = labelW;
     const y0 = headerH;
 
-    // Draw cells.
+    // Draw cells — violation = down, clean = up wash.
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
         const v = violationMatrix.viol[r]![c]!;
         const x = x0 + c * cellW;
         const y = y0 + r * cellH;
 
-        ctx.fillStyle = v ? 'rgba(220, 60, 60, 0.7)' : 'rgba(63, 185, 80, 0.12)';
+        ctx.fillStyle = v
+          ? colorWithAlpha(colors.down, 0.7)
+          : colorWithAlpha(colors.up, 0.12);
         ctx.fillRect(x, y, cellW - 1, cellH - 1);
 
         if (selectedCell && surface.strikes[c] === selectedCell.strike && surface.dtes[r] === selectedCell.dte) {
-          ctx.strokeStyle = '#f59e0b';
+          ctx.strokeStyle = colors.brand;
           ctx.lineWidth = 2;
           ctx.strokeRect(x, y, cellW - 1, cellH - 1);
         }
@@ -115,7 +119,7 @@ export function ArbitrageView() {
     }
 
     // Y-axis labels (strikes).
-    ctx.fillStyle = 'rgba(156, 163, 175, 0.9)';
+    ctx.fillStyle = colorWithAlpha(colors.label, 0.9);
     ctx.font = '10px "JetBrains Mono", monospace';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
@@ -127,7 +131,7 @@ export function ArbitrageView() {
     // X-axis labels (DTE).
     ctx.textAlign = 'right';
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = 'rgba(156, 163, 175, 0.7)';
+    ctx.fillStyle = colorWithAlpha(colors.label, 0.7);
     ctx.font = '9px "JetBrains Mono", monospace';
     for (let r = 0; r < rows; r++) {
       const y = y0 + r * cellH + cellH / 2;
@@ -137,12 +141,12 @@ export function ArbitrageView() {
     // Title + mode + counts in top area.
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
-    ctx.fillStyle = 'rgba(156, 163, 175, 0.6)';
+    ctx.fillStyle = colorWithAlpha(colors.label, 0.6);
     ctx.font = '9px "JetBrains Mono", monospace';
     ctx.fillText(`Arbitrage Violations — ${mode.toUpperCase()}`, x0, 2);
-    ctx.fillStyle = violCount.calendar > 0 ? '#ef4444' : '#22c55e';
+    ctx.fillStyle = violCount.calendar > 0 ? colors.down : colors.up;
     ctx.fillText(`Calendar: ${violCount.calendar}`, x0 + cols * cellW - 160, 2);
-    ctx.fillStyle = violCount.butterfly > 0 ? '#ef4444' : '#22c55e';
+    ctx.fillStyle = violCount.butterfly > 0 ? colors.down : colors.up;
     ctx.fillText(`Butterfly: ${violCount.butterfly}`, x0 + cols * cellW - 80, 2);
   }, [surface, violationMatrix, dim, selectedCell, mode, violCount]);
 

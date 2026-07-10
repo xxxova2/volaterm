@@ -3,7 +3,7 @@ import {
 } from 'recharts';
 import { DataBadge } from '../DataBadge';
 import { CollapsibleSection } from '../../terminal/CollapsibleSection';
-import { chartTooltipStyle } from '../../../lib/chartTheme';
+import { CHART, chartAxisTick, chartGridProps, chartTooltipStyle } from '../../../lib/chartTheme';
 
 export function CurveSection({
   curve,
@@ -32,15 +32,15 @@ export function CurveSection({
     >
       <ResponsiveContainer width="100%" height={200}>
         <LineChart data={curve}>
-          <CartesianGrid stroke="#1f1f1f" strokeDasharray="2 2" />
-          <ReferenceLine y={0} stroke="#1f1f1f" />
-          <XAxis dataKey="label" tick={{ fill: '#71717a', fontSize: 10 }} />
-          <YAxis tick={{ fill: '#71717a', fontSize: 10 }} tickFormatter={(v) => `${v}%`} domain={['auto', 'auto']} />
+          <CartesianGrid {...chartGridProps} />
+          <ReferenceLine y={0} stroke={CHART.refLine} />
+          <XAxis dataKey="label" tick={chartAxisTick} />
+          <YAxis tick={chartAxisTick} tickFormatter={(v) => `${v}%`} domain={['auto', 'auto']} />
           <Tooltip
             contentStyle={chartTooltipStyle}
             formatter={(v: number) => [`${Number(v).toFixed(3)}%`, 'YIELD']}
           />
-          <Line type="monotone" dataKey="yield" stroke="#3b82f6" strokeWidth={2} dot={{ r: 3, fill: '#3b82f6' }} connectNulls />
+          <Line type="monotone" dataKey="yield" stroke={CHART.series.info} strokeWidth={2} dot={{ r: 3, fill: CHART.series.info }} connectNulls />
         </LineChart>
       </ResponsiveContainer>
       <DataBadge asOf={curveMeta.as_of} source={curveMeta.source || 'FRED'} note={curveMeta.note} />

@@ -1,6 +1,11 @@
 import { useRef, useEffect, useCallback, useState } from 'react';
 import type { HeatmapCell } from './greeksTypes';
 import { cn } from '../../lib/utils';
+import {
+  canvasCellColor,
+  colorWithAlpha,
+  resolveCanvasColors,
+} from '../../lib/chartTheme';
 
 interface CanvasHeatmapProps {
   rows: { expiry: string; dte: number }[];
@@ -21,17 +26,6 @@ interface CellPos {
   dte: number;
   ri: number;
   ci: number;
-}
-
-function cellColor(v: number, min: number, max: number, diverging: boolean): string {
-  if (diverging) {
-    const m = Math.max(Math.abs(min), Math.abs(max)) || 1;
-    const t = v / m;
-    if (t >= 0) return `rgba(63, 185, 80, ${0.12 + Math.min(1, t) * 0.78})`;
-    return `rgba(240, 136, 62, ${0.12 + Math.min(1, -t) * 0.78})`;
-  }
-  const t = max > min ? (v - min) / (max - min) : 0.5;
-  return `rgba(77, 143, 240, ${0.08 + t * 0.85})`;
 }
 
 export function CanvasHeatmap({
@@ -65,6 +59,7 @@ export function CanvasHeatmap({
     const nCols = cols.length;
     if (nRows === 0 || nCols === 0) return;
 
+    const colors = resolveCanvasColors();
     const cellW = Math.max(12, (w - 80) / nCols);
     const cellH = Math.max(8, (h - 30) / nRows);
     const x0 = 70;
@@ -79,20 +74,20 @@ export function CanvasHeatmap({
         const y = y0 + r * cellH;
 
         if (v != null && isFinite(v)) {
-          ctx.fillStyle = cellColor(v, min, max, diverging);
+          ctx.fillStyle = canvasCellColor(v, min, max, diverging, colors);
         } else {
-          ctx.fillStyle = 'rgba(0,0,0,0.04)';
+          ctx.fillStyle = colors.empty;
         }
         ctx.fillRect(x, y, cellW - 1, cellH - 1);
 
-        // Selected cell ring.
+        // Selected cell ring — brand.
         if (
           selectedCell &&
           cell &&
           cell.strike === selectedCell.strike &&
           cell.dte === selectedCell.dte
         ) {
-          ctx.strokeStyle = '#f59e0b';
+          ctx.strokeStyle = colors.brand;
           ctx.lineWidth = 2;
           ctx.strokeRect(x - 0.5, y - 0.5, cellW, cellH);
         }
@@ -100,7 +95,7 @@ export function CanvasHeatmap({
     }
 
     // Y-axis labels (strikes).
-    ctx.fillStyle = 'rgba(156, 163, 175, 0.9)';
+    ctx.fillStyle = colorWithAlpha(colors.label, 0.9);
     ctx.font = '9px "JetBrains Mono", monospace';
     ctx.textAlign = 'right';
     ctx.textBaseline = 'middle';
@@ -124,7 +119,7 @@ export function CanvasHeatmap({
     if (sortMode) {
       ctx.textAlign = 'left';
       ctx.font = '8px "JetBrains Mono", monospace';
-      ctx.fillStyle = 'rgba(156, 163, 175, 0.6)';
+      ctx.fillStyle = colorWithAlpha(colors.label, 0.6);
       ctx.fillText(`Sort: ${sortMode}`, x0 + nCols * cellW + 6, y0 + nRows * cellH + 12);
     }
 
@@ -132,7 +127,7 @@ export function CanvasHeatmap({
     if (hoverCell) {
       const hx = x0 + hoverCell.ci * cellW;
       const hy = y0 + hoverCell.ri * cellH;
-      ctx.strokeStyle = 'rgba(245, 158, 11, 0.3)';
+      ctx.strokeStyle = colorWithAlpha(colors.brand, 0.3);
       ctx.lineWidth = 1;
       ctx.setLineDash([2, 2]);
       ctx.strokeRect(hx + 0.5, hy + 0.5, cellW - 2, cellH - 2);
@@ -203,6 +198,11 @@ export function CanvasHeatmap({
 
   const txt = `${diverging ? (min < 0 ? formatShort(min) : '0') : formatShort(min)}`;
   const txtMax = formatShort(max);
+  // Legend gradient from theme roles (static CANVAS fallbacks; DOM may refine on paint).
+  const legend = resolveCanvasColors();
+  const legendBg = diverging
+    ? `linear-gradient(90deg, ${colorWithAlpha(legend.down, 0.95)} 0%, ${colorWithAlpha(legend.down, 0.35)} 25%, ${colorWithAlpha(legend.foreground, 0.15)} 50%, ${colorWithAlpha(legend.up, 0.35)} 75%, ${colorWithAlpha(legend.up, 0.95)} 100%)`
+    : `linear-gradient(90deg, ${colorWithAlpha(legend.info, 0.08)} 0%, ${colorWithAlpha(legend.info, 0.55)} 50%, ${colorWithAlpha(legend.info, 0.93)} 100%)`;
 
   return (
     <div className="flex flex-col gap-2">
@@ -222,11 +222,7 @@ export function CanvasHeatmap({
           <span className="text-type-2xs font-mono text-muted-foreground min-w-[4ch] text-right">{txt}</span>
           <div
             className="h-2 w-28 rounded-sm"
-            style={{
-              background: diverging
-                ? 'linear-gradient(90deg, rgba(220, 60, 60, 0.95) 0%, rgba(220, 60, 60, 0.35) 25%, rgba(245, 245, 245, 0.15) 50%, rgba(63, 185, 80, 0.35) 75%, rgba(63, 185, 80, 0.95) 100%)'
-                : 'linear-gradient(90deg, rgba(77, 143, 240, 0.08) 0%, rgba(77, 143, 240, 0.55) 50%, rgba(77, 143, 240, 0.93) 100%)',
-            }}
+            style={{ background: legendBg }}
             data-legend=""
             data-legend-mode={diverging ? 'diverging' : 'sequential'}
           />

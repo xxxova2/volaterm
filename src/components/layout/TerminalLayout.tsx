@@ -15,6 +15,8 @@ import { DeskContextBar } from '../terminal/DeskContextBar';
 import { StatusBar } from '../terminal/StatusBar';
 import { ShortcutsOverlay } from '../terminal/ShortcutsOverlay';
 import { BootBriefing } from '../terminal/BootBriefing';
+import { PlaybackBar } from '../terminal/PlaybackBar';
+import { SymbolDialog } from '../terminal/SymbolDialog';
 import { SidePanel } from './SidePanel';
 import { DashboardView } from '../views/DashboardView';
 import { VolStructureView } from '../views/VolStructureView';
@@ -37,9 +39,10 @@ const GreeksView = lazy(() =>
 export function TerminalLayout() {
   const {
     activeTab, setActiveTab, setSymbol, refresh, loading, source, symbol, uiDensity, setDeskContext,
-    snapshot, chainAvailable, lastChainUpdate,
+    snapshot, chainAvailable, lastChainUpdate, historicalFrames,
   } = useTerminalStore();
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [symbolDialogOpen, setSymbolDialogOpen] = useState(false);
   /** First-open rates/macro briefing while heavy chain loads in the background. */
   const [bootOpen, setBootOpen] = useState(true);
   const heavyReady = Boolean(snapshot && chainAvailable && lastChainUpdate > 0) || (!loading && lastChainUpdate > 0);
@@ -76,10 +79,7 @@ export function TerminalLayout() {
     }
   }, [activeTab, setActiveTab]);
 
-  const handleSymbolSwitch = useCallback(() => {
-    const sym = window.prompt('Enter symbol:');
-    if (!sym) return;
-
+  const handleSymbolSelect = useCallback((sym: string) => {
     const sanitized = sanitizeSymbol(sym);
     if (!sanitized) {
       toast.error('Invalid symbol', {
@@ -87,9 +87,9 @@ export function TerminalLayout() {
       });
       return;
     }
-
     setSymbol(sanitized);
     toast.success(`Switched to ${sanitized}`);
+    setSymbolDialogOpen(false);
   }, [setSymbol]);
 
   const nextTab = useCallback(() => {
@@ -100,7 +100,7 @@ export function TerminalLayout() {
 
   useKeyboardShortcuts({
     r: refresh,
-    s: handleSymbolSwitch,
+    s: () => setSymbolDialogOpen(true),
     space: () => useTerminalStore.getState().togglePlay(),
     l: () => {
       // LIVE-only: L re-asserts live market feeds (demo disabled).
@@ -208,7 +208,7 @@ export function TerminalLayout() {
         uiDensity === 'readable' ? 'density-readable' : 'density-dense',
       )}
     >
-      <TerminalHeader />
+      <TerminalHeader onOpenShortcuts={() => setShortcutsOpen((o) => !o)} />
       <TabNav />
       <DeskContextBar />
       <main
@@ -221,8 +221,12 @@ export function TerminalLayout() {
       </main>
       {/* Bottom control strip — display / expiries / sources (was left rail) */}
       <SidePanel />
+      {historicalFrames.length >= 2 && <PlaybackBar />}
       <StatusBar />
       {shortcutsOpen && <ShortcutsOverlay onClose={() => setShortcutsOpen(false)} />}
+      {symbolDialogOpen && (
+        <SymbolDialog onSelect={handleSymbolSelect} onClose={() => setSymbolDialogOpen(false)} />
+      )}
       {bootOpen && (
         <BootBriefing
           heavyReady={heavyReady}

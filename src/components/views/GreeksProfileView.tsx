@@ -4,6 +4,7 @@ import { useTerminalStore } from '../../store/terminalStore';
 import { Panel } from '../terminal/Panel';
 import { greeksProfile } from '../../lib/options/analytics';
 import { fmtPrice } from '../../lib/format';
+import { CHART, CHART_GREEK, chartAxisTick, chartGridProps } from '../../lib/chartTheme';
 
 type GreekKey = 'delta' | 'gamma' | 'theta' | 'vega';
 
@@ -16,11 +17,10 @@ const GREEKS: { key: GreekKey; label: string }[] = [
 ];
 
 const COLORS: Record<GreekKey, string> = {
-  delta: '#4d8ff0',
-  gamma: '#3fb950',
-  theta: '#f0883e',
-  vega: '#a06ee0',
-
+  delta: CHART_GREEK.delta,
+  gamma: CHART_GREEK.gamma,
+  theta: CHART_GREEK.theta,
+  vega: CHART_GREEK.vega,
 };
 
 export function GreeksProfileView() {
@@ -78,21 +78,21 @@ export function GreeksProfileView() {
       <div className="h-full p-2">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data} margin={{ top: 8, right: 12, bottom: 18, left: 10 }}>
-            <CartesianGrid strokeDasharray="2 4" stroke="var(--grid)" />
+            <CartesianGrid {...chartGridProps} />
             <XAxis
               dataKey="strike"
               type="number"
               domain={['dataMin', 'dataMax']}
               tickFormatter={v => fmtPrice(v, 0)}
-              tick={{ fontSize: 10, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }}
-              stroke="var(--border)"
+              tick={chartAxisTick}
+              stroke={CHART.axisLine}
             />
             <YAxis
-              tick={{ fontSize: 10, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }}
-              stroke="var(--border)"
+              tick={chartAxisTick}
+              stroke={CHART.axisLine}
               width={60}
             />
-            <ReferenceLine x={snapshot.spot} stroke="var(--amber)" strokeDasharray="3 3" strokeOpacity={0.6} />
+            <ReferenceLine x={snapshot.spot} stroke={CHART.series.amber} strokeDasharray="3 3" strokeOpacity={0.6} />
             <Tooltip
               content={({ active, payload }) => {
                 if (!active || !payload?.length) return null;

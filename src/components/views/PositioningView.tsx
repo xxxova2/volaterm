@@ -11,7 +11,8 @@ import { OptionChain } from './OptionChain';
 import { DiagnosticsStrip } from './DiagnosticsStrip';
 import { Explain } from '../common/Explain';
 import { EmptyState } from '../common/EmptyState';
-import { FreshnessChip } from '../common/Freshness';
+import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
+import { FreshnessFromDomain } from '../common/Freshness';
 import { VirtualRows } from '../common/VirtualRows';
 import { fmtCompact, fmtPrice, fmtPct, fmtSigned } from '../../lib/format';
 import {
@@ -23,13 +24,16 @@ import {
   type ExposureWeight,
 } from '../../lib/options/analytics';
 import { cn } from '../../lib/utils';
-import { chartTooltipStyle, chartGridProps } from '../../lib/chartTheme';
+import { CHART, chartAxisTick, chartTooltipStyle, chartGridProps } from '../../lib/chartTheme';
 import {
   useBoardFocus,
   useRegisterBoard,
   type FocusableBoardApi,
 } from '../../hooks/useBoardFocus';
 import { PERF_BUDGET } from '../../config/perfBudget';
+import { UI_COPY } from '../../config/uiCopy';
+import { DeskChrome } from '../terminal/DeskChrome';
+import { DeskModeBar } from '../terminal/DeskModeBar';
 
 type Sub = 'chain' | 'dealer' | 'levels' | 'edge';
 
@@ -67,6 +71,14 @@ export function PositioningView() {
   const sviReadout = useTerminalStore((s) => s.sviReadout);
   const arbResult = useTerminalStore((s) => s.arbResult);
   const setDeskContext = useTerminalStore((s) => s.setDeskContext);
+  const chainAvailable = useTerminalStore((s) => s.chainAvailable);
+  const chainUsed = useTerminalStore((s) => s.chainUsed);
+  const lastChainUpdate = useTerminalStore((s) => s.lastChainUpdate);
+  const provenance = useTerminalStore((s) => s.provenance);
+
+  // Fail-closed: never optimistic live from snapshot presence alone; FreshnessFromDomain re-ticks age
+  const chainMissing = !chainAvailable || chainUsed === 'none';
+  const chainAsOfMs = provenance.chain?.asOfMs ?? (lastChainUpdate > 0 ? lastChainUpdate : null);
 
   useEffect(() => {
     const meta = SUBS.find((s) => s.id === sub);
@@ -161,35 +173,35 @@ export function PositioningView() {
   const flip = dealer?.gammaFlip;
   const aboveFlip = flip != null && snapshot ? snapshot.spot >= flip : null;
 
+  const activeDomId = SUBS.find((s) => s.id === sub)?.domId ?? 'pos-sub-dealer';
+
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <div className="sticky top-0 z-20 flex shrink-0 flex-wrap items-center gap-1 border-b border-border bg-background/95 px-2 py-1 backdrop-blur-sm">
-        <span className="mr-1 font-mono text-type-xs font-bold tracking-wider text-primary">
-          POSITIONING
-        </span>
-        {SUBS.map((s) => (
-          <button
-            key={s.id}
-            id={s.domId}
-            type="button"
-            data-desk-section="1"
-            data-desk-section-active={sub === s.id ? '1' : undefined}
-            onClick={() => setSub(s.id)}
-            title={s.blurb}
-            className={cn(
-              'rounded px-2 py-0.5 font-mono text-type-xs transition-colors',
-              sub === s.id
-                ? 'bg-primary text-primary-foreground'
-                : 'text-muted-foreground hover:bg-muted hover:text-foreground',
-            )}
-          >
-            {s.label}
-          </button>
-        ))}
-        <span className="ml-auto">
-          <FreshnessChip kind={snapshot ? 'live' : 'delayed'} />
-        </span>
-      </div>
+      <DeskChrome
+        label="POSITIONING"
+        trailing={
+          <FreshnessFromDomain
+            asOfMs={chainAsOfMs}
+            domain="chain"
+            down={chainMissing}
+            previousKind={provenance.chain?.kind}
+          />
+        }
+      >
+        <DeskModeBar
+          items={SUBS.map((s) => ({
+            id: s.domId,
+            label: s.label,
+            title: s.blurb,
+          }))}
+          activeId={activeDomId}
+          onSelect={(domId) => {
+            const m = SUBS.find((s) => s.domId === domId);
+            if (m) setSub(m.id);
+          }}
+          asSectionButtons
+        />
+      </DeskChrome>
 
       {/* Fixed GEX flip callout — Phase F */}
       {snapshot && flip != null && (
@@ -264,24 +276,27 @@ export function PositioningView() {
 
       <div className="min-h-0 flex-1">
         {sub === 'chain' && (
-          <Panel title="Option Chain" className="h-full">
-            <div className="flex h-full flex-col">
-              <DiagnosticsStrip sviReadout={sviReadout} arbResult={arbResult} />
-              <div className="min-h-0 flex-1">
-                <OptionChain />
+          <SectionErrorBoundary name="Chain">
+            <Panel title="Option Chain" className="h-full">
+              <div className="flex h-full flex-col">
+                <DiagnosticsStrip sviReadout={sviReadout} arbResult={arbResult} />
+                <div className="min-h-0 flex-1">
+                  <OptionChain />
+                </div>
               </div>
-            </div>
-          </Panel>
+            </Panel>
+          </SectionErrorBoundary>
         )}
 
         {sub === 'dealer' && (
+          <SectionErrorBoundary name="Dealer">
           <Panel
             title={<Explain term="dealerStack">Dealer Stack</Explain>}
             subtitle="Customer long OI → dealers short · pick metric + weight"
             className="h-full"
           >
             {!dealer || dealer.points.length === 0 ? (
-              <EmptyState kind="no-data" title="No OI / greek data" body="Chain inventory empty — load live options or wait for surface." />
+              <EmptyState kind="no-data" title="No OI / greek data" body={UI_COPY.empty.chain} />
             ) : (
               <div className="flex h-full flex-col">
                 <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-1.5">
@@ -342,10 +357,10 @@ export function PositioningView() {
                     ))}
                   </div>
                   <div className="ml-auto flex flex-wrap gap-3 font-mono text-type-xs">
-                    <StatMini label={`Σ ${metric.toUpperCase()}`} value={fmtCompact(totalVal)} color={totalVal >= 0 ? 'var(--up)' : 'var(--down)'} />
-                    <StatMini label="DEX $" value={fmtCompact(dealer.totalDEX)} color={dealer.totalDEX >= 0 ? 'var(--up)' : 'var(--down)'} />
+                    <StatMini label={`Σ ${metric.toUpperCase()}`} value={fmtCompact(totalVal)} color={totalVal >= 0 ? CHART.series.up : CHART.series.down} />
+                    <StatMini label="DEX $" value={fmtCompact(dealer.totalDEX)} color={dealer.totalDEX >= 0 ? CHART.series.up : CHART.series.down} />
                     <StatMini label="Charm/d" value={fmtCompact(dealer.totalCharm)} />
-                    <StatMini label="Flip" value={dealer.gammaFlip != null ? fmtPrice(dealer.gammaFlip, 0) : '—'} color="var(--amber)" />
+                    <StatMini label="Flip" value={dealer.gammaFlip != null ? fmtPrice(dealer.gammaFlip, 0) : '—'} color={CHART.series.amber} />
                   </div>
                 </div>
                 <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
@@ -357,41 +372,41 @@ export function PositioningView() {
                           <CartesianGrid {...chartGridProps} />
                           <XAxis
                             dataKey="label"
-                            tick={{ fontSize: 9, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }}
+                            tick={{ ...chartAxisTick, fontSize: 9 }}
                             tickLine={false}
                             interval={Math.max(0, Math.floor(chartData.length / 14))}
                           />
                           <YAxis
-                            tick={{ fontSize: 10, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }}
+                            tick={chartAxisTick}
                             tickLine={false}
                             width={44}
                             tickFormatter={(v: number) => `${v.toFixed(0)}M`}
                           />
                           <Tooltip contentStyle={chartTooltipStyle} />
-                          <ReferenceLine y={0} stroke="var(--muted-foreground)" />
+                          <ReferenceLine y={0} stroke={CHART.refLine} />
                           {spotLabel && (
                             <ReferenceLine
                               x={spotLabel}
-                              stroke="var(--amber)"
+                              stroke={CHART.series.amber}
                               strokeDasharray="4 4"
-                              label={{ value: 'Spot', position: 'top', fill: 'var(--amber)', fontSize: 9, fontFamily: 'JetBrains Mono' }}
+                              label={{ value: 'Spot', position: 'top', fill: CHART.series.amber, fontSize: 9, fontFamily: 'JetBrains Mono' }}
                             />
                           )}
                           {flipLabel && flipLabel !== spotLabel && (
                             <ReferenceLine
                               x={flipLabel}
-                              stroke="var(--down)"
+                              stroke={CHART.series.down}
                               strokeDasharray="3 3"
-                              label={{ value: 'Flip', position: 'top', fill: 'var(--down)', fontSize: 9, fontFamily: 'JetBrains Mono' }}
+                              label={{ value: 'Flip', position: 'top', fill: CHART.series.down, fontSize: 9, fontFamily: 'JetBrains Mono' }}
                             />
                           )}
                           {metric === 'gex' ? (
                             <>
-                              <Bar dataKey="call" fill="var(--up)" stackId="m" opacity={0.85} name="Call" isAnimationActive={false} />
-                              <Bar dataKey="put" fill="var(--down)" stackId="m" opacity={0.85} name="Put" isAnimationActive={false} />
+                              <Bar dataKey="call" fill={CHART.series.up} stackId="m" opacity={0.85} name="Call" isAnimationActive={false} />
+                              <Bar dataKey="put" fill={CHART.series.down} stackId="m" opacity={0.85} name="Put" isAnimationActive={false} />
                             </>
                           ) : (
-                            <Bar dataKey="net" fill="var(--cyan)" opacity={0.9} name="Net" isAnimationActive={false} />
+                            <Bar dataKey="net" fill={CHART.series.cyan} opacity={0.9} name="Net" isAnimationActive={false} />
                           )}
                         </BarChart>
                       </ResponsiveContainer>
@@ -446,9 +461,11 @@ export function PositioningView() {
               </div>
             )}
           </Panel>
+          </SectionErrorBoundary>
         )}
 
         {sub === 'levels' && (
+          <SectionErrorBoundary name="Levels">
           <div className="h-full overflow-y-auto p-2">
             <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
               <Panel title={<Explain term="keyLevels">Dealer Levels</Explain>}>
@@ -520,19 +537,19 @@ export function PositioningView() {
                   ) : (
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={oiByExpiry} margin={{ top: 8, right: 8, bottom: 4, left: 0 }}>
-                        <CartesianGrid stroke="var(--grid)" strokeDasharray="2 4" />
+                        <CartesianGrid {...chartGridProps} />
                         <XAxis
                           dataKey="label"
-                          tick={{ fontSize: 9, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }}
+                          tick={{ ...chartAxisTick, fontSize: 9 }}
                         />
                         <YAxis
-                          tick={{ fontSize: 9, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }}
+                          tick={{ ...chartAxisTick, fontSize: 9 }}
                           width={40}
                           tickFormatter={(v) => `${(v / 1000).toFixed(0)}K`}
                         />
                         <Tooltip contentStyle={chartTooltipStyle} />
-                        <Bar dataKey="callOI" stackId="oi" fill="var(--up)" name="Call OI" opacity={0.85} />
-                        <Bar dataKey="putOI" stackId="oi" fill="var(--down)" name="Put OI" opacity={0.85} />
+                        <Bar dataKey="callOI" stackId="oi" fill={CHART.series.up} name="Call OI" opacity={0.85} />
+                        <Bar dataKey="putOI" stackId="oi" fill={CHART.series.down} name="Put OI" opacity={0.85} />
                       </BarChart>
                     </ResponsiveContainer>
                   )}
@@ -552,25 +569,25 @@ export function PositioningView() {
                           }))}
                         margin={{ top: 8, right: 8, bottom: 4, left: 0 }}
                       >
-                        <CartesianGrid stroke="var(--grid)" strokeDasharray="2 4" />
+                        <CartesianGrid {...chartGridProps} />
                         <XAxis
                           dataKey="label"
-                          tick={{ fontSize: 8, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }}
+                          tick={{ ...chartAxisTick, fontSize: 8 }}
                           interval={Math.max(0, Math.floor(dealer.points.length / 20))}
                         />
                         <YAxis
-                          tick={{ fontSize: 9, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }}
+                          tick={{ ...chartAxisTick, fontSize: 9 }}
                           width={36}
                           tickFormatter={(v) => `${v.toFixed(0)}M`}
                         />
                         <Tooltip contentStyle={chartTooltipStyle} />
-                        <ReferenceLine y={0} stroke="var(--muted-foreground)" />
+                        <ReferenceLine y={0} stroke={CHART.refLine} />
                         <ReferenceLine
                           x={fmtPrice(snapshot.spot, 0)}
-                          stroke="var(--amber)"
+                          stroke={CHART.series.amber}
                           strokeDasharray="3 3"
                         />
-                        <Bar dataKey="net" fill="var(--cyan)" name="Net GEX $M" opacity={0.9} />
+                        <Bar dataKey="net" fill={CHART.series.cyan} name="Net GEX $M" opacity={0.9} />
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
@@ -578,9 +595,11 @@ export function PositioningView() {
               )}
             </div>
           </div>
+          </SectionErrorBoundary>
         )}
 
         {sub === 'edge' && (
+          <SectionErrorBoundary name="Edge">
           <Panel
             title={<Explain term="parityEdge">Put–Call Parity Edge</Explain>}
             subtitle="European residual · tradeable only if |res| > half-spreads"
@@ -665,6 +684,7 @@ export function PositioningView() {
               </div>
             </div>
           </Panel>
+          </SectionErrorBoundary>
         )}
       </div>
     </div>

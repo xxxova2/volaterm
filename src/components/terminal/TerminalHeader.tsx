@@ -2,9 +2,32 @@ import { useCallback, useState, useEffect } from 'react';
 import { useTerminalStore } from '../../store/terminalStore';
 import { fmtPrice, fmtClock } from '../../lib/format';
 import { SymbolDialog } from './SymbolDialog';
+import { FreshnessChip } from '../common/Freshness';
+import {
+  kindFromProvenance,
+  worstFreshnessKind,
+} from '../../lib/data/freshness';
 
-export function TerminalHeader() {
-  const { symbol, snapshot, setSymbol, loading, fmpQuote, liveRFR, chainUsed, chainAvailable } = useTerminalStore();
+interface TerminalHeaderProps {
+  /** Open keyboard shortcuts overlay (same as ?). */
+  onOpenShortcuts?: () => void;
+}
+
+export function TerminalHeader({ onOpenShortcuts }: TerminalHeaderProps) {
+  const {
+    symbol,
+    snapshot,
+    setSymbol,
+    loading,
+    fmpQuote,
+    liveRFR,
+    chainUsed,
+    chainAvailable,
+    spotSource,
+    lastSpotUpdate,
+    lastChainUpdate,
+    provenance,
+  } = useTerminalStore();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [clock, setClock] = useState(Date.now());
 
@@ -24,6 +47,32 @@ export function TerminalHeader() {
     setSymbol(sym);
     setDialogOpen(false);
   }, [setSymbol]);
+
+  // Product mode is static MODE LIVE; data trust uses same missing→down as StatusBar.
+  const spotMissing = spotSource === 'none';
+  const chainMissing = !chainAvailable || chainUsed === 'none';
+  const spotKind = kindFromProvenance(
+    provenance.spot?.kind,
+    provenance.spot?.asOfMs ?? (lastSpotUpdate > 0 ? lastSpotUpdate : null),
+    'spot',
+    { demo: false, down: spotMissing },
+  );
+  const chainKind = kindFromProvenance(
+    provenance.chain?.kind,
+    provenance.chain?.asOfMs ?? (lastChainUpdate > 0 ? lastChainUpdate : null),
+    'chain',
+    { demo: false, down: chainMissing },
+  );
+  const summaryKind = worstFreshnessKind(spotKind, chainKind);
+  const spotAsOf = provenance.spot?.asOfMs ?? (lastSpotUpdate > 0 ? lastSpotUpdate : null);
+  const chainAsOf = provenance.chain?.asOfMs ?? (lastChainUpdate > 0 ? lastChainUpdate : null);
+  const asOfHint = [
+    spotAsOf != null ? `spot ${new Date(spotAsOf).toLocaleTimeString()}` : null,
+    chainAsOf != null ? `chain ${new Date(chainAsOf).toLocaleTimeString()}` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  const dataTitle = `Spot: ${spotKind} · Chain: ${chainKind}${asOfHint ? ` · as-of ${asOfHint}` : ''}`;
 
   return (
     <>
@@ -67,12 +116,19 @@ export function TerminalHeader() {
 
         <div className="flex shrink-0 items-center gap-2">
           <span className="hidden tabular-nums text-muted-foreground sm:inline">{fmtClock(clock)}</span>
+          {/* KD-UI-13: product mode (muted) — not a green freshness pill */}
           <span
-            className="rounded bg-up/20 px-2 py-0.5 text-xs font-medium text-up"
-            title="LIVE-only terminal — market feeds only, no DEMO/synthetic surfaces"
+            className="rounded border border-border bg-muted/50 px-1.5 py-0.5 text-type-2xs font-medium uppercase tracking-wider text-muted-foreground"
+            title="LIVE-only terminal — market feeds only; no demo mode."
+            aria-label="LIVE-only terminal — market feeds only; no demo mode."
           >
-            LIVE
+            MODE LIVE
           </span>
+          <FreshnessChip
+            kind={summaryKind}
+            title={dataTitle}
+            aria-label={`Data freshness: ${summaryKind}`}
+          />
           <button
             onClick={() => useTerminalStore.getState().refresh()}
             className="text-muted-foreground hover:text-foreground transition-colors"
@@ -81,7 +137,7 @@ export function TerminalHeader() {
             ↻
           </button>
           <button
-            onClick={() => {}}
+            onClick={() => onOpenShortcuts?.()}
             className="text-muted-foreground hover:text-foreground transition-colors"
             title="Shortcuts (?)"
           >

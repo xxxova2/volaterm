@@ -109,6 +109,54 @@ export function makeProvenance(
 }
 
 /**
+ * Recompute domain freshness from asOf + previous store kind.
+ * Shared by StatusBar and TerminalHeader so missing→down / hysteresis stay in lockstep.
+ */
+export function kindFromProvenance(
+  previousKind: FreshnessKind | undefined,
+  asOfMs: number | null | undefined,
+  domain: FreshnessDomain,
+  opts?: { demo?: boolean; down?: boolean; nowMs?: number },
+): FreshnessKind {
+  return classifyDomainFreshness(asOfMs, domain, {
+    demo: opts?.demo,
+    down: opts?.down,
+    previousKind,
+    nowMs: opts?.nowMs,
+  });
+}
+
+/**
+ * Worst (least trusted) freshness among kinds — for header summary chips.
+ * Rank: down < expired < stale < delayed < unknown < live.
+ * `demo` ranks with stale (synthetic is not market-live).
+ */
+const FRESHNESS_RANK: Record<FreshnessKind, number> = {
+  down: 0,
+  expired: 1,
+  stale: 2,
+  demo: 2,
+  delayed: 3,
+  unknown: 4,
+  live: 5,
+};
+
+export function worstFreshnessKind(...kinds: FreshnessKind[]): FreshnessKind {
+  if (kinds.length === 0) return 'unknown';
+  let worst = kinds[0]!;
+  let worstRank = FRESHNESS_RANK[worst];
+  for (let i = 1; i < kinds.length; i++) {
+    const k = kinds[i]!;
+    const r = FRESHNESS_RANK[k];
+    if (r < worstRank) {
+      worst = k;
+      worstRank = r;
+    }
+  }
+  return worst;
+}
+
+/**
  * Legacy ISO / minute-based classifier (DataBadge / macro widgets).
  * Defaults: delayed 15m, stale **30m** (aligned with DataBadge, not the old 60).
  */

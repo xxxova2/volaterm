@@ -8,6 +8,7 @@ import { DiagnosticsStrip } from './DiagnosticsStrip';
 import { fitSVI, svi } from '../../lib/options/svi';
 import type { OptionQuote } from '../../lib/options/types';
 import { Explain } from '../common/Explain';
+import { CHART, CHART_SERIES_ORDINAL, chartAxisTick, chartGridProps, chartTooltipStyle } from '../../lib/chartTheme';
 
 type XMode = 'moneyness' | 'strike' | 'delta';
 
@@ -179,7 +180,7 @@ export function SmileView() {
     );
   }
 
-  const colors = ['#22c55e', '#3b82f6', '#eab308', '#a855f7', '#ec4899', '#f97316'];
+  const colors = CHART_SERIES_ORDINAL;
 
   return (
     <Panel title="IV Smile / Skew" className="h-full">
@@ -240,24 +241,24 @@ export function SmileView() {
         <div className="flex-1">
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart margin={{ top: 10, right: 20, bottom: 10, left: 20 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--grid)" />
+              <CartesianGrid {...chartGridProps} />
               <XAxis
                 dataKey="x"
-                tick={{ fontSize: 10, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }}
+                tick={chartAxisTick}
                 tickLine={false}
-                label={{ value: xLabel, position: 'bottom', fontSize: 10, fill: 'var(--muted-foreground)' }}
+                label={{ value: xLabel, position: 'bottom', fontSize: 10, fill: CHART.axisMuted }}
                 domain={['auto', 'auto']}
                 type="number"
               />
               <YAxis
-                tick={{ fontSize: 10, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }}
+                tick={chartAxisTick}
                 tickLine={false}
                 tickFormatter={(v: number) => `${v.toFixed(1)}%`}
                 domain={['auto', 'auto']}
               />
               <Tooltip
-                contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 4, fontSize: 11, fontFamily: 'JetBrains Mono' }}
-                labelStyle={{ color: 'var(--foreground)' }}
+                contentStyle={chartTooltipStyle}
+                labelStyle={{ color: CHART.tooltipFg }}
               />
 
               {/* Calls — solid lines */}
@@ -267,10 +268,10 @@ export function SmileView() {
                   data={slice.calls}
                   type="monotone"
                   dataKey="iv"
-                  stroke={i === selectedExpiryIdx ? '#f97316' : colors[i % colors.length]}
+                  stroke={i === selectedExpiryIdx ? CHART.series.selected : colors[i % colors.length]}
                   strokeWidth={i === selectedExpiryIdx ? 2.5 : 1}
                   strokeOpacity={i === selectedExpiryIdx ? 1 : 0.3}
-                  dot={i === selectedExpiryIdx ? { r: 3, fill: 'var(--card)', stroke: '#f97316', strokeWidth: 1.5 } : false}
+                  dot={i === selectedExpiryIdx ? { r: 3, fill: CHART.tooltipBg, stroke: CHART.series.selected, strokeWidth: 1.5 } : false}
                   name={`${slice.label} Calls`}
                   connectNulls
                   points={undefined}
@@ -284,11 +285,11 @@ export function SmileView() {
                   data={slice.puts}
                   type="monotone"
                   dataKey="iv"
-                  stroke={i === selectedExpiryIdx ? '#f97316' : colors[i % colors.length]}
+                  stroke={i === selectedExpiryIdx ? CHART.series.selected : colors[i % colors.length]}
                   strokeWidth={i === selectedExpiryIdx ? 2 : 0.8}
                   strokeOpacity={i === selectedExpiryIdx ? 0.8 : 0.2}
                   strokeDasharray={i === selectedExpiryIdx ? '6 3' : '3 3'}
-                  dot={i === selectedExpiryIdx ? { r: 2.5, fill: 'var(--card)', stroke: '#f97316', strokeWidth: 1 } : false}
+                  dot={i === selectedExpiryIdx ? { r: 2.5, fill: CHART.tooltipBg, stroke: CHART.series.selected, strokeWidth: 1 } : false}
                   name={`${slice.label} Puts`}
                   connectNulls
                   points={undefined}
@@ -301,7 +302,7 @@ export function SmileView() {
                   data={sviCurve.points}
                   type="monotone"
                   dataKey="sviIv"
-                  stroke="#a855f7"
+                  stroke={CHART.series.svi}
                   strokeWidth={1.5}
                   strokeDasharray="4 2"
                   dot={false}

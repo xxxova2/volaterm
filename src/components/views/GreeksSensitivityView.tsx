@@ -4,8 +4,9 @@ import { useTerminalStore } from '../../store/terminalStore';
 import { Panel } from '../terminal/Panel';
 import { spotSensitivity, ivSensitivity } from '../../lib/options/analytics';
 import { GREEK_KEYS } from './greeksTypes';
+import { CHART, CHART_SCENARIO, chartAxisTick, chartGridProps } from '../../lib/chartTheme';
 
-const SCENARIO_COLORS = ['#f0883e', '#6b6b76', '#3fb950'];
+const SCENARIO_COLORS = CHART_SCENARIO;
 
 export function GreeksSensitivityView() {
   const snapshot = useTerminalStore(s => s.snapshot);
@@ -42,9 +43,9 @@ export function GreeksSensitivityView() {
         <div className="h-full p-2">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={spotChartData} margin={{ top: 8, right: 12, bottom: 18, left: 10 }}>
-              <CartesianGrid strokeDasharray="2 4" stroke="var(--grid)" />
-              <XAxis dataKey="greek" tick={{ fontSize: 10, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }} stroke="var(--border)" />
-              <YAxis tick={{ fontSize: 10, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }} stroke="var(--border)" width={60} />
+              <CartesianGrid {...chartGridProps} />
+              <XAxis dataKey="greek" tick={chartAxisTick} stroke={CHART.axisLine} />
+              <YAxis tick={chartAxisTick} stroke={CHART.axisLine} width={60} />
               <Tooltip
                 content={({ active, payload, label }) => {
                   if (!active || !payload?.length) return null;
@@ -73,9 +74,9 @@ export function GreeksSensitivityView() {
         <div className="h-full p-2">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={ivChartData} margin={{ top: 8, right: 12, bottom: 18, left: 10 }}>
-              <CartesianGrid strokeDasharray="2 4" stroke="var(--grid)" />
-              <XAxis dataKey="greek" tick={{ fontSize: 10, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }} stroke="var(--border)" />
-              <YAxis tick={{ fontSize: 10, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }} stroke="var(--border)" width={60} />
+              <CartesianGrid {...chartGridProps} />
+              <XAxis dataKey="greek" tick={chartAxisTick} stroke={CHART.axisLine} />
+              <YAxis tick={chartAxisTick} stroke={CHART.axisLine} width={60} />
               <Tooltip
                 content={({ active, payload, label }) => {
                   if (!active || !payload?.length) return null;

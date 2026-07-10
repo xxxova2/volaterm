@@ -8,7 +8,7 @@ import {
 } from 'recharts';
 import { CollapsibleSection } from '../../terminal/CollapsibleSection';
 import { DataBadge } from '../DataBadge';
-import { chartTooltipStyle } from '../../../lib/chartTheme';
+import { CHART, CHART_SPREAD, chartGridProps, chartTooltipStyle } from '../../../lib/chartTheme';
 import type { CurveShapeData, ImplyRead, RatesCurveHistory } from '../../../lib/macrovol/api';
 import { ImplyChip } from '../../common/ImplyDrawer';
 import { Spark } from './Spark';
@@ -27,19 +27,19 @@ export type StirPathPoint = {
 export type SpreadHist = { date: string; bps: number }[];
 
 const SPREAD_META: {
-  key: string;
+  key: keyof typeof CHART_SPREAD;
   label: string;
   color: string;
   histKey: keyof SpreadHistoryPack;
   sparkKey?: string;
 }[] = [
-  { key: '2s10s', label: '2s10s', color: '#3b82f6', histKey: 's2s10', sparkKey: 'spark_2s10s' },
-  { key: '5s30s', label: '5s30s', color: '#22c55e', histKey: 's5s30', sparkKey: 'spark_5s30s' },
-  { key: '2s5s', label: '2s5s', color: '#f59e0b', histKey: 's2s5', sparkKey: 'spark_2s5s' },
-  { key: '5s10s', label: '5s10s', color: '#06b6d4', histKey: 's5s10', sparkKey: 'spark_5s10s' },
-  { key: '10s30s', label: '10s30s', color: '#a78bfa', histKey: 's10s30', sparkKey: 'spark_10s30s' },
-  { key: '3m10y', label: '3m10y', color: '#ef4444', histKey: 's3m10y', sparkKey: 'spark_3m10y' },
-  { key: 'fly_2s5s10s', label: '2s5s10s fly', color: '#ec4899', histKey: 'fly', sparkKey: 'spark_fly' },
+  { key: '2s10s', label: '2s10s', color: CHART_SPREAD['2s10s'], histKey: 's2s10', sparkKey: 'spark_2s10s' },
+  { key: '5s30s', label: '5s30s', color: CHART_SPREAD['5s30s'], histKey: 's5s30', sparkKey: 'spark_5s30s' },
+  { key: '2s5s', label: '2s5s', color: CHART_SPREAD['2s5s'], histKey: 's2s5', sparkKey: 'spark_2s5s' },
+  { key: '5s10s', label: '5s10s', color: CHART_SPREAD['5s10s'], histKey: 's5s10', sparkKey: 'spark_5s10s' },
+  { key: '10s30s', label: '10s30s', color: CHART_SPREAD['10s30s'], histKey: 's10s30', sparkKey: 'spark_10s30s' },
+  { key: '3m10y', label: '3m10y', color: CHART_SPREAD['3m10y'], histKey: 's3m10y', sparkKey: 'spark_3m10y' },
+  { key: 'fly_2s5s10s', label: '2s5s10s fly', color: CHART_SPREAD.fly_2s5s10s, histKey: 'fly', sparkKey: 'spark_fly' },
 ];
 
 export type SpreadHistoryPack = {
@@ -97,7 +97,7 @@ function MiniCurve({
         <div className="min-h-0 flex-1" style={{ height: 88 }}>
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={data} margin={{ top: 2, right: 2, bottom: 0, left: 0 }}>
-              <CartesianGrid stroke="var(--grid)" strokeDasharray="2 2" />
+              <CartesianGrid {...chartGridProps} />
               <XAxis dataKey="date" hide />
               <YAxis hide domain={['auto', 'auto']} />
               <Tooltip
@@ -105,7 +105,7 @@ function MiniCurve({
                 formatter={(v: number) => [`${Number(v).toFixed(1)} bp`, title]}
                 labelFormatter={(l) => String(l)}
               />
-              <ReferenceLine y={0} stroke="#333" strokeWidth={1} />
+              <ReferenceLine y={0} stroke={CHART.refLine} strokeWidth={1} />
               <Area
                 type="monotone"
                 dataKey="bps"

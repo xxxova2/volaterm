@@ -30,15 +30,15 @@ Default ports: Vite `3000` (or `VITE_PORT`), API `3001` (or `PORT`), MacroVol `8
 - Portfolio Greeks, scenario analysis, breakeven, expected move, max pain
 - ATM IV from OTM-wing interpolation; dealer-style GEX; SVI readout / no-arb diagnostics
 
-**Data sources**
-- **Synthetic demo** — offline SVI surface when live feeds unavailable
+**Data sources** (LIVE-only product — market feeds; no demo mode switch)
 - **Live equity chain** — Yahoo Finance (`yfinance` proxy `/api/options`) on Node/Docker
 - **FMP enrichment** — spot, treasury, profile, news, earnings (`FMP_API_KEY`)
 - **Deribit public** — BTC/ETH options + funding
 - **MacroVol** — FRED / NY Fed / rates risk (`macrovol-api` on `:8765`)
+- Fail-closed fallbacks may mark surfaces synthetic in provenance chips — never presented as a user-selectable “demo mode”
 
 **UI system** (see `UI_UX_PLAN.md`, `DESIGN.md`)
-- Density dense/readable (**D**), desk section jump **[** **]**, LIVE/DELAYED/STALE freshness
+- Density dense/readable (**D**), desk section jump **[** **]**, domain LIVE/DELAYED/STALE freshness (separate from MODE LIVE)
 - Virtualized chain & STIR boards, CSV export, imply drawer, collapsible Rates sections
 
 ## Tech Stack
@@ -67,7 +67,7 @@ src/
 ├── store/            # terminalStore, toastStore
 └── lib/
     ├── options/      # BS, greeks, SVI, analytics, Deribit/Yahoo/FMP chain builders
-    ├── data/         # DataProvider (Live/Demo), FMP/yfinance/Deribit clients, freshness
+    ├── data/         # DataProvider (LIVE path + fail-closed fallbacks), clients, freshness
     └── macrovol/     # MacroVol HTTP client
 ```
 
@@ -83,7 +83,7 @@ Product & frontend architecture design: **[`DESIGN.md`](DESIGN.md)**.
 | `D` | Toggle dense / readable density |
 | `R` | Refresh data |
 | `S` | Symbol search |
-| `L` | Toggle Live / Demo |
+| `L` | Refresh LIVE feeds |
 | `Space` | Play / pause playback |
 | `←` `→` | Scrub historical frames (when board unfocused) |
 | `↑` `↓` / `j` `k` | Board row focus (chain · SR3 · SERFF · calendars) |
@@ -97,7 +97,7 @@ Playback bar: scrub ~64 frames, speed 0.5×–4× when history is available.
 
 ## Environment Variables
 
-See `.env.example` — no API keys required for demo mode.
+See `.env.example`. Terminal boots LIVE-only; optional keys unlock enrichment and MacroVol.
 
 Useful: `FMP_API_KEY`, `MACROVOL_API_URL`, `PORT`, `VITE_PORT`, `API_TARGET`.
 
@@ -109,10 +109,10 @@ Two targets share API logic (`api/_shared.js`):
 
 | Target | How | What works |
 |--------|-----|------------|
-| **Vercel** | SPA + serverless `api/` | Demo + FMP enrichment. No Python chain. |
+| **Vercel** | SPA + serverless `api/` | FMP enrichment; no Python chain (surface may fall back synthetic). |
 | **Docker / Node** | `Dockerfile` → `node server.js` | Full stack incl. Yahoo chain + MacroVol proxy |
 
-> Live Yahoo chain needs Python (`yfinance`). On Vercel the terminal runs synthetic surface + FMP enrichment.
+> Live Yahoo chain needs Python (`yfinance`). On Vercel, prefer Docker/Node for full chain fidelity.
 
 ## Merged From
 

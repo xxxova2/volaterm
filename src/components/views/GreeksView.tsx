@@ -2,6 +2,11 @@ import { useEffect, useMemo, useRef, useState, useCallback, lazy, Suspense } fro
 import { useTerminalStore } from '../../store/terminalStore';
 import { fmtPrice, fmtSigned } from '../../lib/format';
 import { cn } from '../../lib/utils';
+import {
+  canvasCellColor,
+  colorWithAlpha,
+  resolveCanvasColors,
+} from '../../lib/chartTheme';
 import { portfolioGreeks, impliedMove } from '../../lib/options/analytics';
 import { GreeksProfileView } from './GreeksProfileView';
 import { GreeksSensitivityView } from './GreeksSensitivityView';
@@ -12,6 +17,11 @@ import { GREEK_META, type GreekKey, type HeatmapCell } from './greeksTypes';
 import { computeHeatmapAggregates } from './greeksUtils';
 import { Explain } from '../common/Explain';
 import { DeskLoading } from '../common/Skeleton';
+import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
+import { EmptyState } from '../common/EmptyState';
+import { UI_COPY } from '../../config/uiCopy';
+import { DeskChrome } from '../terminal/DeskChrome';
+import { DeskModeBar } from '../terminal/DeskModeBar';
 import type { OptionQuote } from '../../lib/options/types';
 
 const Greeks10View = lazy(() =>
@@ -52,17 +62,6 @@ function moneynessThreshold(range: MoneynessRange): number {
     default:
       return Infinity;
   }
-}
-
-function cellColor(v: number, min: number, max: number, diverging: boolean): string {
-  if (diverging) {
-    const m = Math.max(Math.abs(min), Math.abs(max)) || 1;
-    const t = v / m;
-    if (t >= 0) return `rgba(63, 185, 80, ${0.12 + Math.min(1, t) * 0.78})`;
-    return `rgba(240, 136, 62, ${0.12 + Math.min(1, -t) * 0.78})`;
-  }
-  const t = max > min ? (v - min) / (max - min) : 0.5;
-  return `rgba(77, 143, 240, ${0.08 + t * 0.85})`;
 }
 
 /**
@@ -320,6 +319,7 @@ export function GreeksView() {
     ctx.scale(dpr, dpr);
     ctx.clearRect(0, 0, w, h);
 
+    const colors = resolveCanvasColors();
     const nRows = rows.length;
     const nCols = cols.length;
     const labelW = 48;
@@ -339,14 +339,14 @@ export function GreeksView() {
         const y = y0 + r * cellH;
 
         if (v != null && isFinite(v)) {
-          ctx.fillStyle = cellColor(v, min, max, diverging);
+          ctx.fillStyle = canvasCellColor(v, min, max, diverging, colors);
         } else {
-          ctx.fillStyle = 'rgba(0,0,0,0.04)';
+          ctx.fillStyle = colors.empty;
         }
         ctx.fillRect(x, y, cellW - 1, cellH - 1);
 
         if (selectedCell && cell && cell.strike === selectedCell.strike && cell.dte === selectedCell.dte) {
-          ctx.strokeStyle = '#f59e0b';
+          ctx.strokeStyle = colors.brand;
           ctx.lineWidth = 2;
           ctx.strokeRect(x - 0.5, y - 0.5, cellW, cellH);
         }
@@ -354,7 +354,7 @@ export function GreeksView() {
     }
 
     // Y-axis labels (strikes).
-    ctx.fillStyle = 'rgba(156, 163, 175, 0.9)';
+    ctx.fillStyle = colorWithAlpha(colors.label, 0.9);
     ctx.font = '9px "JetBrains Mono", monospace';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
@@ -366,7 +366,7 @@ export function GreeksView() {
     // X-axis labels (DTE).
     ctx.textAlign = 'right';
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = 'rgba(156, 163, 175, 0.7)';
+    ctx.fillStyle = colorWithAlpha(colors.label, 0.7);
     ctx.font = '8px "JetBrains Mono", monospace';
     for (let r = 0; r < nRows; r++) {
       const y = y0 + r * cellH + cellH / 2;
@@ -381,7 +381,7 @@ export function GreeksView() {
       const y = y0 + r * cellH + cellH / 2;
       const agg = aggregates.byExpiry[r];
       if (agg?.mean != null) {
-        ctx.fillStyle = 'rgba(156, 163, 175, 0.55)';
+        ctx.fillStyle = colorWithAlpha(colors.label, 0.55);
         // Already showing DTE at this x — skip extra if cramped.
         if (cellH >= 14) {
           ctx.fillText(fmtAggShort(agg.mean, selectedGreek), x0 - 3, y + 8);
@@ -392,7 +392,7 @@ export function GreeksView() {
     // Title + fill quality.
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
-    ctx.fillStyle = 'rgba(156, 163, 175, 0.65)';
+    ctx.fillStyle = colorWithAlpha(colors.label, 0.65);
     ctx.font = '8px "JetBrains Mono", monospace';
     const greekLabel = GREEK_META.find(g => g.key === selectedGreek)?.label ?? selectedGreek;
     ctx.fillText(
@@ -458,7 +458,16 @@ export function GreeksView() {
   if (edition === 'greeks10') {
     return (
       <div className="flex h-full flex-col">
-        <div className="flex items-center gap-1 border-b border-border px-1 py-0.5">
+        <DeskChrome
+          dense
+          sticky={false}
+          trailing={
+            <span className="font-mono text-type-2xs text-muted-foreground">
+              MacroVol desk · ATM · 3D surfaces · GEX/Charm · IV surface
+            </span>
+          }
+        >
+          {/* Edition toggle: solid primary CTA allowed */}
           <button
             type="button"
             onClick={() => setEdition('greeks10')}
@@ -469,18 +478,17 @@ export function GreeksView() {
           <button
             type="button"
             onClick={() => setEdition('terminal')}
-            className="rounded px-2 py-0.5 font-mono text-type-xs text-muted-foreground hover:text-foreground"
+            className="rounded px-2 py-0.5 font-mono text-type-xs text-muted-foreground hover:bg-muted hover:text-foreground"
           >
             Terminal Greeks
           </button>
-          <span className="ml-2 font-mono text-type-2xs text-muted-foreground">
-            MacroVol desk · ATM · 3D surfaces · GEX/Charm · IV surface
-          </span>
-        </div>
+        </DeskChrome>
         <div className="min-h-0 flex-1">
-          <Suspense fallback={<DeskLoading message="Loading Greeks 1.0…" />}>
-            <Greeks10View />
-          </Suspense>
+          <SectionErrorBoundary name="Greeks 1.0">
+            <Suspense fallback={<DeskLoading message={UI_COPY.load.greeks} />}>
+              <Greeks10View />
+            </Suspense>
+          </SectionErrorBoundary>
         </div>
       </div>
     );
@@ -488,26 +496,38 @@ export function GreeksView() {
 
   if (!snapshot) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-3 font-mono text-xs text-muted-foreground">
-        <div>No terminal chain data</div>
-        <button
-          type="button"
-          onClick={() => setEdition('greeks10')}
-          className="rounded bg-primary px-3 py-1.5 text-primary-foreground"
-        >
-          Open Greeks 1.0 (MacroVol API)
-        </button>
+      <div className="flex h-full flex-col items-center justify-center gap-3 p-4">
+        <EmptyState
+          kind="no-data"
+          title="No terminal chain data"
+          body={UI_COPY.empty.chain}
+          action={
+            <button
+              type="button"
+              onClick={() => setEdition('greeks10')}
+              className="rounded bg-primary px-3 py-1.5 font-mono text-type-xs text-primary-foreground"
+            >
+              Open Greeks 1.0 (MacroVol API)
+            </button>
+          }
+        />
       </div>
     );
   }
 
   const greekRow1 = GREEK_META.slice(0, 7);
   const greekRow2 = GREEK_META.slice(7);
+  const activeDomId = SUB_VIEWS.find((s) => s.id === subView)?.domId ?? 'greeks-sub-heatmap';
 
   return (
     <div className="flex flex-col h-full">
       {/* Edition + sub-view tabs — sticky for tall greek boards */}
-      <div className="sticky top-0 z-20 flex shrink-0 items-center gap-0.5 border-b border-border bg-background/95 px-1 py-0.5 backdrop-blur-sm">
+      <DeskChrome
+        dense
+        trailing={
+          <DiagnosticsStrip sviReadout={sviReadout} arbResult={arbResult} data-testid="greeks-diagnostics" />
+        }
+      >
         <button
           type="button"
           onClick={() => setEdition('greeks10')}
@@ -517,44 +537,54 @@ export function GreeksView() {
           Greeks 1.0
         </button>
         <span className="mx-0.5 text-border">|</span>
-        {SUB_VIEWS.map(sv => (
-          <button
-            key={sv.id}
-            id={sv.domId}
-            type="button"
-            data-desk-section="1"
-            data-desk-section-active={subView === sv.id ? '1' : undefined}
-            onClick={() => setSubView(sv.id)}
-            className={cn('px-2 py-0.5 text-type-xs font-mono rounded transition-colors',
-              subView === sv.id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
-            )}
-          >
-            {sv.label}
-          </button>
-        ))}
-        <div className="flex-1" />
-        <DiagnosticsStrip sviReadout={sviReadout} arbResult={arbResult} data-testid="greeks-diagnostics" />
-      </div>
+        <DeskModeBar
+          items={SUB_VIEWS.map((sv) => ({
+            id: sv.domId,
+            label: sv.label,
+          }))}
+          activeId={activeDomId}
+          onSelect={(domId) => {
+            const m = SUB_VIEWS.find((s) => s.domId === domId);
+            if (m) setSubView(m.id);
+          }}
+          asSectionButtons
+        />
+      </DeskChrome>
 
       {subView !== 'heatmap' ? (
         <div className="flex-1 p-1 overflow-hidden">
-          {subView === 'profile' && <GreeksProfileView />}
-          {subView === 'sensitivity' && <GreeksSensitivityView />}
-          {subView === 'byexpiry' && <GreeksExpiryView />}
+          {subView === 'profile' && (
+            <SectionErrorBoundary name="Profile">
+              <GreeksProfileView />
+            </SectionErrorBoundary>
+          )}
+          {subView === 'sensitivity' && (
+            <SectionErrorBoundary name="Sensitivity">
+              <GreeksSensitivityView />
+            </SectionErrorBoundary>
+          )}
+          {subView === 'byexpiry' && (
+            <SectionErrorBoundary name="By Expiry">
+              <GreeksExpiryView />
+            </SectionErrorBoundary>
+          )}
           {subView === 'surface3d' && (
-            <div className="flex h-full flex-col">
-              <div className="border-b border-border px-3 py-1 font-mono text-type-2xs text-amber">
-                3D mesh = OTM-wing greeks (put K&lt;S, call K≥S), height-scaled min→max for visualization only —
-                not OI-weighted exposure. Prefer Greeks 1.0 surfaces / heatmap for desk work.
+            <SectionErrorBoundary name="3D">
+              <div className="flex h-full flex-col">
+                <div className="border-b border-border px-3 py-1 font-mono text-type-2xs text-amber">
+                  3D mesh = OTM-wing greeks (put K&lt;S, call K≥S), height-scaled min→max for visualization only —
+                  not OI-weighted exposure. Prefer Greeks 1.0 surfaces / heatmap for desk work.
+                </div>
+                <div className="min-h-0 flex-1">
+                  <GreeksSurface3D />
+                </div>
               </div>
-              <div className="min-h-0 flex-1">
-                <GreeksSurface3D />
-              </div>
-            </div>
+            </SectionErrorBoundary>
           )}
         </div>
       ) : (
-        <>
+        <SectionErrorBoundary name="Heatmap">
+          <>
           {/* Compact tool bar */}
           <div className="flex items-center gap-1 px-1 py-0.5 border-b border-border text-type-xs font-mono flex-shrink-0">
             <div className="flex gap-0.5" title="Which option side feeds the greek value">
@@ -710,7 +740,8 @@ export function GreeksView() {
               )}
             </div>
           )}
-        </>
+          </>
+        </SectionErrorBoundary>
       )}
     </div>
   );

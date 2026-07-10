@@ -4,7 +4,7 @@ import {
 import type { CurveShapeData, ImplyRead } from '../../../lib/macrovol/api';
 import { DataBadge } from '../DataBadge';
 import { CollapsibleSection } from '../../terminal/CollapsibleSection';
-import { chartTooltipStyle } from '../../../lib/chartTheme';
+import { CHART, CHART_SPREAD, chartGridProps, chartTooltipStyle } from '../../../lib/chartTheme';
 import { ImplyChip } from '../../common/ImplyDrawer';
 import { Spark } from './Spark';
 
@@ -23,14 +23,15 @@ export function ShapeSection({
   onOpenImply: (i: ImplyRead) => void;
 }) {
   // Compact regime strip — full spread curves live on CurvesBoard (sec-curves).
+  // Colors from shared CHART_SPREAD so Shape + Curves always match.
   const shapeCards = [
-    { key: '2s10s', label: '2s10s', spark: shape.history?.spark_2s10s, color: '#3b82f6' },
-    { key: '5s30s', label: '5s30s', spark: shape.history?.spark_5s30s, color: '#22c55e' },
-    { key: 'fly_2s5s10s', label: 'fly', spark: shape.history?.spark_fly, color: '#a78bfa' },
-    { key: '2s5s', label: '2s5s', spark: shape.history?.spark_2s5s, color: '#f59e0b' },
-    { key: '5s10s', label: '5s10s', spark: shape.history?.spark_5s10s, color: '#06b6d4' },
-    { key: '10s30s', label: '10s30s', spark: shape.history?.spark_10s30s, color: '#a78bfa' },
-    { key: '3m10y', label: '3m10y', spark: shape.history?.spark_3m10y, color: '#ef4444' },
+    { key: '2s10s', label: '2s10s', spark: shape.history?.spark_2s10s, color: CHART_SPREAD['2s10s'] },
+    { key: '5s30s', label: '5s30s', spark: shape.history?.spark_5s30s, color: CHART_SPREAD['5s30s'] },
+    { key: 'fly_2s5s10s', label: 'fly', spark: shape.history?.spark_fly, color: CHART_SPREAD.fly_2s5s10s },
+    { key: '2s5s', label: '2s5s', spark: shape.history?.spark_2s5s, color: CHART_SPREAD['2s5s'] },
+    { key: '5s10s', label: '5s10s', spark: shape.history?.spark_5s10s, color: CHART_SPREAD['5s10s'] },
+    { key: '10s30s', label: '10s30s', spark: shape.history?.spark_10s30s, color: CHART_SPREAD['10s30s'] },
+    { key: '3m10y', label: '3m10y', spark: shape.history?.spark_3m10y, color: CHART_SPREAD['3m10y'] },
   ];
 
   return (
@@ -83,21 +84,21 @@ export function ShapeSection({
       {/* Larger multi-spread history strip */}
       <div className="mt-2 grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-4">
         {[
-          { title: '2s10s', data: shapeHistoryCharts.s2s10, color: '#3b82f6' },
-          { title: '5s30s', data: shapeHistoryCharts.s5s30, color: '#22c55e' },
-          { title: '3m10y', data: shapeHistoryCharts.s3m10y, color: '#ef4444' },
-          { title: 'fly 2s5s10s', data: shapeHistoryCharts.fly, color: '#a78bfa' },
+          { title: '2s10s', data: shapeHistoryCharts.s2s10, color: CHART_SPREAD['2s10s'] },
+          { title: '5s30s', data: shapeHistoryCharts.s5s30, color: CHART_SPREAD['5s30s'] },
+          { title: '3m10y', data: shapeHistoryCharts.s3m10y, color: CHART_SPREAD['3m10y'] },
+          { title: 'fly 2s5s10s', data: shapeHistoryCharts.fly, color: CHART_SPREAD.fly_2s5s10s },
         ].map((ch) => (
           <div key={ch.title} className="rounded border border-border/60 p-1">
             <div className="mb-0.5 text-type-2xs text-muted-foreground">{ch.title} (bps)</div>
             {ch.data.length > 0 ? (
               <ResponsiveContainer width="100%" height={96}>
                 <AreaChart data={ch.data} margin={{ top: 2, right: 2, bottom: 0, left: 0 }}>
-                  <CartesianGrid stroke="#1f1f1f" strokeDasharray="2 2" />
+                  <CartesianGrid {...chartGridProps} />
                   <XAxis dataKey="date" hide />
                   <YAxis hide domain={['auto', 'auto']} />
                   <Tooltip contentStyle={chartTooltipStyle} />
-                  <ReferenceLine y={0} stroke="#333" />
+                  <ReferenceLine y={0} stroke={CHART.refLine} />
                   <Area type="monotone" dataKey="bps" stroke={ch.color} fill={ch.color} fillOpacity={0.15} strokeWidth={1.4} isAnimationActive={false} />
                 </AreaChart>
               </ResponsiveContainer>

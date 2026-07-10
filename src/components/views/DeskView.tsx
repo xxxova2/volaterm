@@ -16,9 +16,12 @@ import { useTerminalStore } from '../../store/terminalStore';
 import { Panel } from '../terminal/Panel';
 import { Explain } from '../common/Explain';
 import { EmptyState } from '../common/EmptyState';
-import { FreshnessChip } from '../common/Freshness';
+import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
+import { FreshnessFromDomain } from '../common/Freshness';
+import { DeskChrome } from '../terminal/DeskChrome';
 import { fmtPct, fmtPrice, fmtSigned, fmtCompact } from '../../lib/format';
 import { cn } from '../../lib/utils';
+import { UI_COPY } from '../../config/uiCopy';
 import {
   analyzeComboBreakEven,
   breakEvenTable,
@@ -106,10 +109,17 @@ export function DeskView() {
   const snapshot = useTerminalStore(s => s.snapshot);
   const source = useTerminalStore(s => s.source);
   const chainUsed = useTerminalStore(s => s.chainUsed);
+  const chainAvailable = useTerminalStore(s => s.chainAvailable);
+  const lastChainUpdate = useTerminalStore(s => s.lastChainUpdate);
+  const provenance = useTerminalStore(s => s.provenance);
   const symbol = useTerminalStore(s => s.symbol);
   const setActiveTab = useTerminalStore(s => s.setActiveTab);
   // Blotter-first default: Combo PnL (mark risk) over abstract simulator
   const [tool, setTool] = useState<ToolId>('combopnl');
+
+  // Fail-closed: domain classification — never optimistic live without asOf age; re-ticks every 5s
+  const chainMissing = !chainAvailable || chainUsed === 'none';
+  const chainAsOfMs = provenance.chain?.asOfMs ?? (lastChainUpdate > 0 ? lastChainUpdate : null);
 
   const inv = useMemo(() => (snapshot ? inventoryByExpiry(snapshot) : []), [snapshot]);
   const port = useMemo(
@@ -124,7 +134,7 @@ export function DeskView() {
         <EmptyState
           kind="no-data"
           title="No surface data"
-          body="Load a symbol / wait for chain — inventory blotter needs a snapshot."
+          body={`${UI_COPY.empty.chain} Inventory blotter needs a snapshot.`}
         />
       </Panel>
     );
@@ -134,10 +144,22 @@ export function DeskView() {
 
   return (
     <div className="h-full flex flex-col gap-1 overflow-hidden">
-      {/* Blotter-first strip (Phase F) */}
+      {/* Blotter-first strip (Phase F) — light DeskChrome for label + freshness only */}
       <div className="flex flex-col gap-1 rounded border border-border bg-card px-2 py-1.5">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="px-1 font-mono text-xs font-bold tracking-wider text-primary">MM DESK</span>
+        <DeskChrome
+          label="MM DESK"
+          labelClassName="mr-0 px-1"
+          sticky={false}
+          className="border-0 bg-transparent p-0"
+          trailing={
+            <FreshnessFromDomain
+              asOfMs={chainAsOfMs}
+              domain="chain"
+              down={chainMissing}
+              previousKind={provenance.chain?.kind}
+            />
+          }
+        >
           <span className="font-mono text-type-xs text-muted-foreground">
             {snapshot.symbol} @ {fmtPrice(snapshot.spot, snapshot.spot > 1000 ? 1 : 2)}
           </span>
@@ -147,12 +169,11 @@ export function DeskView() {
           >
             {badge.label}
           </span>
-          <FreshnessChip kind={chainUsed === 'none' || !chainUsed ? 'delayed' : 'live'} />
           <span className="hidden font-mono text-type-2xs text-muted-foreground md:inline">
             Blotter first · tools secondary · BS-Merton
             {chainUsed === 'deribit' ? ' · Deribit mark IV' : ''}
           </span>
-        </div>
+        </DeskChrome>
         {/* Inventory blotter — primary risk tape */}
         <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 rounded border border-primary/20 bg-primary/5 px-2 py-1 font-mono text-type-xs">
           <span className="font-bold uppercase tracking-wider text-primary">Blotter Σ</span>
@@ -217,18 +238,20 @@ export function DeskView() {
       </div>
 
       <div className="flex-1 min-h-0">
-        {tool === 'sim' && <SimTool />}
-        {tool === 'combopnl' && <ComboPnlTool />}
-        {tool === 'straddle' && <StraddleTool />}
-        {tool === 'combo' && <ComboTool />}
-        {tool === 'optionpnl' && <OptionPnlTool />}
-        {tool === 'breakeven' && <BreakEvenTool />}
-        {tool === 'roll' && <RollTool />}
-        {tool === 'basis' && <BasisTool />}
-        {tool === 'subjective' && <SubjectiveTool />}
-        {tool === 'dfollow' && <DFollowTool />}
-        {tool === 'hedge' && <HedgeTool />}
-        {tool === 'grid' && <GridTool />}
+        <SectionErrorBoundary key={tool} name={`MM ${tool}`}>
+          {tool === 'sim' && <SimTool />}
+          {tool === 'combopnl' && <ComboPnlTool />}
+          {tool === 'straddle' && <StraddleTool />}
+          {tool === 'combo' && <ComboTool />}
+          {tool === 'optionpnl' && <OptionPnlTool />}
+          {tool === 'breakeven' && <BreakEvenTool />}
+          {tool === 'roll' && <RollTool />}
+          {tool === 'basis' && <BasisTool />}
+          {tool === 'subjective' && <SubjectiveTool />}
+          {tool === 'dfollow' && <DFollowTool />}
+          {tool === 'hedge' && <HedgeTool />}
+          {tool === 'grid' && <GridTool />}
+        </SectionErrorBoundary>
       </div>
     </div>
   );

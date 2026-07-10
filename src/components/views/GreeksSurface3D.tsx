@@ -4,6 +4,7 @@ import { OrbitControls, Html } from '@react-three/drei';
 import * as THREE from 'three';
 import { useTerminalStore } from '../../store/terminalStore';
 import { VISUAL_CONFIG } from '../../config/constants';
+import { CANVAS } from '../../lib/chartTheme';
 import { GREEK_META, type GreekKey } from './greeksTypes';
 import { greekRamp01, useGreekSurfaceGeometry } from './useGreekSurfaceGeometry';
 import { cn } from '../../lib/utils';
@@ -47,7 +48,7 @@ function AtmLine({ x }: { x: number }) {
   return (
     <mesh position={[x, 0, 0]}>
       <boxGeometry args={[0.018, 0.006, DEPTH]} />
-      <meshBasicMaterial color="#f0b400" transparent opacity={0.9} />
+      <meshBasicMaterial color={CANVAS.brand} transparent opacity={0.9} />
     </mesh>
   );
 }
@@ -63,7 +64,7 @@ function Axes({
 
   return (
     <>
-      <gridHelper args={[4, 8, '#2a2a33', '#1f1f26']} position={[0, 0, 0]} />
+      <gridHelper args={[4, 8, CANVAS.grid, CANVAS.gridMinor]} position={[0, 0, 0]} />
 
       {info.xTicks.map((tick, i) => (
         <Html key={`x${i}-${tick.label}`} position={[tick.px, 0, DEPTH / 2 + 0.05]} center distanceFactor={6}>
@@ -227,7 +228,7 @@ export function GreeksSurface3D() {
       <EmptyState
         kind="no-data"
         title="No chain for 3D surface"
-        body="Load a surface (LIVE or demo) to render greek mesh."
+        body="Load a LIVE surface to render greek mesh."
         className="h-full"
       />
     );

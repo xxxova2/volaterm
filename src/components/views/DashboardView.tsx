@@ -14,6 +14,8 @@ import {
 } from '../../lib/options/analytics';
 import { Explain } from '../common/Explain';
 import { DeskLoading } from '../common/Skeleton';
+import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
+import { UI_COPY } from '../../config/uiCopy';
 import { macrovolApi, type RatesSummary, type StirStripData, type MacroSummary } from '../../lib/macrovol/api';
 import type { ActiveTab } from '../../lib/options/types';
 
@@ -215,8 +217,18 @@ export function DashboardView() {
           hasHistory={(fmpHistory?.length ?? 0) > 0}
           onRetryMacro={() => setMacroRetry((n) => n + 1)}
         />
-        <RatesStrip rates={rates} stir={stir} onOpen={() => go('rates')} />
-        <DeskLoading message="Fitting surface… rates strip still live when MacroVol is up." className="flex-1 min-h-[12rem]" />
+        <SectionErrorBoundary name="Macro strip">
+          <RatesStrip
+            rates={rates}
+            stir={stir}
+            onOpen={() => go('rates')}
+            offlineLabel={UI_COPY.empty.macro}
+          />
+        </SectionErrorBoundary>
+        <DeskLoading
+          message={`${UI_COPY.load.surface} rates strip still live when MacroVol is up.`}
+          className="flex-1 min-h-[12rem]"
+        />
       </div>
     );
   }
@@ -268,7 +280,15 @@ export function DashboardView() {
         onRetryMacro={() => setMacroRetry((n) => n + 1)}
       />
 
-      <RatesStrip rates={rates} stir={stir} macro={macro} onOpen={() => go('rates')} />
+      <SectionErrorBoundary name="Macro strip">
+        <RatesStrip
+          rates={rates}
+          stir={stir}
+          macro={macro}
+          onOpen={() => go('rates')}
+          offlineLabel={UI_COPY.empty.macro}
+        />
+      </SectionErrorBoundary>
 
       {/* Action chips */}
       <div className="mb-2 flex flex-wrap gap-1 px-1">
@@ -316,199 +336,220 @@ export function DashboardView() {
       {/*
         Home hierarchy (D-PR-6): Vol regime spotlight (~2-col), then 1 / 2 / 3 grid.
         Top 3 on squint: regime banner, vol regime, key levels.
+        Per-panel boundaries so one bad widget does not blank the whole home grid.
       */}
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {/* Spotlight — Vol Structure metrics */}
-        <Panel title={<Explain term="volRegime">Vol Structure · Regime</Explain>} className="sm:col-span-2">
-          <div className="grid grid-cols-2 gap-3 p-3 md:grid-cols-4">
-            <MiniStat label="ATM IV front" term="atmIV" value={fmtPct(volRegime)} />
-            <MiniStat label="IV Rank" term="ivRank" value={`${(ivData.percentile).toFixed(0)}%`} />
-            <MiniStat label="IV High" value={fmtPct(ivHighLow.ivHigh)} color="text-up" />
-            <MiniStat label="IV Low" value={fmtPct(ivHighLow.ivLow)} color="text-down" />
-            <MiniStat label="Term Slope" term="termStructure" value={fmtSignedPct(termSlope, 1)} color={termSlope >= 0 ? 'text-up' : 'text-down'} />
-            <MiniStat label="25Δ RR" term="skew" value={`${(pcSkew * 100).toFixed(2)}%`} color={pcSkew >= 0 ? 'text-down' : 'text-up'} />
-            <MiniStat label="RV (hist)" value={rv != null ? fmtPct(rv) : '—'} />
-            <MiniStat
-              label="VRP IV−RV"
-              value={vrp != null ? `${(vrp * 100).toFixed(1)}pt` : '—'}
-              color={vrp != null && vrp < 0 ? 'text-up' : 'text-muted-foreground'}
-            />
-          </div>
-          <button
-            type="button"
-            onClick={() => go('vol')}
-            className="w-full border-t border-border px-3 py-1.5 text-left font-mono text-type-2xs text-primary hover:bg-muted/40"
-          >
-            Open Vol Structure (surface · smile · term · surface fit) →
-          </button>
-        </Panel>
+        <div className="sm:col-span-2">
+          <SectionErrorBoundary name="Vol regime">
+            <Panel title={<Explain term="volRegime">Vol Structure · Regime</Explain>}>
+              <div className="grid grid-cols-2 gap-3 p-3 md:grid-cols-4">
+                <MiniStat label="ATM IV front" term="atmIV" value={fmtPct(volRegime)} />
+                <MiniStat label="IV Rank" term="ivRank" value={`${(ivData.percentile).toFixed(0)}%`} />
+                <MiniStat label="IV High" value={fmtPct(ivHighLow.ivHigh)} color="text-up" />
+                <MiniStat label="IV Low" value={fmtPct(ivHighLow.ivLow)} color="text-down" />
+                <MiniStat label="Term Slope" term="termStructure" value={fmtSignedPct(termSlope, 1)} color={termSlope >= 0 ? 'text-up' : 'text-down'} />
+                <MiniStat label="25Δ RR" term="skew" value={`${(pcSkew * 100).toFixed(2)}%`} color={pcSkew >= 0 ? 'text-down' : 'text-up'} />
+                <MiniStat label="RV (hist)" value={rv != null ? fmtPct(rv) : '—'} />
+                <MiniStat
+                  label="VRP IV−RV"
+                  value={vrp != null ? `${(vrp * 100).toFixed(1)}pt` : '—'}
+                  color={vrp != null && vrp < 0 ? 'text-up' : 'text-muted-foreground'}
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => go('vol')}
+                className="w-full border-t border-border px-3 py-1.5 text-left font-mono text-type-2xs text-primary hover:bg-muted/40"
+              >
+                Open Vol Structure (surface · smile · term · surface fit) →
+              </button>
+            </Panel>
+          </SectionErrorBoundary>
+        </div>
 
-        <Panel title={<Explain term="spot">Spot &amp; Session</Explain>}>
-          <div className="p-3">
-            <div className="font-mono text-type-2xl font-bold tabular-nums">{fmtPrice(snapshot.spot)}</div>
-            <div className={`mt-1 font-mono text-type-md tabular-nums ${dayChg >= 0 ? 'text-up' : 'text-down'}`}>
-              {fmtSigned(dayChg)} ({fmtSignedPct(dayChgPct)})
+        <SectionErrorBoundary name="Spot session">
+          <Panel title={<Explain term="spot">Spot &amp; Session</Explain>}>
+            <div className="p-3">
+              <div className="font-mono text-type-2xl font-bold tabular-nums">{fmtPrice(snapshot.spot)}</div>
+              <div className={`mt-1 font-mono text-type-md tabular-nums ${dayChg >= 0 ? 'text-up' : 'text-down'}`}>
+                {fmtSigned(dayChg)} ({fmtSignedPct(dayChgPct)})
+              </div>
+              {quotePath.length > 1 ? (
+                <div className="mt-2 h-16">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={quotePath} margin={{ top: 2, right: 0, bottom: 0, left: 0 }}>
+                      <defs>
+                        <linearGradient id="homeQuoteFill" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="var(--info)" stopOpacity={0.35} />
+                          <stop offset="100%" stopColor="var(--info)" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <Area type="monotone" dataKey="close" stroke="var(--info)" fill="url(#homeQuoteFill)" strokeWidth={1.5} dot={false} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : (
+                <p className="mt-3 font-mono text-type-xs text-muted-foreground">
+                  Enable LIVE for 60d close path
+                </p>
+              )}
+              <div className="mt-1 text-type-2xs font-mono text-muted-foreground">
+                {quotePath.length > 1 ? '60d close path' : 'No synthetic progress bar'}
+              </div>
             </div>
-            {quotePath.length > 1 ? (
-              <div className="mt-2 h-16">
+          </Panel>
+        </SectionErrorBoundary>
+
+        <SectionErrorBoundary name="Key levels">
+          <Panel title={<Explain term="keyLevels">Key Levels</Explain>}>
+            <div className="grid grid-cols-2 gap-3 p-3">
+              <MiniStat label="Max Pain" term="maxPain" value={maxPain ? fmtPrice(maxPain, 0) : '—'} />
+              <MiniStat label="Gamma Flip" term="gammaFlip" value={gex?.gammaFlip ? fmtPrice(gex.gammaFlip, 0) : '—'} color="text-warn" />
+              <MiniStat label="Call Wall" term="callWall" value={largestPos ? fmtPrice(largestPos.strike, 0) : '—'} color="text-up" />
+              <MiniStat label="Put Wall" term="putWall" value={largestNeg ? fmtPrice(largestNeg.strike, 0) : '—'} color="text-down" />
+              <MiniStat label="Total GEX" term="gex" value={fmtCompact(gex?.totalGEX ?? 0)} color={gex && gex.totalGEX >= 0 ? 'text-up' : 'text-down'} />
+              <MiniStat label="Σ DEX $" term="dex" value={gex ? fmtCompact(gex.totalDEX) : '—'} />
+            </div>
+            <button
+              type="button"
+              onClick={() => go('positioning')}
+              className="w-full border-t border-border px-3 py-1.5 text-left font-mono text-type-2xs text-primary hover:bg-muted/40"
+            >
+              Open Positioning (chain · dealer · edge) →
+            </button>
+          </Panel>
+        </SectionErrorBoundary>
+
+        <SectionErrorBoundary name="Chain inventory">
+          <Panel title={<Explain term="portfolioRisk">Chain Inventory Σ</Explain>}>
+            <div className="grid grid-cols-2 gap-3 p-3">
+              <MiniStat label="Σ Delta" term="netDelta" value={portGreeks?.delta.toFixed(2) ?? '—'} color={portGreeks && portGreeks.delta >= 0 ? 'text-up' : 'text-down'} />
+              <MiniStat label="Σ Gamma" term="netGamma" value={portGreeks?.gamma.toFixed(4) ?? '—'} color="text-up" />
+              <MiniStat label="Σ Vega" term="netVega" value={portGreeks?.vega.toFixed(2) ?? '—'} color="text-info" />
+              <MiniStat label="Σ Theta" term="netTheta" value={portGreeks?.theta.toFixed(2) ?? '—'} color={portGreeks && portGreeks.theta >= 0 ? 'text-up' : 'text-down'} />
+            </div>
+            <div className="px-3 pb-2 text-type-2xs font-mono text-muted-foreground">
+              Sum of listed contract greeks — not a position book. Use MM Desk for book risk.
+            </div>
+          </Panel>
+        </SectionErrorBoundary>
+
+        <SectionErrorBoundary name="Expected move">
+          <Panel title={<Explain term="expectedMove">Expected Move</Explain>}>
+            <div className="p-3">
+              {move ? (
+                <div className="space-y-3">
+                  <div>
+                    <div className="text-type-xs font-mono uppercase tracking-wider text-muted-foreground">Dollar Move</div>
+                    <div className="font-mono text-type-xl font-bold tabular-nums text-foreground">±{fmtPrice(move.move)}</div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <MiniStat label="% Move" term="expectedMove" value={fmtPct(move.movePct)} />
+                    <MiniStat label="Prob Touch" term="probTouch" value={fmtPct(move.probTouch)} color="text-info" />
+                  </div>
+                  <div className="text-type-xs font-mono text-muted-foreground">Front ATM straddle (0.8× convention)</div>
+                </div>
+              ) : (
+                <div className="font-mono text-type-sm text-muted-foreground">No data</div>
+              )}
+            </div>
+          </Panel>
+        </SectionErrorBoundary>
+
+        <SectionErrorBoundary name="Surface fit">
+          <Panel title={<Explain term="surface">Surface Fit / Model Convergence</Explain>}>
+            <div className="space-y-3 p-3" data-testid="diagnostics-card">
+              <p className="text-type-2xs font-mono text-muted-foreground">
+                Validates SVI fit, not raw feed
+              </p>
+              <div className="flex items-center justify-between">
+                <span className="text-type-2xs font-mono uppercase tracking-wider text-muted-foreground">
+                  <Explain term="sviRmse">SVI RMSE</Explain>
+                </span>
+                <span className="font-mono text-type-md font-semibold tabular-nums text-foreground" data-testid="svi-rmse">
+                  {fmtPct(sviRmse)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-type-2xs font-mono uppercase tracking-wider text-muted-foreground">SVI Samples</span>
+                <span className="font-mono text-type-md font-semibold tabular-nums text-foreground">
+                  {String(sviSamples)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-type-2xs font-mono uppercase tracking-wider text-muted-foreground">
+                  <Explain term="arbitrage">Calendar / Butterfly</Explain>
+                </span>
+                <span
+                  className={`rounded px-2 py-0.5 text-type-xs font-mono uppercase tracking-wider ${
+                    arbClean ? 'bg-up/15 text-up' : 'bg-down/15 text-down'
+                  }`}
+                  data-testid="arb-badge"
+                  data-arb-clean={arbClean ? 'true' : 'false'}
+                >
+                  {arbClean ? 'Clean' : 'Flags'}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-3 pt-1">
+                <MiniStat label="Calendar" term="calendarArb" value={String(calendarCount)} color={calendarCount === 0 ? 'text-up' : 'text-down'} />
+                <MiniStat label="Butterfly" term="butterflyArb" value={String(butterflyCount)} color={butterflyCount === 0 ? 'text-up' : 'text-down'} />
+              </div>
+              {parityFlags > 0 && (
+                <div className="text-type-xs font-mono text-warn">
+                  {parityFlags} parity residual(s) past half-spread → Positioning Edge
+                </div>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => go('vol')}
+              className="w-full border-t border-border px-3 py-1.5 text-left font-mono text-type-2xs text-primary hover:bg-muted/40"
+            >
+              Inspect under Vol Structure → Surface Fit
+            </button>
+          </Panel>
+        </SectionErrorBoundary>
+
+        <div className="sm:col-span-2 below-fold">
+          <SectionErrorBoundary name="OI by expiry">
+            <Panel title="Open Interest by Expiry">
+              <div className="h-48 p-2">
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={quotePath} margin={{ top: 2, right: 0, bottom: 0, left: 0 }}>
-                    <defs>
-                      <linearGradient id="homeQuoteFill" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="var(--info)" stopOpacity={0.35} />
-                        <stop offset="100%" stopColor="var(--info)" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <Area type="monotone" dataKey="close" stroke="var(--info)" fill="url(#homeQuoteFill)" strokeWidth={1.5} dot={false} />
-                  </AreaChart>
+                  <BarChart data={expiryOI} margin={{ top: 4, right: 8, bottom: 18, left: 0 }}>
+                    <CartesianGrid stroke="var(--grid)" strokeDasharray="2 4" />
+                    <XAxis dataKey="label" tick={{ fontSize: 9, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }} stroke="var(--border)" />
+                    <YAxis tick={{ fontSize: 9, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }} stroke="var(--border)" width={40} tickFormatter={v => `${(v / 1000).toFixed(0)}K`} />
+                    <Tooltip
+                      content={({ active, payload, label }) => {
+                        if (!active || !payload?.length) return null;
+                        return (
+                          <div className="rounded border border-border bg-popover/95 p-2 font-mono text-type-xs shadow backdrop-blur">
+                            <div className="mb-1 font-semibold text-foreground">{label}</div>
+                            <div className="text-foreground">OI: {(payload[0]!.value as number).toLocaleString()}</div>
+                          </div>
+                        );
+                      }}
+                    />
+                    <Bar dataKey="oi" fill="var(--info)" radius={[2, 2, 0, 0]} />
+                  </BarChart>
                 </ResponsiveContainer>
               </div>
-            ) : (
-              <p className="mt-3 font-mono text-type-xs text-muted-foreground">
-                Enable LIVE for 60d close path
-              </p>
-            )}
-            <div className="mt-1 text-type-2xs font-mono text-muted-foreground">
-              {quotePath.length > 1 ? '60d close path' : 'No synthetic progress bar'}
-            </div>
-          </div>
-        </Panel>
+            </Panel>
+          </SectionErrorBoundary>
+        </div>
 
-        <Panel title={<Explain term="keyLevels">Key Levels</Explain>}>
-          <div className="grid grid-cols-2 gap-3 p-3">
-            <MiniStat label="Max Pain" term="maxPain" value={maxPain ? fmtPrice(maxPain, 0) : '—'} />
-            <MiniStat label="Gamma Flip" term="gammaFlip" value={gex?.gammaFlip ? fmtPrice(gex.gammaFlip, 0) : '—'} color="text-warn" />
-            <MiniStat label="Call Wall" term="callWall" value={largestPos ? fmtPrice(largestPos.strike, 0) : '—'} color="text-up" />
-            <MiniStat label="Put Wall" term="putWall" value={largestNeg ? fmtPrice(largestNeg.strike, 0) : '—'} color="text-down" />
-            <MiniStat label="Total GEX" term="gex" value={fmtCompact(gex?.totalGEX ?? 0)} color={gex && gex.totalGEX >= 0 ? 'text-up' : 'text-down'} />
-            <MiniStat label="Σ DEX $" term="dex" value={gex ? fmtCompact(gex.totalDEX) : '—'} />
-          </div>
-          <button
-            type="button"
-            onClick={() => go('positioning')}
-            className="w-full border-t border-border px-3 py-1.5 text-left font-mono text-type-2xs text-primary hover:bg-muted/40"
-          >
-            Open Positioning (chain · dealer · edge) →
-          </button>
-        </Panel>
-
-        <Panel title={<Explain term="portfolioRisk">Chain Inventory Σ</Explain>}>
-          <div className="grid grid-cols-2 gap-3 p-3">
-            <MiniStat label="Σ Delta" term="netDelta" value={portGreeks?.delta.toFixed(2) ?? '—'} color={portGreeks && portGreeks.delta >= 0 ? 'text-up' : 'text-down'} />
-            <MiniStat label="Σ Gamma" term="netGamma" value={portGreeks?.gamma.toFixed(4) ?? '—'} color="text-up" />
-            <MiniStat label="Σ Vega" term="netVega" value={portGreeks?.vega.toFixed(2) ?? '—'} color="text-info" />
-            <MiniStat label="Σ Theta" term="netTheta" value={portGreeks?.theta.toFixed(2) ?? '—'} color={portGreeks && portGreeks.theta >= 0 ? 'text-up' : 'text-down'} />
-          </div>
-          <div className="px-3 pb-2 text-type-2xs font-mono text-muted-foreground">
-            Sum of listed contract greeks — not a position book. Use MM Desk for book risk.
-          </div>
-        </Panel>
-
-        <Panel title={<Explain term="expectedMove">Expected Move</Explain>}>
-          <div className="p-3">
-            {move ? (
-              <div className="space-y-3">
-                <div>
-                  <div className="text-type-xs font-mono uppercase tracking-wider text-muted-foreground">Dollar Move</div>
-                  <div className="font-mono text-type-xl font-bold tabular-nums text-foreground">±{fmtPrice(move.move)}</div>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <MiniStat label="% Move" term="expectedMove" value={fmtPct(move.movePct)} />
-                  <MiniStat label="Prob Touch" term="probTouch" value={fmtPct(move.probTouch)} color="text-info" />
-                </div>
-                <div className="text-type-xs font-mono text-muted-foreground">Front ATM straddle (0.8× convention)</div>
-              </div>
-            ) : (
-              <div className="font-mono text-type-sm text-muted-foreground">No data</div>
-            )}
-          </div>
-        </Panel>
-
-        <Panel title={<Explain term="surface">Surface Fit / Model Convergence</Explain>}>
-          <div className="space-y-3 p-3" data-testid="diagnostics-card">
-            <p className="text-type-2xs font-mono text-muted-foreground">
-              Validates SVI fit, not raw feed
-            </p>
-            <div className="flex items-center justify-between">
-              <span className="text-type-2xs font-mono uppercase tracking-wider text-muted-foreground">
-                <Explain term="sviRmse">SVI RMSE</Explain>
-              </span>
-              <span className="font-mono text-type-md font-semibold tabular-nums text-foreground" data-testid="svi-rmse">
-                {fmtPct(sviRmse)}
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-type-2xs font-mono uppercase tracking-wider text-muted-foreground">SVI Samples</span>
-              <span className="font-mono text-type-md font-semibold tabular-nums text-foreground">
-                {String(sviSamples)}
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-type-2xs font-mono uppercase tracking-wider text-muted-foreground">
-                <Explain term="arbitrage">Calendar / Butterfly</Explain>
-              </span>
-              <span
-                className={`rounded px-2 py-0.5 text-type-xs font-mono uppercase tracking-wider ${
-                  arbClean ? 'bg-up/15 text-up' : 'bg-down/15 text-down'
-                }`}
-                data-testid="arb-badge"
-                data-arb-clean={arbClean ? 'true' : 'false'}
-              >
-                {arbClean ? 'Clean' : 'Flags'}
-              </span>
-            </div>
-            <div className="grid grid-cols-2 gap-3 pt-1">
-              <MiniStat label="Calendar" term="calendarArb" value={String(calendarCount)} color={calendarCount === 0 ? 'text-up' : 'text-down'} />
-              <MiniStat label="Butterfly" term="butterflyArb" value={String(butterflyCount)} color={butterflyCount === 0 ? 'text-up' : 'text-down'} />
-            </div>
-            {parityFlags > 0 && (
-              <div className="text-type-xs font-mono text-warn">
-                {parityFlags} parity residual(s) past half-spread → Positioning Edge
-              </div>
-            )}
-          </div>
-          <button
-            type="button"
-            onClick={() => go('vol')}
-            className="w-full border-t border-border px-3 py-1.5 text-left font-mono text-type-2xs text-primary hover:bg-muted/40"
-          >
-            Inspect under Vol Structure → Surface Fit
-          </button>
-        </Panel>
-
-        <Panel title="Open Interest by Expiry" className="sm:col-span-2 below-fold">
-          <div className="h-48 p-2">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={expiryOI} margin={{ top: 4, right: 8, bottom: 18, left: 0 }}>
-                <CartesianGrid stroke="var(--grid)" strokeDasharray="2 4" />
-                <XAxis dataKey="label" tick={{ fontSize: 9, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }} stroke="var(--border)" />
-                <YAxis tick={{ fontSize: 9, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }} stroke="var(--border)" width={40} tickFormatter={v => `${(v / 1000).toFixed(0)}K`} />
-                <Tooltip
-                  content={({ active, payload, label }) => {
-                    if (!active || !payload?.length) return null;
-                    return (
-                      <div className="rounded border border-border bg-popover/95 p-2 font-mono text-type-xs shadow backdrop-blur">
-                        <div className="mb-1 font-semibold text-foreground">{label}</div>
-                        <div className="text-foreground">OI: {(payload[0]!.value as number).toLocaleString()}</div>
-                      </div>
-                    );
-                  }}
-                />
-                <Bar dataKey="oi" fill="var(--info)" radius={[2, 2, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </Panel>
-
-        <Panel title="Quant notes" className="below-fold">
-          <ul className="space-y-1.5 p-3 font-mono text-type-xs text-muted-foreground leading-snug">
-            <li>· <span className="text-foreground">Home</span> = regime tape + chips before trading.</li>
-            <li>· <span className="text-foreground">Dealer stack</span> = GEX/DEX/VEX/Charm under Positioning.</li>
-            <li>· <span className="text-foreground">Surface Fit</span> = SVI / model, not raw feed arb.</li>
-            <li>· <span className="text-foreground">VRP</span> needs LIVE price history (close-to-close RV).</li>
-            <li>· <span className="text-foreground">Greeks 1.0</span> preferred (live SOFR r) over raw 3D mesh.</li>
-          </ul>
-        </Panel>
+        <SectionErrorBoundary name="Quant notes">
+          <Panel title="Quant notes" className="below-fold">
+            <ul className="space-y-1.5 p-3 font-mono text-type-xs text-muted-foreground leading-snug">
+              <li>· <span className="text-foreground">Home</span> = regime tape + chips before trading.</li>
+              <li>· <span className="text-foreground">Dealer stack</span> = GEX/DEX/VEX/Charm under Positioning.</li>
+              <li>· <span className="text-foreground">Surface Fit</span> = SVI / model, not raw feed arb.</li>
+              <li>· <span className="text-foreground">VRP</span> needs LIVE price history (close-to-close RV).</li>
+              <li>· <span className="text-foreground">Greeks 1.0</span> preferred (live SOFR r) over raw 3D mesh.</li>
+            </ul>
+          </Panel>
+        </SectionErrorBoundary>
       </div>
     </div>
   );
@@ -575,11 +616,13 @@ function RatesStrip({
   stir,
   macro,
   onOpen,
+  offlineLabel = UI_COPY.empty.macro,
 }: {
   rates: RatesSummary | null;
   stir?: StirStripData | null;
   macro?: MacroSummary | null;
   onOpen: () => void;
+  offlineLabel?: string;
 }) {
   const cuts = stir?.path?.approx_25bp_cuts_priced;
   const items = rates ? [
@@ -624,7 +667,7 @@ function RatesStrip({
         </span>
       )) : (
         <span className="col-span-2 font-mono text-type-xs text-muted-foreground md:col-span-1">
-          MacroVol offline — start :8765 for SOFR strip
+          {offlineLabel}
         </span>
       )}
       <span className="col-span-2 ml-auto font-mono text-type-2xs text-primary md:col-span-1">Rates desk →</span>

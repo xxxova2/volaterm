@@ -4,6 +4,7 @@ import {
   classifyFreshnessFromIso,
   FRESHNESS_THRESHOLDS,
   makeProvenance,
+  worstFreshnessKind,
 } from './freshness';
 
 describe('classifyDomainFreshness', () => {
@@ -59,5 +60,28 @@ describe('makeProvenance', () => {
     expect(p.source).toBe('yfinance');
     expect(p.kind).toBe('live');
     expect(p.asOfMs).toBeTruthy();
+  });
+});
+
+describe('worstFreshnessKind', () => {
+  it('returns min rank (down < expired < stale < delayed < unknown < live)', () => {
+    expect(worstFreshnessKind('live', 'delayed')).toBe('delayed');
+    expect(worstFreshnessKind('live', 'stale', 'delayed')).toBe('stale');
+    expect(worstFreshnessKind('unknown', 'live')).toBe('unknown');
+    expect(worstFreshnessKind('expired', 'down', 'live')).toBe('down');
+    expect(worstFreshnessKind('live')).toBe('live');
+  });
+
+  it('ranks demo with stale (worse than delayed)', () => {
+    expect(worstFreshnessKind('demo', 'delayed')).toBe('demo');
+    expect(worstFreshnessKind('delayed', 'demo')).toBe('demo');
+    // same rank as stale — either may win; both must beat delayed/live
+    const demoVsStale = worstFreshnessKind('demo', 'stale');
+    expect(demoVsStale === 'demo' || demoVsStale === 'stale').toBe(true);
+    expect(worstFreshnessKind('demo', 'live')).toBe('demo');
+  });
+
+  it('returns unknown for empty input', () => {
+    expect(worstFreshnessKind()).toBe('unknown');
   });
 });

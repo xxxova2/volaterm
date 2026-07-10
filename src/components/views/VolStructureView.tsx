@@ -6,10 +6,13 @@ import { useEffect, useState, lazy, Suspense } from 'react';
 import { SmileView } from './SmileView';
 import { TermView } from './TermView';
 import { ArbitrageView } from './ArbitrageView';
-import { cn } from '../../lib/utils';
 import { useTerminalStore } from '../../store/terminalStore';
 import { DeskLoading } from '../common/Skeleton';
 import { EmptyState } from '../common/EmptyState';
+import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
+import { UI_COPY } from '../../config/uiCopy';
+import { DeskChrome } from '../terminal/DeskChrome';
+import { DeskModeBar } from '../terminal/DeskModeBar';
 
 const SurfaceView = lazy(() =>
   import('./surface/SurfaceView').then((m) => ({ default: m.SurfaceView })),
@@ -47,7 +50,7 @@ export function VolStructureView() {
   }, [sub, setDeskContext, chainUsed]);
 
   if (loading && !snapshot) {
-    return <DeskLoading message="Loading live option chain…" />;
+    return <DeskLoading message={UI_COPY.load.chain} />;
   }
   if (!snapshot) {
     return (
@@ -55,67 +58,72 @@ export function VolStructureView() {
         <EmptyState
           kind="no-data"
           title="No live surface"
-          body="Awaiting a real option chain (yfinance/FMP equities, Deribit for BTC/ETH)."
+          body={UI_COPY.empty.chain}
         />
       </div>
     );
   }
 
+  const activeDomId = SUBS.find((s) => s.id === sub)?.domId ?? 'vol-sub-surface';
+
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <div className="sticky top-0 z-20 flex shrink-0 flex-wrap items-center gap-1 border-b border-border bg-background/95 px-2 py-1 backdrop-blur-sm">
-        <span className="mr-1 font-mono text-type-xs font-bold tracking-wider text-primary">
-          VOL STRUCTURE
-        </span>
-        {SUBS.map((s) => (
-          <button
-            key={s.id}
-            id={s.domId}
-            type="button"
-            data-desk-section="1"
-            data-desk-section-active={sub === s.id ? '1' : undefined}
-            onClick={() => setSub(s.id)}
-            title={s.blurb}
-            className={cn(
-              'rounded px-2 py-0.5 font-mono text-type-xs transition-colors',
-              sub === s.id
-                ? 'bg-primary text-primary-foreground'
-                : 'text-muted-foreground hover:bg-muted hover:text-foreground',
-            )}
-          >
-            {s.label}
-          </button>
-        ))}
-        <span className="ml-auto hidden font-mono text-type-2xs text-muted-foreground xl:inline">
-          Fit = SVI / model · not feed arb · [ ] cycle · parity under Positioning
-        </span>
-      </div>
+      <DeskChrome
+        label="VOL STRUCTURE"
+        trailing={
+          <span className="hidden font-mono text-type-2xs text-muted-foreground xl:inline">
+            Fit = SVI / model · not feed arb · [ ] cycle · parity under Positioning
+          </span>
+        }
+      >
+        <DeskModeBar
+          items={SUBS.map((s) => ({
+            id: s.domId,
+            label: s.label,
+            title: s.blurb,
+          }))}
+          activeId={activeDomId}
+          onSelect={(domId) => {
+            const m = SUBS.find((s) => s.domId === domId);
+            if (m) setSub(m.id);
+          }}
+          asSectionButtons
+        />
+      </DeskChrome>
 
       <div className="min-h-0 flex-1 term-crossfade" key={sub}>
         {sub === 'surface' && (
-          <Suspense
-            fallback={
-              <DeskLoading message="Fitting surface…" />
-            }
-          >
-            <SurfaceView />
-          </Suspense>
+          <SectionErrorBoundary name="Surface">
+            <Suspense fallback={<DeskLoading message={UI_COPY.load.surface} />}>
+              <SurfaceView />
+            </Suspense>
+          </SectionErrorBoundary>
         )}
-        {sub === 'smile' && <SmileView />}
-        {sub === 'term' && <TermView />}
+        {sub === 'smile' && (
+          <SectionErrorBoundary name="Smile">
+            <SmileView />
+          </SectionErrorBoundary>
+        )}
+        {sub === 'term' && (
+          <SectionErrorBoundary name="Term">
+            <TermView />
+          </SectionErrorBoundary>
+        )}
         {sub === 'quality' && (
-          <div className="flex h-full flex-col">
-            <p className="shrink-0 border-b border-border px-3 py-1.5 font-mono text-type-2xs text-muted-foreground">
-              Surface Fit / Model Convergence — validates SVI fit, not raw feed
-            </p>
-            <div className="border-b border-border px-3 py-1.5 font-mono text-type-xs text-muted-foreground">
-              Calendar: total variance w=σ²T non-decreasing in T · Butterfly: discrete convexity of w in log-moneyness.
-              Red cells = model inconsistency / noisy grid — not a free lunch without bid/ask and transaction costs.
+          <SectionErrorBoundary name="Quality">
+            <div className="flex h-full flex-col">
+              <p className="shrink-0 border-b border-border px-3 py-1.5 font-mono text-type-2xs text-muted-foreground">
+                Surface Fit / Model Convergence — validates SVI fit, not raw feed
+              </p>
+              <div className="border-b border-border px-3 py-1.5 font-mono text-type-xs text-muted-foreground">
+                Calendar: total variance w=σ²T non-decreasing in T · Butterfly: discrete convexity of w in log-moneyness.
+                Red cells = model inconsistency / noisy grid — not a free lunch without bid/ask and transaction costs.
+              </div>
+              <div className="min-h-0 flex-1">
+                <ArbitrageView />
+              </div>
             </div>
-            <div className="min-h-0 flex-1">
-              <ArbitrageView />
-            </div>
-          </div>
+          </SectionErrorBoundary>
         )}
       </div>
     </div>
