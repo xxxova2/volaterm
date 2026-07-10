@@ -12,6 +12,9 @@ import { GREEK_META, type GreekKey, type HeatmapCell } from './greeksTypes';
 import { computeHeatmapAggregates } from './greeksUtils';
 import { Explain } from '../common/Explain';
 import { DeskLoading } from '../common/Skeleton';
+import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
+import { EmptyState } from '../common/EmptyState';
+import { UI_COPY } from '../../config/uiCopy';
 import type { OptionQuote } from '../../lib/options/types';
 
 const Greeks10View = lazy(() =>
@@ -478,9 +481,11 @@ export function GreeksView() {
           </span>
         </div>
         <div className="min-h-0 flex-1">
-          <Suspense fallback={<DeskLoading message="Loading Greeks 1.0…" />}>
-            <Greeks10View />
-          </Suspense>
+          <SectionErrorBoundary name="Greeks 1.0">
+            <Suspense fallback={<DeskLoading message={UI_COPY.load.surface} />}>
+              <Greeks10View />
+            </Suspense>
+          </SectionErrorBoundary>
         </div>
       </div>
     );
@@ -488,15 +493,20 @@ export function GreeksView() {
 
   if (!snapshot) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-3 font-mono text-xs text-muted-foreground">
-        <div>No terminal chain data</div>
-        <button
-          type="button"
-          onClick={() => setEdition('greeks10')}
-          className="rounded bg-primary px-3 py-1.5 text-primary-foreground"
-        >
-          Open Greeks 1.0 (MacroVol API)
-        </button>
+      <div className="flex h-full flex-col items-center justify-center gap-3 p-4">
+        <EmptyState
+          kind="no-data"
+          title={UI_COPY.empty.chain}
+          action={
+            <button
+              type="button"
+              onClick={() => setEdition('greeks10')}
+              className="rounded bg-primary px-3 py-1.5 font-mono text-type-xs text-primary-foreground"
+            >
+              Open Greeks 1.0 (MacroVol API)
+            </button>
+          }
+        />
       </div>
     );
   }
@@ -538,23 +548,38 @@ export function GreeksView() {
 
       {subView !== 'heatmap' ? (
         <div className="flex-1 p-1 overflow-hidden">
-          {subView === 'profile' && <GreeksProfileView />}
-          {subView === 'sensitivity' && <GreeksSensitivityView />}
-          {subView === 'byexpiry' && <GreeksExpiryView />}
+          {subView === 'profile' && (
+            <SectionErrorBoundary name="Profile">
+              <GreeksProfileView />
+            </SectionErrorBoundary>
+          )}
+          {subView === 'sensitivity' && (
+            <SectionErrorBoundary name="Sensitivity">
+              <GreeksSensitivityView />
+            </SectionErrorBoundary>
+          )}
+          {subView === 'byexpiry' && (
+            <SectionErrorBoundary name="By Expiry">
+              <GreeksExpiryView />
+            </SectionErrorBoundary>
+          )}
           {subView === 'surface3d' && (
-            <div className="flex h-full flex-col">
-              <div className="border-b border-border px-3 py-1 font-mono text-type-2xs text-amber">
-                3D mesh = OTM-wing greeks (put K&lt;S, call K≥S), height-scaled min→max for visualization only —
-                not OI-weighted exposure. Prefer Greeks 1.0 surfaces / heatmap for desk work.
+            <SectionErrorBoundary name="3D">
+              <div className="flex h-full flex-col">
+                <div className="border-b border-border px-3 py-1 font-mono text-type-2xs text-amber">
+                  3D mesh = OTM-wing greeks (put K&lt;S, call K≥S), height-scaled min→max for visualization only —
+                  not OI-weighted exposure. Prefer Greeks 1.0 surfaces / heatmap for desk work.
+                </div>
+                <div className="min-h-0 flex-1">
+                  <GreeksSurface3D />
+                </div>
               </div>
-              <div className="min-h-0 flex-1">
-                <GreeksSurface3D />
-              </div>
-            </div>
+            </SectionErrorBoundary>
           )}
         </div>
       ) : (
-        <>
+        <SectionErrorBoundary name="Heatmap">
+          <>
           {/* Compact tool bar */}
           <div className="flex items-center gap-1 px-1 py-0.5 border-b border-border text-type-xs font-mono flex-shrink-0">
             <div className="flex gap-0.5" title="Which option side feeds the greek value">
@@ -710,7 +735,8 @@ export function GreeksView() {
               )}
             </div>
           )}
-        </>
+          </>
+        </SectionErrorBoundary>
       )}
     </div>
   );

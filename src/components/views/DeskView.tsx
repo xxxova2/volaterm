@@ -16,9 +16,11 @@ import { useTerminalStore } from '../../store/terminalStore';
 import { Panel } from '../terminal/Panel';
 import { Explain } from '../common/Explain';
 import { EmptyState } from '../common/EmptyState';
+import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
 import { FreshnessFromDomain } from '../common/Freshness';
 import { fmtPct, fmtPrice, fmtSigned, fmtCompact } from '../../lib/format';
 import { cn } from '../../lib/utils';
+import { UI_COPY } from '../../config/uiCopy';
 import {
   analyzeComboBreakEven,
   breakEvenTable,
@@ -130,8 +132,7 @@ export function DeskView() {
       <Panel title="MM Desk" apis={['yfinance', 'FMP', 'Deribit']} className="h-full">
         <EmptyState
           kind="no-data"
-          title="No surface data"
-          body="Load a symbol / wait for chain — inventory blotter needs a snapshot."
+          title={UI_COPY.empty.chain}
         />
       </Panel>
     );
@@ -229,18 +230,20 @@ export function DeskView() {
       </div>
 
       <div className="flex-1 min-h-0">
-        {tool === 'sim' && <SimTool />}
-        {tool === 'combopnl' && <ComboPnlTool />}
-        {tool === 'straddle' && <StraddleTool />}
-        {tool === 'combo' && <ComboTool />}
-        {tool === 'optionpnl' && <OptionPnlTool />}
-        {tool === 'breakeven' && <BreakEvenTool />}
-        {tool === 'roll' && <RollTool />}
-        {tool === 'basis' && <BasisTool />}
-        {tool === 'subjective' && <SubjectiveTool />}
-        {tool === 'dfollow' && <DFollowTool />}
-        {tool === 'hedge' && <HedgeTool />}
-        {tool === 'grid' && <GridTool />}
+        <SectionErrorBoundary name={`MM ${tool}`}>
+          {tool === 'sim' && <SimTool />}
+          {tool === 'combopnl' && <ComboPnlTool />}
+          {tool === 'straddle' && <StraddleTool />}
+          {tool === 'combo' && <ComboTool />}
+          {tool === 'optionpnl' && <OptionPnlTool />}
+          {tool === 'breakeven' && <BreakEvenTool />}
+          {tool === 'roll' && <RollTool />}
+          {tool === 'basis' && <BasisTool />}
+          {tool === 'subjective' && <SubjectiveTool />}
+          {tool === 'dfollow' && <DFollowTool />}
+          {tool === 'hedge' && <HedgeTool />}
+          {tool === 'grid' && <GridTool />}
+        </SectionErrorBoundary>
       </div>
     </div>
   );

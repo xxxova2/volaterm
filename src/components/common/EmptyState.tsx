@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { cn } from '../../lib/utils';
+import { UI_COPY } from '../../config/uiCopy';
 import { SectionSkeleton } from './Skeleton';
 
 export type EmptyKind = 'loading' | 'no-data' | 'api-down' | 'demo' | 'error';
@@ -11,15 +12,15 @@ const COPY: Record<EmptyKind, { title: string; body: string }> = {
   },
   'no-data': {
     title: 'No live data',
-    body: 'Upstream returned empty. Check source / session / symbol.',
+    body: UI_COPY.empty.chain,
   },
   'api-down': {
     title: 'API unavailable',
-    body: 'Service unreachable. Start MacroVol (:8765) or check network / keys.',
+    body: UI_COPY.empty.apiDown,
   },
   demo: {
-    title: 'Demo surface',
-    body: 'Synthetic fallback — not market prices. Refresh LIVE feeds.',
+    title: 'Synthetic fallback',
+    body: UI_COPY.empty.demo,
   },
   error: {
     title: 'Load failed',
@@ -29,6 +30,7 @@ const COPY: Record<EmptyKind, { title: string; body: string }> = {
 
 /**
  * Explicit empty / error states — never show silent zeros as if live.
+ * Defaults are LIVE-only (no switch-to-demo CTAs).
  */
 export function EmptyState({
   kind = 'no-data',

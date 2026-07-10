@@ -12,8 +12,10 @@ import { useTerminalStore } from '../../store/terminalStore';
 import { Panel } from '../terminal/Panel';
 import { Explain } from '../common/Explain';
 import { EmptyState } from '../common/EmptyState';
+import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
 import { FreshnessChip, FreshnessFromDomain } from '../common/Freshness';
 import { fmtCompact, fmtPct, fmtPrice, fmtSignedPct } from '../../lib/format';
+import { UI_COPY } from '../../config/uiCopy';
 import {
   gammaExposure, impliedMove, portfolioGreeks,
   realizedVolCloseToClose, volRiskPremium,
@@ -329,7 +331,7 @@ export function BtcView() {
   if (!snapshot && !hasTape) {
     return (
       <Panel title="Crypto Desk" apis={['Deribit']} className="h-full">
-        <EmptyState kind="loading" title="Loading crypto surface…" body="Deribit public books for BTC/ETH" />
+        <EmptyState kind="loading" title={UI_COPY.load.crypto} />
       </Panel>
     );
   }
@@ -346,44 +348,46 @@ export function BtcView() {
   return (
     <div className="h-full flex flex-col gap-1 overflow-hidden">
       {/* Dual BTC | ETH columns (Phase F) */}
-      <div className="flex flex-col gap-1 rounded border border-border bg-card px-2 py-1.5 sm:flex-row sm:items-stretch">
-        <div className="flex shrink-0 flex-col justify-center px-1">
-          <span className="font-mono text-type-xs font-bold tracking-wider text-primary">CRYPTO</span>
-          <span className="font-mono text-type-2xs text-muted-foreground">BTC · ETH dual tape</span>
-        </div>
-        <DualCol d={dual.btc} active={symbol === 'BTC'} onSelect={selectCcy} />
-        <DualCol d={dual.eth} active={symbol === 'ETH'} onSelect={selectCcy} />
-        <div className="flex shrink-0 flex-wrap items-center gap-1 sm:flex-col sm:justify-center">
-          {(['IBIT', 'BITO', 'MSTR'] as const).map((p) => (
+      <SectionErrorBoundary name="Dual tape">
+        <div className="flex flex-col gap-1 rounded border border-border bg-card px-2 py-1.5 sm:flex-row sm:items-stretch">
+          <div className="flex shrink-0 flex-col justify-center px-1">
+            <span className="font-mono text-type-xs font-bold tracking-wider text-primary">CRYPTO</span>
+            <span className="font-mono text-type-2xs text-muted-foreground">BTC · ETH dual tape</span>
+          </div>
+          <DualCol d={dual.btc} active={symbol === 'BTC'} onSelect={selectCcy} />
+          <DualCol d={dual.eth} active={symbol === 'ETH'} onSelect={selectCcy} />
+          <div className="flex shrink-0 flex-wrap items-center gap-1 sm:flex-col sm:justify-center">
+            {(['IBIT', 'BITO', 'MSTR'] as const).map((p) => (
+              <button
+                key={p}
+                type="button"
+                onClick={() => { setProxy(p); setSymbol(p); }}
+                className={cn(
+                  'rounded border px-1.5 py-0.5 font-mono text-type-2xs',
+                  symbol === p
+                    ? 'border-primary text-primary'
+                    : 'border-border text-muted-foreground hover:text-foreground',
+                )}
+              >
+                {p}
+              </button>
+            ))}
             <button
-              key={p}
               type="button"
-              onClick={() => { setProxy(p); setSymbol(p); }}
+              onClick={() => setCryptoDualCharts(!cryptoDualCharts)}
               className={cn(
                 'rounded border px-1.5 py-0.5 font-mono text-type-2xs',
-                symbol === p
+                cryptoDualCharts
                   ? 'border-primary text-primary'
                   : 'border-border text-muted-foreground hover:text-foreground',
               )}
+              title="Dual BTC+ETH charts (default off — heavy)"
             >
-              {p}
+              2× charts
             </button>
-          ))}
-          <button
-            type="button"
-            onClick={() => setCryptoDualCharts(!cryptoDualCharts)}
-            className={cn(
-              'rounded border px-1.5 py-0.5 font-mono text-type-2xs',
-              cryptoDualCharts
-                ? 'border-primary text-primary'
-                : 'border-border text-muted-foreground hover:text-foreground',
-            )}
-            title="Dual BTC+ETH charts (default off — heavy)"
-          >
-            2× charts
-          </button>
+          </div>
         </div>
-      </div>
+      </SectionErrorBoundary>
 
       {/* Optional dual-pane thin charts (PR-06 full charts path) */}
       {cryptoDualCharts && (
@@ -467,169 +471,193 @@ export function BtcView() {
         <Panel title="Crypto Desk" apis={['Deribit']} className="min-h-0 flex-1">
           <EmptyState
             kind="loading"
-            title="Loading active book…"
+            title={UI_COPY.load.crypto}
             body="Dual tape available above · full charts when Deribit/chain snapshot lands"
           />
         </Panel>
       ) : (
       <div className="flex-1 grid grid-cols-12 grid-rows-2 gap-1 min-h-0">
         {/* Price */}
-        <Panel
-          title={`${proxy} Spot Path`}
-          subtitle={
-            proxy === 'BTC' || proxy === 'ETH'
-              ? `${proxy}-USD · Deribit / live seed`
-              : `${proxy} equity proxy`
-          }
-          className="col-span-4 row-span-1 min-h-0"
-        >
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={priceSeries} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
-              <defs>
-                <linearGradient id="cryptoFill" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="var(--amber)" stopOpacity={0.35} />
-                  <stop offset="100%" stopColor="var(--amber)" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid {...chartGridProps} />
-              <XAxis dataKey="t" tick={{ fontSize: 9, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }} interval="preserveStartEnd" />
-              <YAxis domain={['auto', 'auto']} tick={{ fontSize: 9, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }} width={48} />
-              <Tooltip contentStyle={chartTooltipStyle} />
-              <Area type="monotone" dataKey="close" stroke="var(--amber)" fill="url(#cryptoFill)" strokeWidth={1.5} />
-            </AreaChart>
-          </ResponsiveContainer>
-        </Panel>
+        <div className="col-span-4 row-span-1 min-h-0">
+          <SectionErrorBoundary name="Spot path">
+            <Panel
+              title={`${proxy} Spot Path`}
+              subtitle={
+                proxy === 'BTC' || proxy === 'ETH'
+                  ? `${proxy}-USD · Deribit / live seed`
+                  : `${proxy} equity proxy`
+              }
+              className="h-full min-h-0"
+            >
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={priceSeries} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+                  <defs>
+                    <linearGradient id="cryptoFill" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="var(--amber)" stopOpacity={0.35} />
+                      <stop offset="100%" stopColor="var(--amber)" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid {...chartGridProps} />
+                  <XAxis dataKey="t" tick={{ fontSize: 9, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }} interval="preserveStartEnd" />
+                  <YAxis domain={['auto', 'auto']} tick={{ fontSize: 9, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }} width={48} />
+                  <Tooltip contentStyle={chartTooltipStyle} />
+                  <Area type="monotone" dataKey="close" stroke="var(--amber)" fill="url(#cryptoFill)" strokeWidth={1.5} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </Panel>
+          </SectionErrorBoundary>
+        </div>
 
         {/* Term structure */}
-        <Panel title="Vol Term Structure" subtitle="ATM IV by DTE" className="col-span-4 row-span-1 min-h-0">
-          <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={termData} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--grid)" />
-              <XAxis dataKey="label" tick={{ fontSize: 9, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }} />
-              <YAxis tick={{ fontSize: 9, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }} width={36} unit="%" />
-              <Tooltip contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', fontSize: 11, fontFamily: 'JetBrains Mono' }} />
-              <Line type="monotone" dataKey="atm" stroke="var(--cyan)" strokeWidth={2} dot={{ r: 2 }} />
-            </ComposedChart>
-          </ResponsiveContainer>
-        </Panel>
+        <div className="col-span-4 row-span-1 min-h-0">
+          <SectionErrorBoundary name="Term">
+            <Panel title="Vol Term Structure" subtitle="ATM IV by DTE" className="h-full min-h-0">
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={termData} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--grid)" />
+                  <XAxis dataKey="label" tick={{ fontSize: 9, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }} />
+                  <YAxis tick={{ fontSize: 9, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }} width={36} unit="%" />
+                  <Tooltip contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', fontSize: 11, fontFamily: 'JetBrains Mono' }} />
+                  <Line type="monotone" dataKey="atm" stroke="var(--cyan)" strokeWidth={2} dot={{ r: 2 }} />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </Panel>
+          </SectionErrorBoundary>
+        </div>
 
         {/* Funding / basis — Deribit live print only (no mock path) */}
-        <Panel
-          title="Funding / Carry"
-          subtitle={
-            liveFundingAnn != null
-              ? `Deribit live 8h ann. ${fmtPct(liveFundingAnn)}`
-              : 'Awaiting Deribit funding'
-          }
-          className="col-span-4 row-span-1 min-h-0"
-        >
-          {funding.length ? (
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={funding} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--grid)" />
-                <XAxis dataKey="t" tick={{ fontSize: 9, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }} />
-                <YAxis yAxisId="l" tick={{ fontSize: 9, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }} width={40} tickFormatter={(v: number) => `${(v * 100).toFixed(0)}%`} />
-                <YAxis yAxisId="r" orientation="right" tick={{ fontSize: 9, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }} width={36} tickFormatter={(v: number) => `${(v * 100).toFixed(1)}%`} />
-                <Tooltip
-                  contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', fontSize: 11, fontFamily: 'JetBrains Mono' }}
-                  formatter={(v: number, name: string) => [name === 'fundingAnn' ? `${(v * 100).toFixed(1)}%` : `${(v * 100).toFixed(2)}%`, name === 'fundingAnn' ? 'Funding' : 'Cum']}
-                />
-                <Bar yAxisId="l" dataKey="fundingAnn" fill="var(--primary)" opacity={0.7} />
-                <Line yAxisId="r" type="monotone" dataKey="cumPnl" stroke="var(--up)" strokeWidth={1.5} dot={false} />
-              </ComposedChart>
-            </ResponsiveContainer>
-          ) : (
-            <EmptyState kind="no-data" title="No live funding" body="Deribit funding not loaded. Stay on LIVE · BTC/ETH." />
-          )}
-        </Panel>
+        <div className="col-span-4 row-span-1 min-h-0">
+          <SectionErrorBoundary name="Funding">
+            <Panel
+              title="Funding / Carry"
+              subtitle={
+                liveFundingAnn != null
+                  ? `Deribit live 8h ann. ${fmtPct(liveFundingAnn)}`
+                  : 'Awaiting Deribit funding'
+              }
+              className="h-full min-h-0"
+            >
+              {funding.length ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={funding} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--grid)" />
+                    <XAxis dataKey="t" tick={{ fontSize: 9, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }} />
+                    <YAxis yAxisId="l" tick={{ fontSize: 9, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }} width={40} tickFormatter={(v: number) => `${(v * 100).toFixed(0)}%`} />
+                    <YAxis yAxisId="r" orientation="right" tick={{ fontSize: 9, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }} width={36} tickFormatter={(v: number) => `${(v * 100).toFixed(1)}%`} />
+                    <Tooltip
+                      contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', fontSize: 11, fontFamily: 'JetBrains Mono' }}
+                      formatter={(v: number, name: string) => [name === 'fundingAnn' ? `${(v * 100).toFixed(1)}%` : `${(v * 100).toFixed(2)}%`, name === 'fundingAnn' ? 'Funding' : 'Cum']}
+                    />
+                    <Bar yAxisId="l" dataKey="fundingAnn" fill="var(--primary)" opacity={0.7} />
+                    <Line yAxisId="r" type="monotone" dataKey="cumPnl" stroke="var(--up)" strokeWidth={1.5} dot={false} />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              ) : (
+                <EmptyState kind="no-data" title="No live funding" body="Deribit funding not loaded. Stay on LIVE · BTC/ETH." />
+              )}
+            </Panel>
+          </SectionErrorBoundary>
+        </div>
 
         {/* GEX */}
-        <Panel title="Dealer GEX" subtitle="Net gamma exposure by strike" className="col-span-5 row-span-1 min-h-0">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={gexChart} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--grid)" />
-              <XAxis dataKey="label" tick={{ fontSize: 8, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }} interval={Math.max(1, Math.floor(gexChart.length / 10))} />
-              <YAxis tick={{ fontSize: 9, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }} width={40} tickFormatter={(v: number) => `${v.toFixed(0)}M`} />
-              <Tooltip contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', fontSize: 11, fontFamily: 'JetBrains Mono' }} />
-              <ReferenceLine y={0} stroke="var(--muted-foreground)" />
-              <ReferenceLine x={fmtPrice(snapshot.spot, snapshot.spot > 1000 ? 0 : 1)} stroke="var(--amber)" strokeDasharray="3 3" />
-              <Bar dataKey="net" fill="var(--cyan)" opacity={0.85} />
-            </BarChart>
-          </ResponsiveContainer>
-        </Panel>
+        <div className="col-span-5 row-span-1 min-h-0">
+          <SectionErrorBoundary name="GEX">
+            <Panel title="Dealer GEX" subtitle="Net gamma exposure by strike" className="h-full min-h-0">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={gexChart} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--grid)" />
+                  <XAxis dataKey="label" tick={{ fontSize: 8, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }} interval={Math.max(1, Math.floor(gexChart.length / 10))} />
+                  <YAxis tick={{ fontSize: 9, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }} width={40} tickFormatter={(v: number) => `${v.toFixed(0)}M`} />
+                  <Tooltip contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', fontSize: 11, fontFamily: 'JetBrains Mono' }} />
+                  <ReferenceLine y={0} stroke="var(--muted-foreground)" />
+                  <ReferenceLine x={fmtPrice(snapshot.spot, snapshot.spot > 1000 ? 0 : 1)} stroke="var(--amber)" strokeDasharray="3 3" />
+                  <Bar dataKey="net" fill="var(--cyan)" opacity={0.85} />
+                </BarChart>
+              </ResponsiveContainer>
+            </Panel>
+          </SectionErrorBoundary>
+        </div>
 
         {/* Basis + roll + book */}
-        <Panel
-          title="Fwd Basis Curve"
-          subtitle={
-            basis?.hasMarketMarks
-              ? `Deribit futures marks${basis.perp ? ` · perp ${fmtPrice(basis.perp.mark, 0)}` : ''}`
-              : 'Theo F − S (r−q / funding carry)'
-          }
-          className="col-span-3 row-span-1 min-h-0"
-        >
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={basisData} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--grid)" />
-              <XAxis dataKey="label" tick={{ fontSize: 9, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }} />
-              <YAxis tick={{ fontSize: 9, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }} width={36} unit="%" />
-              <Tooltip contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', fontSize: 11, fontFamily: 'JetBrains Mono' }} />
-              <Area type="monotone" dataKey="basisPct" stroke="var(--primary)" fill="var(--primary)" fillOpacity={0.2} />
-            </AreaChart>
-          </ResponsiveContainer>
-        </Panel>
+        <div className="col-span-3 row-span-1 min-h-0">
+          <SectionErrorBoundary name="Basis">
+            <Panel
+              title="Fwd Basis Curve"
+              subtitle={
+                basis?.hasMarketMarks
+                  ? `Deribit futures marks${basis.perp ? ` · perp ${fmtPrice(basis.perp.mark, 0)}` : ''}`
+                  : 'Theo F − S (r−q / funding carry)'
+              }
+              className="h-full min-h-0"
+            >
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={basisData} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--grid)" />
+                  <XAxis dataKey="label" tick={{ fontSize: 9, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }} />
+                  <YAxis tick={{ fontSize: 9, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }} width={36} unit="%" />
+                  <Tooltip contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', fontSize: 11, fontFamily: 'JetBrains Mono' }} />
+                  <Area type="monotone" dataKey="basisPct" stroke="var(--primary)" fill="var(--primary)" fillOpacity={0.2} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </Panel>
+          </SectionErrorBoundary>
+        </div>
 
-        <Panel title="MM Snapshot" subtitle="Chain inventory Σ + roll map (not a book)" className="col-span-4 row-span-1 min-h-0 overflow-auto">
-          <div className="p-2 flex flex-col gap-2 h-full">
-            <div className="grid grid-cols-3 gap-2">
-              <Stat label="ΣΔ" term="netDelta" value={port ? fmtCompact(port.delta) : '—'} />
-              <Stat label="ΣΓ" term="netGamma" value={port ? fmtCompact(port.gamma) : '—'} />
-              <Stat label="Σν" term="netVega" value={port ? fmtCompact(port.vega) : '—'} />
-              <Stat label="ΣΘ/d" term="netTheta" value={port ? fmtCompact(port.theta) : '—'} />
-              <Stat label="Back IV" value={fmtPct(back?.atmIV)} />
-              <Stat label="Term slope" value={front && back ? fmtSignedPct(back.atmIV - front.atmIV) : '—'} />
-            </div>
-            {roll && (
-              <div className="flex-1 min-h-0">
-                <div className="text-type-xs text-muted-foreground font-mono mb-1">
-                  <Explain term="rollPnl">Roll / funding PnL</Explain> heatmap (notional × carry × T)
+        <div className="col-span-4 row-span-1 min-h-0 overflow-auto">
+          <SectionErrorBoundary name="MM Snapshot">
+            <Panel title="MM Snapshot" subtitle="Chain inventory Σ + roll map (not a book)" className="h-full min-h-0 overflow-auto">
+              <div className="p-2 flex flex-col gap-2 h-full">
+                <div className="grid grid-cols-3 gap-2">
+                  <Stat label="ΣΔ" term="netDelta" value={port ? fmtCompact(port.delta) : '—'} />
+                  <Stat label="ΣΓ" term="netGamma" value={port ? fmtCompact(port.gamma) : '—'} />
+                  <Stat label="Σν" term="netVega" value={port ? fmtCompact(port.vega) : '—'} />
+                  <Stat label="ΣΘ/d" term="netTheta" value={port ? fmtCompact(port.theta) : '—'} />
+                  <Stat label="Back IV" value={fmtPct(back?.atmIV)} />
+                  <Stat label="Term slope" value={front && back ? fmtSignedPct(back.atmIV - front.atmIV) : '—'} />
                 </div>
-                <div className="grid gap-px" style={{ gridTemplateColumns: `repeat(${roll.horizons.length}, minmax(0, 1fr))` }}>
-                  {roll.pnl.flatMap((row, si) =>
-                    row.map((v, hi) => {
-                      const intensity = Math.min(1, Math.abs(v) / (snapshot.spot * 0.02 + 1e-9));
-                      const bg = v >= 0
-                        ? `color-mix(in oklch, var(--up) ${Math.round(intensity * 70)}%, transparent)`
-                        : `color-mix(in oklch, var(--down) ${Math.round(intensity * 70)}%, transparent)`;
-                      return (
-                        <div
-                          key={`${si}-${hi}`}
-                          title={`shock ${(roll.shocks[si]! * 100).toFixed(0)}% · ${roll.horizons[hi]}d → ${v.toFixed(2)}`}
-                          className="h-4 text-type-2xs font-mono flex items-center justify-center text-foreground/80"
-                          style={{ background: bg }}
-                        >
-                          {hi === 0 ? `${(roll.shocks[si]! * 100).toFixed(0)}%` : ''}
-                        </div>
-                      );
-                    }),
-                  )}
-                </div>
-                <div className="flex justify-between text-type-2xs font-mono text-muted-foreground mt-0.5">
-                  {roll.horizons.map(h => <span key={h}>{h}d</span>)}
-                </div>
+                {roll && (
+                  <div className="flex-1 min-h-0">
+                    <div className="text-type-xs text-muted-foreground font-mono mb-1">
+                      <Explain term="rollPnl">Roll / funding PnL</Explain> heatmap (notional × carry × T)
+                    </div>
+                    <div className="grid gap-px" style={{ gridTemplateColumns: `repeat(${roll.horizons.length}, minmax(0, 1fr))` }}>
+                      {roll.pnl.flatMap((row, si) =>
+                        row.map((v, hi) => {
+                          const intensity = Math.min(1, Math.abs(v) / (snapshot.spot * 0.02 + 1e-9));
+                          const bg = v >= 0
+                            ? `color-mix(in oklch, var(--up) ${Math.round(intensity * 70)}%, transparent)`
+                            : `color-mix(in oklch, var(--down) ${Math.round(intensity * 70)}%, transparent)`;
+                          return (
+                            <div
+                              key={`${si}-${hi}`}
+                              title={`shock ${(roll.shocks[si]! * 100).toFixed(0)}% · ${roll.horizons[hi]}d → ${v.toFixed(2)}`}
+                              className="h-4 text-type-2xs font-mono flex items-center justify-center text-foreground/80"
+                              style={{ background: bg }}
+                            >
+                              {hi === 0 ? `${(roll.shocks[si]! * 100).toFixed(0)}%` : ''}
+                            </div>
+                          );
+                        }),
+                      )}
+                    </div>
+                    <div className="flex justify-between text-type-2xs font-mono text-muted-foreground mt-0.5">
+                      {roll.horizons.map(h => <span key={h}>{h}d</span>)}
+                    </div>
+                  </div>
+                )}
+                <p className="text-type-2xs text-muted-foreground font-mono leading-snug">
+                  {chainUsed === 'deribit'
+                    ? `Live Deribit options + ${basis?.hasMarketMarks ? 'futures marks' : 'theo basis'} · funding ${isEth ? 'ETH' : 'BTC'}-PERPETUAL.`
+                    : `Deribit unavailable — synth smile on live spot. Retry LIVE or check /api/deribit/market/${proxy === 'ETH' ? 'ETH' : 'BTC'}.`}
+                  {' '}Quant focus: funding vs basis (cash-and-carry premium), 25Δ RR, γ walls, roll heatmap.
+                  {' '}Σ greeks = listed inventory, not a position. Open{' '}
+                  <button type="button" className="text-primary underline" onClick={() => setActiveTab('desk')}>MM Desk</button>
+                  {' '}for hedge / combo / sim.
+                </p>
               </div>
-            )}
-            <p className="text-type-2xs text-muted-foreground font-mono leading-snug">
-              {chainUsed === 'deribit'
-                ? `Live Deribit options + ${basis?.hasMarketMarks ? 'futures marks' : 'theo basis'} · funding ${isEth ? 'ETH' : 'BTC'}-PERPETUAL.`
-                : `Deribit unavailable — synth smile on live spot. Retry LIVE or check /api/deribit/market/${proxy === 'ETH' ? 'ETH' : 'BTC'}.`}
-              {' '}Quant focus: funding vs basis (cash-and-carry premium), 25Δ RR, γ walls, roll heatmap.
-              {' '}Σ greeks = listed inventory, not a position. Open{' '}
-              <button type="button" className="text-primary underline" onClick={() => setActiveTab('desk')}>MM Desk</button>
-              {' '}for hedge / combo / sim.
-            </p>
-          </div>
-        </Panel>
+            </Panel>
+          </SectionErrorBoundary>
+        </div>
       </div>
       )}
     </div>

@@ -10,6 +10,8 @@ import { cn } from '../../lib/utils';
 import { useTerminalStore } from '../../store/terminalStore';
 import { DeskLoading } from '../common/Skeleton';
 import { EmptyState } from '../common/EmptyState';
+import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
+import { UI_COPY } from '../../config/uiCopy';
 
 const SurfaceView = lazy(() =>
   import('./surface/SurfaceView').then((m) => ({ default: m.SurfaceView })),
@@ -47,15 +49,14 @@ export function VolStructureView() {
   }, [sub, setDeskContext, chainUsed]);
 
   if (loading && !snapshot) {
-    return <DeskLoading message="Loading live option chain…" />;
+    return <DeskLoading message={UI_COPY.load.chain} />;
   }
   if (!snapshot) {
     return (
       <div className="flex h-full items-center justify-center p-4">
         <EmptyState
           kind="no-data"
-          title="No live surface"
-          body="Awaiting a real option chain (yfinance/FMP equities, Deribit for BTC/ETH)."
+          title={UI_COPY.empty.chain}
         />
       </div>
     );
@@ -93,29 +94,37 @@ export function VolStructureView() {
 
       <div className="min-h-0 flex-1 term-crossfade" key={sub}>
         {sub === 'surface' && (
-          <Suspense
-            fallback={
-              <DeskLoading message="Fitting surface…" />
-            }
-          >
-            <SurfaceView />
-          </Suspense>
+          <SectionErrorBoundary name="Surface">
+            <Suspense fallback={<DeskLoading message={UI_COPY.load.surface} />}>
+              <SurfaceView />
+            </Suspense>
+          </SectionErrorBoundary>
         )}
-        {sub === 'smile' && <SmileView />}
-        {sub === 'term' && <TermView />}
+        {sub === 'smile' && (
+          <SectionErrorBoundary name="Smile">
+            <SmileView />
+          </SectionErrorBoundary>
+        )}
+        {sub === 'term' && (
+          <SectionErrorBoundary name="Term">
+            <TermView />
+          </SectionErrorBoundary>
+        )}
         {sub === 'quality' && (
-          <div className="flex h-full flex-col">
-            <p className="shrink-0 border-b border-border px-3 py-1.5 font-mono text-type-2xs text-muted-foreground">
-              Surface Fit / Model Convergence — validates SVI fit, not raw feed
-            </p>
-            <div className="border-b border-border px-3 py-1.5 font-mono text-type-xs text-muted-foreground">
-              Calendar: total variance w=σ²T non-decreasing in T · Butterfly: discrete convexity of w in log-moneyness.
-              Red cells = model inconsistency / noisy grid — not a free lunch without bid/ask and transaction costs.
+          <SectionErrorBoundary name="Quality">
+            <div className="flex h-full flex-col">
+              <p className="shrink-0 border-b border-border px-3 py-1.5 font-mono text-type-2xs text-muted-foreground">
+                Surface Fit / Model Convergence — validates SVI fit, not raw feed
+              </p>
+              <div className="border-b border-border px-3 py-1.5 font-mono text-type-xs text-muted-foreground">
+                Calendar: total variance w=σ²T non-decreasing in T · Butterfly: discrete convexity of w in log-moneyness.
+                Red cells = model inconsistency / noisy grid — not a free lunch without bid/ask and transaction costs.
+              </div>
+              <div className="min-h-0 flex-1">
+                <ArbitrageView />
+              </div>
             </div>
-            <div className="min-h-0 flex-1">
-              <ArbitrageView />
-            </div>
-          </div>
+          </SectionErrorBoundary>
         )}
       </div>
     </div>

@@ -11,6 +11,7 @@ import { OptionChain } from './OptionChain';
 import { DiagnosticsStrip } from './DiagnosticsStrip';
 import { Explain } from '../common/Explain';
 import { EmptyState } from '../common/EmptyState';
+import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
 import { FreshnessFromDomain } from '../common/Freshness';
 import { VirtualRows } from '../common/VirtualRows';
 import { fmtCompact, fmtPrice, fmtPct, fmtSigned } from '../../lib/format';
@@ -30,6 +31,7 @@ import {
   type FocusableBoardApi,
 } from '../../hooks/useBoardFocus';
 import { PERF_BUDGET } from '../../config/perfBudget';
+import { UI_COPY } from '../../config/uiCopy';
 
 type Sub = 'chain' | 'dealer' | 'levels' | 'edge';
 
@@ -277,24 +279,27 @@ export function PositioningView() {
 
       <div className="min-h-0 flex-1">
         {sub === 'chain' && (
-          <Panel title="Option Chain" className="h-full">
-            <div className="flex h-full flex-col">
-              <DiagnosticsStrip sviReadout={sviReadout} arbResult={arbResult} />
-              <div className="min-h-0 flex-1">
-                <OptionChain />
+          <SectionErrorBoundary name="Chain">
+            <Panel title="Option Chain" className="h-full">
+              <div className="flex h-full flex-col">
+                <DiagnosticsStrip sviReadout={sviReadout} arbResult={arbResult} />
+                <div className="min-h-0 flex-1">
+                  <OptionChain />
+                </div>
               </div>
-            </div>
-          </Panel>
+            </Panel>
+          </SectionErrorBoundary>
         )}
 
         {sub === 'dealer' && (
+          <SectionErrorBoundary name="Dealer">
           <Panel
             title={<Explain term="dealerStack">Dealer Stack</Explain>}
             subtitle="Customer long OI → dealers short · pick metric + weight"
             className="h-full"
           >
             {!dealer || dealer.points.length === 0 ? (
-              <EmptyState kind="no-data" title="No OI / greek data" body="Chain inventory empty — load live options or wait for surface." />
+              <EmptyState kind="no-data" title="No OI / greek data" body={UI_COPY.empty.chain} />
             ) : (
               <div className="flex h-full flex-col">
                 <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-1.5">
@@ -459,9 +464,11 @@ export function PositioningView() {
               </div>
             )}
           </Panel>
+          </SectionErrorBoundary>
         )}
 
         {sub === 'levels' && (
+          <SectionErrorBoundary name="Levels">
           <div className="h-full overflow-y-auto p-2">
             <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
               <Panel title={<Explain term="keyLevels">Dealer Levels</Explain>}>
@@ -591,9 +598,11 @@ export function PositioningView() {
               )}
             </div>
           </div>
+          </SectionErrorBoundary>
         )}
 
         {sub === 'edge' && (
+          <SectionErrorBoundary name="Edge">
           <Panel
             title={<Explain term="parityEdge">Put–Call Parity Edge</Explain>}
             subtitle="European residual · tradeable only if |res| > half-spreads"
@@ -678,6 +687,7 @@ export function PositioningView() {
               </div>
             </div>
           </Panel>
+          </SectionErrorBoundary>
         )}
       </div>
     </div>

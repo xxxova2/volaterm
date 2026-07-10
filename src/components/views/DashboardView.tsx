@@ -14,6 +14,8 @@ import {
 } from '../../lib/options/analytics';
 import { Explain } from '../common/Explain';
 import { DeskLoading } from '../common/Skeleton';
+import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
+import { UI_COPY } from '../../config/uiCopy';
 import { macrovolApi, type RatesSummary, type StirStripData, type MacroSummary } from '../../lib/macrovol/api';
 import type { ActiveTab } from '../../lib/options/types';
 
@@ -215,8 +217,18 @@ export function DashboardView() {
           hasHistory={(fmpHistory?.length ?? 0) > 0}
           onRetryMacro={() => setMacroRetry((n) => n + 1)}
         />
-        <RatesStrip rates={rates} stir={stir} onOpen={() => go('rates')} />
-        <DeskLoading message="Fitting surface… rates strip still live when MacroVol is up." className="flex-1 min-h-[12rem]" />
+        <SectionErrorBoundary name="Macro strip">
+          <RatesStrip
+            rates={rates}
+            stir={stir}
+            onOpen={() => go('rates')}
+            offlineLabel={UI_COPY.empty.macro}
+          />
+        </SectionErrorBoundary>
+        <DeskLoading
+          message={`${UI_COPY.load.surface} rates strip still live when MacroVol is up.`}
+          className="flex-1 min-h-[12rem]"
+        />
       </div>
     );
   }
@@ -268,7 +280,15 @@ export function DashboardView() {
         onRetryMacro={() => setMacroRetry((n) => n + 1)}
       />
 
-      <RatesStrip rates={rates} stir={stir} macro={macro} onOpen={() => go('rates')} />
+      <SectionErrorBoundary name="Macro strip">
+        <RatesStrip
+          rates={rates}
+          stir={stir}
+          macro={macro}
+          onOpen={() => go('rates')}
+          offlineLabel={UI_COPY.empty.macro}
+        />
+      </SectionErrorBoundary>
 
       {/* Action chips */}
       <div className="mb-2 flex flex-wrap gap-1 px-1">
@@ -317,6 +337,7 @@ export function DashboardView() {
         Home hierarchy (D-PR-6): Vol regime spotlight (~2-col), then 1 / 2 / 3 grid.
         Top 3 on squint: regime banner, vol regime, key levels.
       */}
+      <SectionErrorBoundary name="Vol panels">
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {/* Spotlight — Vol Structure metrics */}
         <Panel title={<Explain term="volRegime">Vol Structure · Regime</Explain>} className="sm:col-span-2">
@@ -510,6 +531,7 @@ export function DashboardView() {
           </ul>
         </Panel>
       </div>
+      </SectionErrorBoundary>
     </div>
   );
 }
@@ -575,11 +597,13 @@ function RatesStrip({
   stir,
   macro,
   onOpen,
+  offlineLabel = UI_COPY.empty.macro,
 }: {
   rates: RatesSummary | null;
   stir?: StirStripData | null;
   macro?: MacroSummary | null;
   onOpen: () => void;
+  offlineLabel?: string;
 }) {
   const cuts = stir?.path?.approx_25bp_cuts_priced;
   const items = rates ? [
@@ -624,7 +648,7 @@ function RatesStrip({
         </span>
       )) : (
         <span className="col-span-2 font-mono text-type-xs text-muted-foreground md:col-span-1">
-          MacroVol offline — start :8765 for SOFR strip
+          {offlineLabel}
         </span>
       )}
       <span className="col-span-2 ml-auto font-mono text-type-2xs text-primary md:col-span-1">Rates desk →</span>
