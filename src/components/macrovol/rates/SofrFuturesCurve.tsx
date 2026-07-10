@@ -1,7 +1,8 @@
 /**
  * Bloomberg-style 3M SOFR futures yield strip:
  * white = live implied yield, blue = prior settlement yield.
- * X = delivery quarter, Y = yield %. Real yfinance quotes only.
+ * X = delivery quarter (Sep24→Dec30), Y = yield %.
+ * Live = yfinance; expired = FRED SOFR compound final settlement.
  * Visual twin of the uploaded dual-path chart (black field, dual dots).
  */
 import {
@@ -51,7 +52,7 @@ export function SofrFuturesCurve({
           3 MONTH SOFR FUTURE · YIELD
         </span>
         <span className="font-mono text-type-2xs text-zinc-500">
-          Live vs prior settlement · white = live · blue = prior · USD %
+          Sep24→Dec30 · white = live · blue = prior · settled = FRED SOFR · USD %
         </span>
       </div>
       <ResponsiveContainer width="100%" height={height}>
@@ -59,9 +60,12 @@ export function SofrFuturesCurve({
           <CartesianGrid stroke="#1f1f1f" strokeDasharray="0" vertical horizontal />
           <XAxis
             dataKey="x"
-            tick={{ fill: '#a1a1aa', fontSize: 10, fontFamily: 'JetBrains Mono' }}
-            interval="preserveStartEnd"
-            minTickGap={18}
+            tick={{ fill: '#a1a1aa', fontSize: 9, fontFamily: 'JetBrains Mono' }}
+            interval={0}
+            angle={-40}
+            textAnchor="end"
+            height={48}
+            minTickGap={4}
             axisLine={{ stroke: '#333' }}
             tickLine={{ stroke: '#333' }}
           />

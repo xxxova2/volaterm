@@ -883,39 +883,21 @@ async def get_stir_strip():
       - Desk spreads: calendars, flies, packs, SERFF, inter, cash
     Free data: yfinance (delayed) + NY Fed Markets API + FRED (IORB).
     """
-    key = "stir_strip:v5"
+    key = "stir_strip:v6"
     hit = ttl_cache.get_cached(key, STIR_CACHE_TTL)
     if not ttl_cache.is_miss(hit):
         return hit
     import yfinance as yf
-    from datetime import datetime
     import asyncio
     from services.nyfed_client import fetch_reference_rates
+    from services.stir import build_sr3_contracts, fill_settled_sr3
 
-    # 3M SOFR (CME SR3) — quarterly strip through 2030 (Bloomberg-style path chart).
-    # Board tickers SFR{M}{Y}; yfinance CME symbols SR3{M}{YY}.CME
-    SR3_CONTRACTS = [
-        {"symbol": "SR3H26.CME", "label": "SR3H6", "ticker": "SFRH6", "month": "Mar 26"},
-        {"symbol": "SR3M26.CME", "label": "SR3M6", "ticker": "SFRM6", "month": "Jun 26"},
-        {"symbol": "SR3U26.CME", "label": "SR3U6", "ticker": "SFRU6", "month": "Sep 26"},
-        {"symbol": "SR3Z26.CME", "label": "SR3Z6", "ticker": "SFRZ6", "month": "Dec 26"},
-        {"symbol": "SR3H27.CME", "label": "SR3H7", "ticker": "SFRH7", "month": "Mar 27"},
-        {"symbol": "SR3M27.CME", "label": "SR3M7", "ticker": "SFRM7", "month": "Jun 27"},
-        {"symbol": "SR3U27.CME", "label": "SR3U7", "ticker": "SFRU7", "month": "Sep 27"},
-        {"symbol": "SR3Z27.CME", "label": "SR3Z7", "ticker": "SFRZ7", "month": "Dec 27"},
-        {"symbol": "SR3H28.CME", "label": "SR3H8", "ticker": "SFRH8", "month": "Mar 28"},
-        {"symbol": "SR3M28.CME", "label": "SR3M8", "ticker": "SFRM8", "month": "Jun 28"},
-        {"symbol": "SR3U28.CME", "label": "SR3U8", "ticker": "SFRU8", "month": "Sep 28"},
-        {"symbol": "SR3Z28.CME", "label": "SR3Z8", "ticker": "SFRZ8", "month": "Dec 28"},
-        {"symbol": "SR3H29.CME", "label": "SR3H9", "ticker": "SFRH9", "month": "Mar 29"},
-        {"symbol": "SR3M29.CME", "label": "SR3M9", "ticker": "SFRM9", "month": "Jun 29"},
-        {"symbol": "SR3U29.CME", "label": "SR3U9", "ticker": "SFRU9", "month": "Sep 29"},
-        {"symbol": "SR3Z29.CME", "label": "SR3Z9", "ticker": "SFRZ9", "month": "Dec 29"},
-        {"symbol": "SR3H30.CME", "label": "SR3H0", "ticker": "SFRH0", "month": "Mar 30"},
-        {"symbol": "SR3M30.CME", "label": "SR3M0", "ticker": "SFRM0", "month": "Jun 30"},
-        {"symbol": "SR3U30.CME", "label": "SR3U0", "ticker": "SFRU0", "month": "Sep 30"},
-        {"symbol": "SR3Z30.CME", "label": "SR3Z0", "ticker": "SFRZ0", "month": "Dec 30"},
-    ]
+    # 3M SOFR (CME SR3) — Sep 2024 → Dec 2030 quarterly (Bloomberg-style path).
+    # Live: yfinance SR3{M}{YY}.CME. Expired: FRED SOFR compound final settlement.
+    # Board tickers SFR{M}{Y}; yfinance symbols SR3{M}{YY}.CME
+    SR3_CONTRACTS = build_sr3_contracts(
+        start_year=2024, start_code="U", end_year=2030, end_code="Z"
+    )
 
     # 1M SOFR (CME SR1) — months that yfinance usually quotes
     SR1_CONTRACTS = [
@@ -1042,8 +1024,25 @@ async def get_stir_strip():
 
     async def process_contracts(contracts, fallbacks, *, rate_style: bool = True):
         """rate_style=True → IMM index (100−price); False → price-only (Tsy futures)."""
+        today = date_cls.today()
+
         async def process_one(c):
-            quote = await fetch_quote(c["symbol"])
+            # Skip yfinance for fully expired SR3 (ref quarter done) — fill via FRED later
+            skip_yf = False
+            if rate_style and c.get("ref_end"):
+                try:
+                    if date_cls.fromisoformat(str(c["ref_end"])) < today:
+                        skip_yf = True
+                except ValueError:
+                    pass
+
+            if skip_yf:
+                quote = {
+                    "last": None, "prev": None, "high": None, "low": None,
+                    "open": None, "volume": None,
+                }
+            else:
+                quote = await fetch_quote(c["symbol"])
             last_px = quote.get("last")
             prev_px = quote.get("prev")
             rate = None
@@ -1096,12 +1095,13 @@ async def get_stir_strip():
         results = await asyncio.gather(*tasks, return_exceptions=True)
         return [r for r in results if not isinstance(r, Exception)]
 
-    sr3_results, sr1_results, zq_results, tsy_results, nyfed = await asyncio.gather(
+    sr3_results, sr1_results, zq_results, tsy_results, nyfed, sofr_hist = await asyncio.gather(
         process_contracts(SR3_CONTRACTS, SR3_FALLBACK),
         process_contracts(SR1_CONTRACTS, SR1_FALLBACK),
         process_contracts(ZQ_CONTRACTS, ZQ_FALLBACK),
         process_contracts(TSY_FUTURES, {}, rate_style=False),
         fetch_reference_rates(),
+        fetch_series("SOFR", limit=900),
         return_exceptions=True,
     )
     if isinstance(sr3_results, Exception):
@@ -1114,8 +1114,24 @@ async def get_stir_strip():
         tsy_results = []
     if isinstance(nyfed, Exception):
         nyfed = {"rates": {}, "error": str(nyfed)}
+    if isinstance(sofr_hist, Exception):
+        sofr_hist = []
+
+    # Expired SR3 (delisted on Yahoo): FRED-compounded final settlement Sep24→last full IMM
+    sr3_results = fill_settled_sr3(
+        sr3_results,
+        SR3_CONTRACTS,
+        sofr_hist if isinstance(sofr_hist, list) else [],
+        as_of=date_cls.today(),
+    )
+    # Keep strip chronological (U24 … Z30)
+    sr3_results = sorted(
+        sr3_results,
+        key=lambda r: rate_risk._contract_sort_key(str(r.get("contract") or "")),
+    )
 
     live_count = sum(1 for r in sr3_results if r.get("source") == "live")
+    settled_count = sum(1 for r in sr3_results if r.get("source") == "settled")
     live_sr1 = sum(1 for r in sr1_results if r.get("source") == "live")
     live_zq = sum(1 for r in zq_results if r.get("source") == "live")
     live_tsy = sum(1 for r in tsy_results if r.get("source") == "live")
@@ -1226,20 +1242,22 @@ async def get_stir_strip():
         "zq": zq_results,
         "treasury_futures": tsy_results,
         "live_count": live_count,
+        "settled_count": settled_count,
         "live_sr1": live_sr1,
         "live_zq": live_zq,
         "live_tsy": live_tsy,
         "total_sr3": len(sr3_results),
         "fallback_count": fallback_count,
         "unavailable_count": unavailable_count,
-        "history_available": 0,
+        "history_available": settled_count,
         "history_note": (
             "CME-style board: Last · Change/Net · Settlement(prev) · High · Low · Volume. "
-            "Delayed yfinance quotes; volume from last session bar when available."
+            "Live = delayed yfinance. Expired = FRED SOFR compound final settlement "
+            "(Sep 2024 → last completed IMM quarter). Strip through Dec 2030."
         ),
         "quality_note": (
             "Modeled after CME STIR delivery: outrights grid + ICS spreads (SERFF) + packs/flies. "
-            "SFR = SR3 3M SOFR. SERFFxx = SOFR fut − cash EFFR when ZQ offline. "
+            "SFR = SR3 3M SOFR. Strip U24→Z30. Settled legs use FRED SOFR compound (not invented). "
             "NY Fed = official overnight prints + percentiles + $bn volume + FOMC target. "
             "ALLOW_STIR_FALLBACK=0 by default."
         ),

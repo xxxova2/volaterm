@@ -306,6 +306,7 @@ export interface StirStripData {
   zq: StirContract[];
   treasury_futures?: StirContract[];
   live_count: number;
+  settled_count?: number;
   live_sr1?: number;
   live_zq?: number;
   live_tsy?: number;

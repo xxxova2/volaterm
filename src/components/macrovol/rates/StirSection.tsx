@@ -249,7 +249,11 @@ export function StirSection({
           <BoardShell
             className="xl:col-span-7 2xl:col-span-8"
             title="3M SOFR FUTURES (SFR / SR3) · CME board"
-            badge={`${liveSr3.length} live`}
+            badge={`${liveSr3.filter((c) => c.source === 'live' || !c.source).length} live${
+              liveSr3.some((c) => c.source === 'settled')
+                ? ` · ${liveSr3.filter((c) => c.source === 'settled').length} settled`
+                : ''
+            }`}
             actions={
               <ExportCsvButton
                 filename={`sr3-strip-${new Date().toISOString().slice(0, 10)}`}
@@ -314,8 +318,11 @@ export function StirSection({
                         : ''
                     }`}
                   >
-                    <span className="truncate text-muted-foreground">{c.month}</span>
-                    <span className="truncate font-bold text-foreground">
+                    <span className={`truncate ${c.source === 'settled' ? 'text-zinc-500' : 'text-muted-foreground'}`}>
+                      {c.month}
+                      {c.source === 'settled' ? ' · set' : ''}
+                    </span>
+                    <span className={`truncate font-bold ${c.source === 'settled' ? 'text-zinc-400' : 'text-foreground'}`}>
                       {c.ticker || c.contract}
                     </span>
                     <span className="text-right tabular-nums font-semibold">

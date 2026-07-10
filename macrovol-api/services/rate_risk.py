@@ -795,8 +795,15 @@ def stir_path_analysis(sr3: list[dict], sofr: float | None) -> dict[str, Any]:
             if sofr is not None and c.get("implied_rate") is not None
             else None
         )
-        # Per-contract vs SOFR implication
-        if vs is None:
+        # Per-contract vs SOFR implication (skip path-read on final-settled history)
+        if c.get("source") == "settled":
+            c_imply = _imply(
+                bias="neutral",
+                label="SETTLED",
+                text="Reference quarter complete — FRED SOFR compound final settlement (not a live futures quote).",
+                confidence="high",
+            )
+        elif vs is None:
             c_imply = None
         elif abs(vs) < 8:
             c_imply = _imply(
@@ -964,7 +971,12 @@ _MONTH_CODE_ORDER = {c: i for i, c in enumerate("FGHJKMNQUVXZ")}
 
 
 def _contract_sort_key(label: str) -> tuple[int, int]:
-    """SR3M6 / SR1Z26 / SFRZ7 → (year, month_ord)."""
+    """SR3M6 / SR1Z26 / SFRZ7 / SR3U4 → (year, month_ord).
+
+    One-digit years use a 2020s/2030s pivot so Z0 (2030) sorts after U4 (2024):
+      digit 4–9 → 2024–2029, digit 0–3 → 2030–2033.
+    Two-digit years are 20xx (e.g. 26 → 2026).
+    """
     if not label:
         return (99, 99)
     # strip product root
@@ -979,9 +991,14 @@ def _contract_sort_key(label: str) -> tuple[int, int]:
     mcode = rest[0]
     year_s = rest[1:]
     try:
-        y = int(year_s)
-        if y < 100:
-            y += 2000
+        y_raw = int(year_s)
+        if len(year_s) == 1:
+            # 4–9 → 2024–29; 0–3 → 2030–33 (covers U24…Z30 strip)
+            y = (2020 + y_raw) if y_raw >= 4 else (2030 + y_raw)
+        elif y_raw < 100:
+            y = 2000 + y_raw
+        else:
+            y = y_raw
     except ValueError:
         y = 2099
     return (y, _MONTH_CODE_ORDER.get(mcode, 99))
@@ -1107,9 +1124,14 @@ def stir_spreads(
             )
         )
 
-    # Ordered live SR3 by expiry
+    # Ordered live SR3 by expiry (skip FRED-settled history for calendar/fly flood)
     sr3_live = sorted(
-        [c for c in sr3 if c.get("implied_rate") is not None],
+        [
+            c
+            for c in sr3
+            if c.get("implied_rate") is not None
+            and c.get("source") in (None, "live", "fallback")
+        ],
         key=lambda c: _contract_sort_key(str(c.get("contract") or "")),
     )
     labels3 = [str(c.get("contract")) for c in sr3_live]

@@ -164,7 +164,7 @@ export function CurvesBoard({
       apis={['FRED', 'yfinance', 'MacroVol']}
       defaultOpen
       storageKey="rates.sec.curves"
-      subtitle="UST today vs last year · 3M SOFR strip (live vs prior) · every spread history"
+      subtitle="UST today vs last year · 3M SOFR strip (Sep24→Dec30, live vs prior) · every spread history"
       badge={
         <span className="font-mono text-type-2xs text-muted-foreground">
           {compareLive.length} UST dual · {sofrPath.length} SOFR futs · {SPREAD_META.length} spreads
