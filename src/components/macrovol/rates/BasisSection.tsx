@@ -4,7 +4,7 @@ import {
 import type { BasisData, BasisHistoryData, PlumbingData } from '../../../lib/macrovol/api';
 import { DataBadge } from '../DataBadge';
 import { CollapsibleSection } from '../../terminal/CollapsibleSection';
-import { chartTooltipStyle } from '../../../lib/chartTheme';
+import { CHART, chartAxisTick, chartGridProps, chartTooltipStyle } from '../../../lib/chartTheme';
 
 export function BasisSection({
   basis,
@@ -105,14 +105,14 @@ export function BasisSection({
           <div className="mb-1 text-type-xs text-muted-foreground">SPREAD HISTORY (bps)</div>
           <ResponsiveContainer width="100%" height={160}>
             <LineChart data={basisChart} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-              <CartesianGrid stroke="#1f1f1f" strokeDasharray="2 2" />
-              <XAxis dataKey="date" tick={{ fill: '#71717a', fontSize: 9 }} interval="preserveStartEnd" />
-              <YAxis tick={{ fill: '#71717a', fontSize: 9 }} width={36} />
+              <CartesianGrid {...chartGridProps} />
+              <XAxis dataKey="date" tick={{ ...chartAxisTick, fontSize: 9 }} interval="preserveStartEnd" />
+              <YAxis tick={{ ...chartAxisTick, fontSize: 9 }} width={36} />
               <Tooltip contentStyle={chartTooltipStyle} />
-              <ReferenceLine y={0} stroke="#333" />
-              <Line type="monotone" dataKey="sofr_effr" name="SOFR−EFFR" stroke="#3b82f6" strokeWidth={1.5} dot={false} />
-              <Line type="monotone" dataKey="sofr_iorb" name="SOFR−IORB" stroke="#f59e0b" strokeWidth={1.5} dot={false} />
-              <Line type="monotone" dataKey="effr_iorb" name="EFFR−IORB" stroke="#22c55e" strokeWidth={1.5} dot={false} />
+              <ReferenceLine y={0} stroke={CHART.refLine} />
+              <Line type="monotone" dataKey="sofr_effr" name="SOFR−EFFR" stroke={CHART.series.info} strokeWidth={1.5} dot={false} />
+              <Line type="monotone" dataKey="sofr_iorb" name="SOFR−IORB" stroke={CHART.series.warn} strokeWidth={1.5} dot={false} />
+              <Line type="monotone" dataKey="effr_iorb" name="EFFR−IORB" stroke={CHART.series.up} strokeWidth={1.5} dot={false} />
             </LineChart>
           </ResponsiveContainer>
         </div>

@@ -1,4 +1,5 @@
 import type { CorrelationData } from '../../../lib/macrovol/api';
+import { chartCorrColors } from '../../../lib/chartTheme';
 import { DataBadge } from '../DataBadge';
 import { CollapsibleSection } from '../../terminal/CollapsibleSection';
 
@@ -31,14 +32,7 @@ export function CorrSection({ corr }: { corr: CorrelationData }) {
               <tr key={corr.instruments[i]}>
                 <td className="p-1 pr-2 text-right text-muted-foreground">{corr.instruments[i]}</td>
                 {row.map((v, j) => {
-                  const a = Math.abs(v);
-                  const bg =
-                    v >= 0.9 ? '#1d4ed8'
-                      : v >= 0.6 ? '#3b82f6'
-                        : v >= 0.2 ? '#86efac'
-                          : v >= 0 ? '#ecfdf5'
-                            : '#fde68a';
-                  const fg = a >= 0.85 ? '#fff' : '#1e3a5f';
+                  const { bg, fg } = chartCorrColors(v);
                   return (
                     <td key={j} className="p-1 text-center font-medium" style={{ background: bg, color: fg, minWidth: 36 }}>
                       {v.toFixed(2)}

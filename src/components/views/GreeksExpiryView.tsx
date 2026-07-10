@@ -4,6 +4,7 @@ import { useTerminalStore } from '../../store/terminalStore';
 import { Panel } from '../terminal/Panel';
 import { netByExpiry, impliedMove } from '../../lib/options/analytics';
 import { fmtPrice, fmtPct } from '../../lib/format';
+import { CHART_GREEK } from '../../lib/chartTheme';
 
 export function GreeksExpiryView() {
   const snapshot = useTerminalStore(s => s.snapshot);
@@ -52,9 +53,9 @@ export function GreeksExpiryView() {
                   );
                 }}
               />
-              <Bar dataKey="delta" fill="#4d8ff0" radius={[2, 2, 0, 0]} />
-              <Bar dataKey="gamma" fill="#3fb950" radius={[2, 2, 0, 0]} />
-              <Bar dataKey="vega" fill="#a06ee0" radius={[2, 2, 0, 0]} />
+              <Bar dataKey="delta" fill={CHART_GREEK.delta} radius={[2, 2, 0, 0]} />
+              <Bar dataKey="gamma" fill={CHART_GREEK.gamma} radius={[2, 2, 0, 0]} />
+              <Bar dataKey="vega" fill={CHART_GREEK.vega} radius={[2, 2, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -63,8 +64,8 @@ export function GreeksExpiryView() {
       <div className="grid grid-cols-4 gap-2">
         <Stat label="Expected Move" value={move ? fmtPrice(move.move) : '—'} color="var(--amber)" />
         <Stat label="Move %" value={move ? fmtPct(move.movePct) : '—'} color="var(--amber)" />
-        <Stat label="Prob of Touch" value={move ? fmtPct(move.probTouch) : '—'} color="#4d8ff0" />
-        <Stat label="ATM Straddle" value={move ? fmtPrice(move.straddle) : '—'} color="#3fb950" />
+        <Stat label="Prob of Touch" value={move ? fmtPct(move.probTouch) : '—'} color={CHART_GREEK.delta} />
+        <Stat label="ATM Straddle" value={move ? fmtPrice(move.straddle) : '—'} color={CHART_GREEK.gamma} />
       </div>
     </div>
   );

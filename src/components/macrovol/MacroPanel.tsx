@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { macrovolApi, type MacroSummary } from '../../lib/macrovol/api';
+import { CHART } from '../../lib/chartTheme';
 import { DataBadge } from './DataBadge';
 import { ApiSources } from './ApiSources';
 
@@ -140,8 +141,8 @@ export function MacroPanel() {
             );
           }
           const isWarning = (ind.good === 'down' && e.value > 3) || (ind.good === 'up' && e.value < 0);
-          const arrowColor = e.trend === 'up' ? '#22c55e' : e.trend === 'down' ? '#ef4444' : '#71717a';
-          const barColor = e.trend === 'up' ? '#22c55e' : e.trend === 'down' ? '#ef4444' : '#3b82f6';
+          const arrowColor = e.trend === 'up' ? CHART.series.up : e.trend === 'down' ? CHART.series.down : CHART.series.muted;
+          const barColor = e.trend === 'up' ? CHART.series.up : e.trend === 'down' ? CHART.series.down : CHART.series.info;
           return (
             <div
               key={ind.key}

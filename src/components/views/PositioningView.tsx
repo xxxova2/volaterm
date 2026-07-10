@@ -23,7 +23,7 @@ import {
   type ExposureWeight,
 } from '../../lib/options/analytics';
 import { cn } from '../../lib/utils';
-import { chartTooltipStyle, chartGridProps } from '../../lib/chartTheme';
+import { CHART, chartTooltipStyle, chartGridProps } from '../../lib/chartTheme';
 import {
   useBoardFocus,
   useRegisterBoard,
@@ -400,11 +400,11 @@ export function PositioningView() {
                           )}
                           {metric === 'gex' ? (
                             <>
-                              <Bar dataKey="call" fill="var(--up)" stackId="m" opacity={0.85} name="Call" isAnimationActive={false} />
-                              <Bar dataKey="put" fill="var(--down)" stackId="m" opacity={0.85} name="Put" isAnimationActive={false} />
+                              <Bar dataKey="call" fill={CHART.series.up} stackId="m" opacity={0.85} name="Call" isAnimationActive={false} />
+                              <Bar dataKey="put" fill={CHART.series.down} stackId="m" opacity={0.85} name="Put" isAnimationActive={false} />
                             </>
                           ) : (
-                            <Bar dataKey="net" fill="var(--cyan)" opacity={0.9} name="Net" isAnimationActive={false} />
+                            <Bar dataKey="net" fill={CHART.series.cyan} opacity={0.9} name="Net" isAnimationActive={false} />
                           )}
                         </BarChart>
                       </ResponsiveContainer>
@@ -544,8 +544,8 @@ export function PositioningView() {
                           tickFormatter={(v) => `${(v / 1000).toFixed(0)}K`}
                         />
                         <Tooltip contentStyle={chartTooltipStyle} />
-                        <Bar dataKey="callOI" stackId="oi" fill="var(--up)" name="Call OI" opacity={0.85} />
-                        <Bar dataKey="putOI" stackId="oi" fill="var(--down)" name="Put OI" opacity={0.85} />
+                        <Bar dataKey="callOI" stackId="oi" fill={CHART.series.up} name="Call OI" opacity={0.85} />
+                        <Bar dataKey="putOI" stackId="oi" fill={CHART.series.down} name="Put OI" opacity={0.85} />
                       </BarChart>
                     </ResponsiveContainer>
                   )}
@@ -583,7 +583,7 @@ export function PositioningView() {
                           stroke="var(--amber)"
                           strokeDasharray="3 3"
                         />
-                        <Bar dataKey="net" fill="var(--cyan)" name="Net GEX $M" opacity={0.9} />
+                        <Bar dataKey="net" fill={CHART.series.cyan} name="Net GEX $M" opacity={0.9} />
                       </BarChart>
                     </ResponsiveContainer>
                   </div>

@@ -8,7 +8,9 @@
 import {
   CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
-import { chartTooltipStyle } from '../../../lib/chartTheme';
+import {
+  CHART, chartAxisTick, chartTooltipStyle,
+} from '../../../lib/chartTheme';
 
 export type SofrCurvePoint = {
   x: string;
@@ -57,41 +59,36 @@ export function SofrFuturesCurve({
       </div>
       <ResponsiveContainer width="100%" height={height}>
         <LineChart data={rows} margin={{ top: 10, right: 18, left: 4, bottom: 8 }}>
-          <CartesianGrid stroke="#1f1f1f" strokeDasharray="0" vertical horizontal />
+          <CartesianGrid stroke={CHART.grid} strokeDasharray="0" vertical horizontal />
           <XAxis
             dataKey="x"
-            tick={{ fill: '#a1a1aa', fontSize: 9, fontFamily: 'JetBrains Mono' }}
+            tick={{ ...chartAxisTick, fontSize: 9 }}
             interval={0}
             angle={-40}
             textAnchor="end"
             height={48}
             minTickGap={4}
-            axisLine={{ stroke: '#333' }}
-            tickLine={{ stroke: '#333' }}
+            axisLine={{ stroke: CHART.axisLine }}
+            tickLine={{ stroke: CHART.axisLine }}
           />
           <YAxis
-            tick={{ fill: '#a1a1aa', fontSize: 10, fontFamily: 'JetBrains Mono' }}
+            tick={chartAxisTick}
             width={42}
             domain={['auto', 'auto']}
             tickFormatter={(v) => Number(v).toFixed(2)}
-            axisLine={{ stroke: '#333' }}
-            tickLine={{ stroke: '#333' }}
+            axisLine={{ stroke: CHART.axisLine }}
+            tickLine={{ stroke: CHART.axisLine }}
             label={{
               value: 'USD',
               angle: -90,
               position: 'insideLeft',
-              fill: '#71717a',
+              fill: CHART.axisMuted,
               fontSize: 10,
               fontFamily: 'JetBrains Mono',
             }}
           />
           <Tooltip
-            contentStyle={{
-              ...chartTooltipStyle,
-              background: '#0a0a0a',
-              border: '1px solid #333',
-              color: '#fafafa',
-            }}
+            contentStyle={chartTooltipStyle}
             formatter={(v: number, name: string) => [
               `${Number(v).toFixed(3)}%`,
               name === 'rate' ? liveLabel : priorLabel,
@@ -99,7 +96,7 @@ export function SofrFuturesCurve({
             labelFormatter={(l) => String(l)}
           />
           <Legend
-            wrapperStyle={{ fontSize: 11, fontFamily: 'JetBrains Mono', color: '#a1a1aa', paddingTop: 4 }}
+            wrapperStyle={{ fontSize: 11, fontFamily: 'JetBrains Mono', color: CHART.legend, paddingTop: 4 }}
             formatter={(value) => (value === 'rate' ? liveLabel : priorLabel)}
             iconType="circle"
           />
@@ -108,9 +105,9 @@ export function SofrFuturesCurve({
             type="monotone"
             dataKey="prior"
             name="prior"
-            stroke="#3b82f6"
+            stroke={CHART.series.compare}
             strokeWidth={2.25}
-            dot={{ r: 3.5, fill: '#3b82f6', stroke: '#3b82f6' }}
+            dot={{ r: 3.5, fill: CHART.series.compare, stroke: CHART.series.compare }}
             activeDot={{ r: 5 }}
             connectNulls
             isAnimationActive={false}
@@ -120,9 +117,9 @@ export function SofrFuturesCurve({
             type="monotone"
             dataKey="rate"
             name="rate"
-            stroke="#f4f4f5"
+            stroke={CHART.series.live}
             strokeWidth={2.25}
-            dot={{ r: 3.5, fill: '#f4f4f5', stroke: '#f4f4f5' }}
+            dot={{ r: 3.5, fill: CHART.series.live, stroke: CHART.series.live }}
             activeDot={{ r: 5 }}
             connectNulls
             isAnimationActive={false}

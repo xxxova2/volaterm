@@ -4,6 +4,7 @@ import { useTerminalStore } from '../../store/terminalStore';
 import { Panel } from '../terminal/Panel';
 import { greeksProfile } from '../../lib/options/analytics';
 import { fmtPrice } from '../../lib/format';
+import { CHART_GREEK } from '../../lib/chartTheme';
 
 type GreekKey = 'delta' | 'gamma' | 'theta' | 'vega';
 
@@ -16,11 +17,10 @@ const GREEKS: { key: GreekKey; label: string }[] = [
 ];
 
 const COLORS: Record<GreekKey, string> = {
-  delta: '#4d8ff0',
-  gamma: '#3fb950',
-  theta: '#f0883e',
-  vega: '#a06ee0',
-
+  delta: CHART_GREEK.delta,
+  gamma: CHART_GREEK.gamma,
+  theta: CHART_GREEK.theta,
+  vega: CHART_GREEK.vega,
 };
 
 export function GreeksProfileView() {

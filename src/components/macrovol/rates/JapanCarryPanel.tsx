@@ -5,7 +5,7 @@ import {
 import { macrovolApi } from '../../../lib/macrovol/api';
 import { DataBadge } from '../DataBadge';
 import { CollapsibleSection } from '../../terminal/CollapsibleSection';
-import { chartTooltipStyle } from '../../../lib/chartTheme';
+import { CHART, chartAxisTick, chartGridProps, chartTooltipStyle } from '../../../lib/chartTheme';
 
 /** USDJPY + US−JP yield differential — Japan carry context (FRED series). */
 export function JapanCarryPanel() {
@@ -133,11 +133,11 @@ export function JapanCarryPanel() {
           <div className="mb-1 text-type-xs text-muted-foreground">US−JP 10Y spread history (pp)</div>
           <ResponsiveContainer width="100%" height={120}>
             <AreaChart data={state.hist}>
-              <CartesianGrid stroke="#1f1f1f" strokeDasharray="2 2" />
-              <XAxis dataKey="date" tick={{ fill: '#71717a', fontSize: 8 }} interval="preserveStartEnd" />
-              <YAxis tick={{ fill: '#71717a', fontSize: 8 }} width={32} />
+              <CartesianGrid {...chartGridProps} />
+              <XAxis dataKey="date" tick={{ ...chartAxisTick, fontSize: 8 }} interval="preserveStartEnd" />
+              <YAxis tick={{ ...chartAxisTick, fontSize: 8 }} width={32} />
               <Tooltip contentStyle={chartTooltipStyle} />
-              <Area type="monotone" dataKey="spread" stroke="#f59e0b" fill="#f59e0b" fillOpacity={0.15} strokeWidth={1.5} />
+              <Area type="monotone" dataKey="spread" stroke={CHART.series.warn} fill={CHART.series.warn} fillOpacity={0.15} strokeWidth={1.5} />
             </AreaChart>
           </ResponsiveContainer>
         </div>

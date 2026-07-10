@@ -4,8 +4,9 @@ import { useTerminalStore } from '../../store/terminalStore';
 import { Panel } from '../terminal/Panel';
 import { spotSensitivity, ivSensitivity } from '../../lib/options/analytics';
 import { GREEK_KEYS } from './greeksTypes';
+import { CHART_SCENARIO } from '../../lib/chartTheme';
 
-const SCENARIO_COLORS = ['#f0883e', '#6b6b76', '#3fb950'];
+const SCENARIO_COLORS = CHART_SCENARIO;
 
 export function GreeksSensitivityView() {
   const snapshot = useTerminalStore(s => s.snapshot);

@@ -1,4 +1,6 @@
-export function Spark({ values, color = '#3b82f6' }: { values: number[]; color?: string }) {
+import { CHART } from '../../../lib/chartTheme';
+
+export function Spark({ values, color = CHART.series.info }: { values: number[]; color?: string }) {
   if (!values.length) return <div className="h-8 text-type-2xs text-muted-foreground">no history</div>;
   const min = Math.min(...values);
   const max = Math.max(...values);

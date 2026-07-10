@@ -4,7 +4,7 @@ import {
 import type { PlumbingData } from '../../../lib/macrovol/api';
 import { DataBadge } from '../DataBadge';
 import { CollapsibleSection } from '../../terminal/CollapsibleSection';
-import { chartTooltipStyle } from '../../../lib/chartTheme';
+import { CHART, chartAxisTick, chartGridProps, chartTooltipStyle } from '../../../lib/chartTheme';
 
 export function PlumbingSection({ plumbing }: { plumbing: PlumbingData | null }) {
   const rateCards = plumbing
@@ -57,11 +57,11 @@ export function PlumbingSection({ plumbing }: { plumbing: PlumbingData | null })
               </div>
               <ResponsiveContainer width="100%" height={140}>
                 <LineChart data={rrpHist}>
-                  <CartesianGrid stroke="#1f1f1f" strokeDasharray="2 2" />
-                  <XAxis dataKey="date" tick={{ fill: '#71717a', fontSize: 9 }} interval="preserveStartEnd" />
-                  <YAxis tick={{ fill: '#71717a', fontSize: 9 }} width={40} />
+                  <CartesianGrid {...chartGridProps} />
+                  <XAxis dataKey="date" tick={{ ...chartAxisTick, fontSize: 9 }} interval="preserveStartEnd" />
+                  <YAxis tick={{ ...chartAxisTick, fontSize: 9 }} width={40} />
                   <Tooltip contentStyle={chartTooltipStyle} />
-                  <Line type="monotone" dataKey="volume" stroke="#3b82f6" strokeWidth={1.5} dot={false} />
+                  <Line type="monotone" dataKey="volume" stroke={CHART.series.info} strokeWidth={1.5} dot={false} />
                 </LineChart>
               </ResponsiveContainer>
             </div>
@@ -71,11 +71,11 @@ export function PlumbingSection({ plumbing }: { plumbing: PlumbingData | null })
               <div className="mb-1 text-type-xs text-muted-foreground">RESERVE BALANCES ($T)</div>
               <ResponsiveContainer width="100%" height={140}>
                 <LineChart data={resHist}>
-                  <CartesianGrid stroke="#1f1f1f" strokeDasharray="2 2" />
-                  <XAxis dataKey="date" tick={{ fill: '#71717a', fontSize: 9 }} interval="preserveStartEnd" />
-                  <YAxis tick={{ fill: '#71717a', fontSize: 9 }} width={40} />
+                  <CartesianGrid {...chartGridProps} />
+                  <XAxis dataKey="date" tick={{ ...chartAxisTick, fontSize: 9 }} interval="preserveStartEnd" />
+                  <YAxis tick={{ ...chartAxisTick, fontSize: 9 }} width={40} />
                   <Tooltip contentStyle={chartTooltipStyle} />
-                  <Line type="monotone" dataKey="reserves" stroke="#22c55e" strokeWidth={1.5} dot={false} />
+                  <Line type="monotone" dataKey="reserves" stroke={CHART.series.up} strokeWidth={1.5} dot={false} />
                 </LineChart>
               </ResponsiveContainer>
             </div>
