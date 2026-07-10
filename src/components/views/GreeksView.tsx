@@ -51,7 +51,7 @@ const SUB_VIEWS: { id: SubView; label: string; domId: string }[] = [
   { id: 'profile', label: 'Profile', domId: 'greeks-sub-profile' },
   { id: 'sensitivity', label: 'Sensitivity', domId: 'greeks-sub-sensitivity' },
   { id: 'byexpiry', label: 'By Expiry', domId: 'greeks-sub-byexpiry' },
-  { id: 'surface3d', label: '3D (visual)', domId: 'greeks-sub-surface3d' },
+  { id: 'surface3d', label: '3D Surface', domId: 'greeks-sub-surface3d' },
 ];
 
 function moneynessThreshold(range: MoneynessRange): number {
@@ -463,7 +463,7 @@ export function GreeksView() {
           sticky={false}
           trailing={
             <span className="font-mono text-type-2xs text-muted-foreground">
-              MacroVol desk · ATM · 3D surfaces · GEX/Charm · IV surface
+              MacroVol yfinance · OTM · θ/charm per day · same units as Terminal 3D
             </span>
           }
         >
@@ -525,7 +525,12 @@ export function GreeksView() {
       <DeskChrome
         dense
         trailing={
-          <DiagnosticsStrip sviReadout={sviReadout} arbResult={arbResult} data-testid="greeks-diagnostics" />
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="hidden font-mono text-type-2xs text-muted-foreground lg:inline" title="Unit convention">
+              Same units as Greeks 1.0 · source may differ (desk chain vs MacroVol)
+            </span>
+            <DiagnosticsStrip sviReadout={sviReadout} arbResult={arbResult} data-testid="greeks-diagnostics" />
+          </div>
         }
       >
         <button

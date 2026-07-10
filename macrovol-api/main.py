@@ -109,11 +109,11 @@ async def rates_summary():
     return out
 
 
-async def _default_r() -> float:
-    """SOFR as decimal risk-free; fall back to 0.04 if unavailable."""
-    sofr = await get_latest("SOFR")
+async def _default_r() -> float | None:
+    """SOFR as decimal risk-free. Fail-closed: None if SOFR unavailable (no 4% stub)."""
+    sofr = await get_latest("SOFR", allow_fallback=False)
     if sofr is None:
-        return 0.04
+        return None
     return round(float(sofr) / 100.0, 6)
 
 
@@ -132,9 +132,18 @@ async def get_surface(
     q: float = Query(0.0),
     strike_range: float = Query(0.3),
 ):
+    from fastapi.responses import JSONResponse
     r_eff = r if r is not None else await _default_r()
     # When r not overridden, price each expiry with piecewise Treasury r(T)
     curve_pts = None if r is not None else await _term_curve_points()
+    if r is None and r_eff is None and not curve_pts:
+        return JSONResponse(
+            status_code=503,
+            content={"error": "Risk-free unavailable: SOFR and Treasury curve both missing (fail-closed)."},
+        )
+    # Term structure can still price without a flat SOFR anchor; use front CMT if needed.
+    if r_eff is None and curve_pts:
+        r_eff = float(curve_pts[0][1])
     r_mode = "flat" if r is not None else ("term_structure" if curve_pts else "SOFR")
     key = f"surface:{ticker}:{r_eff}:{q}:{strike_range}:{r_mode}"
     hit = ttl_cache.get_cached(key, SURFACE_CACHE_TTL)
@@ -151,7 +160,6 @@ async def get_surface(
         ttl_cache.set_cached(key, result)
         return result
     except Exception as e:
-        from fastapi.responses import JSONResponse
         return JSONResponse(status_code=500, content={"error": str(e)})
 
 @app.get("/api/surface/{ticker}/preview")
@@ -160,8 +168,16 @@ async def get_surface_preview(
     r: float | None = Query(None),
     q: float = Query(0.0),
 ):
+    from fastapi.responses import JSONResponse
     r_eff = r if r is not None else await _default_r()
     curve_pts = None if r is not None else await _term_curve_points()
+    if r is None and r_eff is None and not curve_pts:
+        return JSONResponse(
+            status_code=503,
+            content={"error": "Risk-free unavailable: SOFR and Treasury curve both missing (fail-closed)."},
+        )
+    if r_eff is None and curve_pts:
+        r_eff = float(curve_pts[0][1])
     key = f"surface_preview:{ticker}:{r_eff}:{q}"
     hit = ttl_cache.get_cached(key, SURFACE_CACHE_TTL)
     if not ttl_cache.is_miss(hit):
@@ -296,33 +312,6 @@ async def rates_shape(history: int = Query(60, ge=10, le=260)):
     }
 
 
-@app.get("/api/rates/dv01")
-async def rates_dv01(
-    n2: float = Query(1.0, description="2Y notional $mm (neg = short)"),
-    n5: float = Query(1.0, description="5Y notional $mm"),
-    n10: float = Query(1.0, description="10Y notional $mm"),
-    n30: float = Query(1.0, description="30Y notional $mm"),
-    shock_2: float = Query(0.0, description="2Y key-rate shock bp"),
-    shock_5: float = Query(0.0, description="5Y key-rate shock bp"),
-    shock_10: float = Query(0.0, description="10Y key-rate shock bp"),
-    shock_30: float = Query(0.0, description="30Y key-rate shock bp"),
-):
-    """Generic par-Treasury DV01 book + optional diagonal key-rate scenario P&L."""
-    by_label, yields, obs_dates, source = await _load_curve_map()
-    notionals = {"2Y": n2, "5Y": n5, "10Y": n10, "30Y": n30}
-    book = rate_risk.build_dv01_book(by_label, notionals)
-    shocks = {"2Y": shock_2, "5Y": shock_5, "10Y": shock_10, "30Y": shock_30}
-    scenario = rate_risk.key_rate_shock_pnl(by_label, notionals, shocks)
-    return {
-        **book,
-        "scenario": scenario,
-        "curve_yields": {k: by_label.get(k) for k in ("2Y", "5Y", "10Y", "30Y")},
-        "obs_dates": obs_dates,
-        "as_of": datetime.now(timezone.utc).isoformat(),
-        "source": source,
-    }
-
-
 @app.get("/api/rates/term-structure")
 async def rates_term_structure(T: float = Query(0.25, ge=0.01, le=40.0)):
     """
@@ -398,20 +387,32 @@ async def get_feed(source: str):
     except Exception as e:
         return {"error": str(e), "posts": []}
 
+def _as_float_or_none(x) -> float | None:
+    """Fail-closed numeric coerce — never inject hardcoded market levels."""
+    if isinstance(x, (int, float)) and not isinstance(x, bool):
+        try:
+            v = float(x)
+            return v if v == v else None  # NaN guard
+        except (TypeError, ValueError):
+            return None
+    return None
+
+
 @app.get("/api/rates/plumbing")
 async def rates_plumbing():
     results = await asyncio.gather(
-        get_latest("IORB"),
-        get_latest("SOFR"),
-        get_latest("DFF"),
+        get_latest("IORB", allow_fallback=False),
+        get_latest("SOFR", allow_fallback=False),
+        get_latest("DFF", allow_fallback=False),
         fetch_series("RRPONTSYD", limit=500),
         fetch_series("WRESBAL", limit=365),
         return_exceptions=True
     )
 
-    iorb = results[0] if isinstance(results[0], (int, float)) else 3.65
-    sofr = results[1] if isinstance(results[1], (int, float)) else 3.62
-    effr = results[2] if isinstance(results[2], (int, float)) else 3.62
+    # Fail-closed: missing FRED prints stay null (UI shows "—"), never 3.65/3.62 stubs.
+    iorb = _as_float_or_none(results[0] if not isinstance(results[0], Exception) else None)
+    sofr = _as_float_or_none(results[1] if not isinstance(results[1], Exception) else None)
+    effr = _as_float_or_none(results[2] if not isinstance(results[2], Exception) else None)
 
     rrp_data = results[3] if isinstance(results[3], list) else []
     rrp_latest = rrp_data[0]["value"] if rrp_data else None
@@ -429,9 +430,9 @@ async def rates_plumbing():
             rrp_rate_source = "unavailable"
             rrp_rate_note = "RATES_RRP_OVERRIDE env var is not a valid float."
     elif iorb is not None:
-        rrp_rate = round((iorb or 0) - 0.10, 2)
+        rrp_rate = round(iorb - 0.10, 2)
         rrp_rate_source = "derived_iorb_minus_10bps"
-        rrp_rate_note = "RRP offering rate = IORB - 10 bps (NY Fed convention). No direct FRED series."
+        rrp_rate_note = "RRP offering rate = IORB - 10 bps (NY Fed convention). No direct FRED series. Derived, not a live print."
     else:
         rrp_rate = None
         rrp_rate_source = "unavailable"
@@ -469,20 +470,29 @@ async def rates_plumbing():
 @app.get("/api/rates/basis")
 async def rates_basis():
     results = await asyncio.gather(
-        get_latest("SOFR"),
-        get_latest("DFF"),
-        get_latest("IORB"),
+        get_latest("SOFR", allow_fallback=False),
+        get_latest("DFF", allow_fallback=False),
+        get_latest("IORB", allow_fallback=False),
         return_exceptions=True
     )
-    sofr = results[0] if isinstance(results[0], (int, float)) else 3.62
-    effr = results[1] if isinstance(results[1], (int, float)) else 3.62
-    iorb = results[2] if isinstance(results[2], (int, float)) else 3.65
+    # Fail-closed: never inject 3.62/3.65 stubs when FRED is down.
+    sofr = _as_float_or_none(results[0] if not isinstance(results[0], Exception) else None)
+    effr = _as_float_or_none(results[1] if not isinstance(results[1], Exception) else None)
+    iorb = _as_float_or_none(results[2] if not isinstance(results[2], Exception) else None)
 
-    sofr_effr = round((sofr - effr) * 100, 1)
-    sofr_iorb = round((sofr - iorb) * 100, 1)
-    effr_iorb = round((effr - iorb) * 100, 1)
+    def bps_spread(a: float | None, b: float | None) -> float | None:
+        if a is None or b is None:
+            return None
+        return round((a - b) * 100, 1)
+
+    sofr_effr = bps_spread(sofr, effr)
+    sofr_iorb = bps_spread(sofr, iorb)
+    effr_iorb = bps_spread(effr, iorb)
     # Regime diagnostics for floor system (post-ample-reserves / drained RRP era)
-    if sofr_iorb < -25:
+    if sofr_iorb is None:
+        regime = "unknown"
+        regime_note = "SOFR−IORB unavailable — missing FRED prints (fail-closed)."
+    elif sofr_iorb < -25:
         regime = "wide_discount"
         regime_note = "SOFR well below IORB — unusual; check data quality or quarter-end effects."
     elif sofr_iorb > 5:
@@ -696,6 +706,209 @@ async def rates_correlations(window: int = Query(30, ge=5, le=252), period: str 
             status_code=500,
             content={"error": f"{type(e).__name__}: {str(e)}", "as_of": datetime.now(timezone.utc).isoformat()},
         )
+
+
+@app.get("/api/rates/jgb-curve")
+async def get_jgb_curve(compare_days: int = Query(365, ge=30, le=800)):
+    """
+    Live Japanese Government Bond (JGB) constant-maturity curve vs ~1Y ago.
+    Source: Ministry of Finance Japan daily CSV — real yields, no synthetic points.
+    """
+    key = f"jgb_curve:{compare_days}"
+    hit = ttl_cache.get_cached(key, 900)
+    if not ttl_cache.is_miss(hit):
+        return hit
+    try:
+        from services.jgb_curve import build_jgb_curve
+        result = await build_jgb_curve(compare_days=compare_days)
+        if not result.get("error"):
+            ttl_cache.set_cached(key, result)
+        return result
+    except Exception as e:
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            status_code=502,
+            content={
+                "error": f"{type(e).__name__}: {str(e)}",
+                "as_of": datetime.now(timezone.utc).isoformat(),
+                "source": "MoF Japan",
+                "note": "Failed to fetch MoF JGB CSV. No demo curve injected.",
+            },
+        )
+
+
+@app.get("/api/rates/fx")
+async def get_fx_board():
+    """
+    Multi-pair FX board (USDJPY, EURUSD, GBPUSD, AUDUSD, USDCHF, USDCAD).
+    Source: Frankfurter / ECB daily reference — free, no API key.
+    """
+    key = "fx_board:v1"
+    hit = ttl_cache.get_cached(key, 600)
+    if not ttl_cache.is_miss(hit):
+        return hit
+    try:
+        from services.fx_board import build_fx_board
+        result = await build_fx_board()
+        if not result.get("error"):
+            ttl_cache.set_cached(key, result)
+        return result
+    except Exception as e:
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            status_code=502,
+            content={
+                "pairs": [],
+                "error": f"{type(e).__name__}: {str(e)}",
+                "as_of": datetime.now(timezone.utc).isoformat(),
+                "source": "Frankfurter",
+                "note": "Failed to fetch Frankfurter rates. No synthetic FX levels.",
+            },
+        )
+
+
+@app.get("/api/rates/auctions")
+async def get_treasury_auctions(limit: int = Query(20, ge=1, le=50)):
+    """
+    Upcoming U.S. Treasury auctions (FiscalData). Supply narrative next to UST curve.
+    """
+    key = f"fiscal_auctions:{limit}"
+    hit = ttl_cache.get_cached(key, 900)
+    if not ttl_cache.is_miss(hit):
+        return hit
+    try:
+        from services.fiscal_auctions import build_upcoming_auctions
+        result = await build_upcoming_auctions(limit=limit)
+        if not result.get("error"):
+            ttl_cache.set_cached(key, result)
+        return result
+    except Exception as e:
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            status_code=502,
+            content={
+                "auctions": [],
+                "error": f"{type(e).__name__}: {str(e)}",
+                "as_of": datetime.now(timezone.utc).isoformat(),
+                "source": "U.S. Treasury FiscalData",
+                "note": "Failed to fetch upcoming auctions. No synthetic calendar.",
+            },
+        )
+
+
+@app.get("/api/crypto/spot")
+async def get_crypto_spot():
+    """
+    BTC/ETH USD spot from CoinGecko — backup when Deribit index fails.
+    Free / keyless; rate-limited. Fail-closed (no synthetic prices).
+    """
+    key = "coingecko_spot:v1"
+    hit = ttl_cache.get_cached(key, 60)
+    if not ttl_cache.is_miss(hit):
+        return hit
+    try:
+        from services.coingecko import build_crypto_spot
+        result = await build_crypto_spot()
+        if not result.get("error"):
+            ttl_cache.set_cached(key, result)
+        return result
+    except Exception as e:
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            status_code=502,
+            content={
+                "assets": [],
+                "error": f"{type(e).__name__}: {str(e)}",
+                "as_of": datetime.now(timezone.utc).isoformat(),
+                "source": "CoinGecko",
+                "note": "Failed to fetch CoinGecko spot. No synthetic crypto levels.",
+            },
+        )
+
+
+@app.get("/api/rates/global-yields")
+async def get_global_yields():
+    """
+    US / DE / UK / FR / JP 10Y sovereign yields (FRED). Multi-curve context after UST + JGB.
+    """
+    key = "global_yields:v1"
+    hit = ttl_cache.get_cached(key, 600)
+    if not ttl_cache.is_miss(hit):
+        return hit
+    try:
+        from services.global_yields import build_global_yields
+        result = await build_global_yields()
+        if not result.get("error"):
+            ttl_cache.set_cached(key, result)
+        return result
+    except Exception as e:
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            status_code=502,
+            content={
+                "points": [],
+                "error": f"{type(e).__name__}: {str(e)}",
+                "as_of": datetime.now(timezone.utc).isoformat(),
+                "source": "FRED",
+                "note": "Failed to fetch global yields. No synthetic levels.",
+            },
+        )
+
+
+@app.get("/api/crypto/perp-basis")
+async def get_perp_basis():
+    """BTC/ETH linear perp mark vs index (Bybit public). Fail-closed."""
+    key = "perp_basis:v1"
+    hit = ttl_cache.get_cached(key, 30)
+    if not ttl_cache.is_miss(hit):
+        return hit
+    try:
+        from services.perp_basis import build_perp_basis
+        result = await build_perp_basis()
+        if not result.get("error"):
+            ttl_cache.set_cached(key, result)
+        return result
+    except Exception as e:
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            status_code=502,
+            content={
+                "rows": [],
+                "error": f"{type(e).__name__}: {str(e)}",
+                "as_of": datetime.now(timezone.utc).isoformat(),
+                "source": "Bybit",
+                "note": "Failed to fetch Bybit perp basis. No synthetic levels.",
+            },
+        )
+
+
+@app.get("/api/sec/context/{symbol}")
+async def get_sec_context(symbol: str, limit: int = Query(8, ge=1, le=20)):
+    """Recent SEC EDGAR filings for equity ticker (8-K / 10-Q / 10-K). No key."""
+    key = f"sec_ctx:{symbol.upper()}:{limit}"
+    hit = ttl_cache.get_cached(key, 900)
+    if not ttl_cache.is_miss(hit):
+        return hit
+    try:
+        from services.sec_context import build_sec_context
+        result = await build_sec_context(symbol, limit=limit)
+        if not result.get("error") or result.get("error") in ("not_equity", "cik_not_found", "no_recent_filings"):
+            ttl_cache.set_cached(key, result)
+        return result
+    except Exception as e:
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            status_code=502,
+            content={
+                "symbol": symbol.upper(),
+                "filings": [],
+                "error": f"{type(e).__name__}: {str(e)}",
+                "as_of": datetime.now(timezone.utc).isoformat(),
+                "source": "SEC EDGAR",
+                "note": "Failed to fetch SEC context. No synthetic filings.",
+            },
+        )
+
 
 # No hardcoded market levels — missing FRED observations stay None.
 # UI must render "—" / unavailable rather than stale demo numbers.
@@ -1295,8 +1508,16 @@ async def get_greeks(
     r: float | None = Query(None, description="Risk-free decimal; default = live SOFR"),
     q: float = Query(0.013, description="Dividend yield decimal"),
 ):
+    from fastapi.responses import JSONResponse
     r_eff = r if r is not None else await _default_r()
     curve_pts = None if r is not None else await _term_curve_points()
+    if r is None and r_eff is None and not curve_pts:
+        return JSONResponse(
+            status_code=503,
+            content={"error": "Risk-free unavailable: SOFR and Treasury curve both missing (fail-closed)."},
+        )
+    if r_eff is None and curve_pts:
+        r_eff = float(curve_pts[0][1])
     r_mode = "flat" if r is not None else ("term_structure" if curve_pts else "SOFR")
     key = f"greeks:{ticker}:{r_eff}:{q}:{r_mode}"
     hit = ttl_cache.get_cached(key, GREEKS_CACHE_TTL)
@@ -1304,19 +1525,38 @@ async def get_greeks(
         return hit
     try:
         result = await asyncio.to_thread(build_greeks_surface, ticker, r_eff, q, curve_pts)
+        spot = result["spot"]
         surfaces = {}
         for greek in ["delta", "gamma", "vega", "theta", "vanna", "charm"]:
-            surfaces[greek] = build_interpolated_surface(result["points"], greek)
+            # OTM-only interpolation — same wing convention as terminal heatmap / 3D surface
+            surfaces[greek] = build_interpolated_surface(
+                result["points"], greek, spot=spot, otm_only=True,
+            )
         result["surfaces"] = surfaces
-        result["gex_grid"] = build_gex_grid(result["points"], result["spot"])
-        result["charm_grid"] = build_charm_exposure_grid(result["points"], result["spot"])
+        result["gex_grid"] = build_gex_grid(result["points"], spot)
+        result["charm_grid"] = build_charm_exposure_grid(result["points"], spot)
         result["as_of"] = datetime.now(timezone.utc).isoformat()
         result["source"] = "yfinance"
         result["r"] = r_eff
         result["q"] = q
         result["r_source"] = "query" if r is not None else ("treasury_term + SOFR anchor" if curve_pts else "SOFR")
         result["r_mode"] = r_mode
-        result["charm_note"] = "Charm is per calendar day (Δ delta / day). Exposure grid = charm × OI × 100 × S."
+        result["units"] = {
+            "theta": "per_calendar_day",
+            "vega": "per_1_vol_point",
+            "charm": "per_calendar_day",
+            "vanna": "raw_dV_dS_dsigma",
+            "surface_side": "otm",
+        }
+        result["charm_note"] = (
+            "Charm is per calendar day (Δ delta / day) — same unit as terminal 3D/heatmap. "
+            "Surfaces use OTM quotes (put K<S, call K≥S). Exposure grid = charm × OI × 100 × S."
+        )
+        result["surface_note"] = (
+            "Interpolated OTM greek surface from yfinance chain. "
+            "Terminal 3D uses the same OTM convention on the LIVE desk chain (FMP/yfinance) — "
+            "levels can still differ when r/q, IV solver, or chain source diverge."
+        )
         ttl_cache.set_cached(key, result)
         return result
     except ValueError as e:

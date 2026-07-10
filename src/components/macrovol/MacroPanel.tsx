@@ -4,16 +4,62 @@ import { CHART } from '../../lib/chartTheme';
 import { DataBadge } from './DataBadge';
 import { ApiSources } from './ApiSources';
 
-const INDICATORS = [
-  { key: 'cpi_yoy' as const, label: 'CPI', sublabel: 'YoY %', series: 'CPIAUCSL', good: 'down' as const },
-  { key: 'core_cpi_yoy' as const, label: 'Core CPI', sublabel: 'YoY %', series: 'CPILFESL', good: 'down' as const },
-  { key: 'core_pce_yoy' as const, label: 'Core PCE', sublabel: 'YoY %', series: 'PCEPILFE', good: 'down' as const },
-  { key: 'nfp_mom' as const, label: 'NFP', sublabel: 'MoM (000s)', series: 'PAYEMS', good: 'up' as const },
-  { key: 'unemployment' as const, label: 'Unemployment', sublabel: 'Rate %', series: 'UNRATE', good: 'down' as const },
-  { key: 'retail_sales' as const, label: 'Retail Sales', sublabel: 'Level', series: 'RSAFS', good: 'up' as const },
-  { key: 'housing_starts' as const, label: 'Housing Starts', sublabel: '000s units', series: 'HOUST', good: 'up' as const },
-  { key: 'fed_balance_sheet' as const, label: 'Fed Balance Sheet', sublabel: '$ Billions', series: 'WALCL', good: 'neutral' as const },
+/**
+ * US macro only — Option A relevance-first: US sets the regime.
+ * Nested by theme *within* the US block (inflation → labor → activity → BS).
+ * Non-US macro lives in Global 10Y / Japan / FX sections further down the desk.
+ */
+const GROUPS: {
+  id: string;
+  title: string;
+  why: string;
+  indicators: {
+    key: 'cpi_yoy' | 'core_cpi_yoy' | 'core_pce_yoy' | 'nfp_mom' | 'unemployment' | 'retail_sales' | 'housing_starts' | 'fed_balance_sheet';
+    label: string;
+    sublabel: string;
+    series: string;
+    good: 'down' | 'up' | 'neutral';
+  }[];
+}[] = [
+  {
+    id: 'inflation',
+    title: 'INFLATION',
+    why: 'Price regime drives Fed path and real rates.',
+    indicators: [
+      { key: 'cpi_yoy', label: 'CPI', sublabel: 'YoY %', series: 'CPIAUCSL', good: 'down' },
+      { key: 'core_cpi_yoy', label: 'Core CPI', sublabel: 'YoY %', series: 'CPILFESL', good: 'down' },
+      { key: 'core_pce_yoy', label: 'Core PCE', sublabel: 'YoY %', series: 'PCEPILFE', good: 'down' },
+    ],
+  },
+  {
+    id: 'labor',
+    title: 'LABOR',
+    why: 'Employment dual-mandate input; NFP / UNRATE move front-end pricing.',
+    indicators: [
+      { key: 'nfp_mom', label: 'NFP', sublabel: 'MoM (000s)', series: 'PAYEMS', good: 'up' },
+      { key: 'unemployment', label: 'Unemployment', sublabel: 'Rate %', series: 'UNRATE', good: 'down' },
+    ],
+  },
+  {
+    id: 'activity',
+    title: 'ACTIVITY',
+    why: 'Demand pulse after prices and labor.',
+    indicators: [
+      { key: 'retail_sales', label: 'Retail Sales', sublabel: 'Level', series: 'RSAFS', good: 'up' },
+      { key: 'housing_starts', label: 'Housing Starts', sublabel: '000s units', series: 'HOUST', good: 'up' },
+    ],
+  },
+  {
+    id: 'balance-sheet',
+    title: 'FED BS',
+    why: 'Liquidity stock context for plumbing / RRP (not a growth print).',
+    indicators: [
+      { key: 'fed_balance_sheet', label: 'Fed Balance Sheet', sublabel: '$ Trillions (WALCL / 1e6)', series: 'WALCL', good: 'neutral' },
+    ],
+  },
 ];
+
+const INDICATORS = GROUPS.flatMap((g) => g.indicators);
 
 type CardState = {
   value: number | null;
@@ -36,6 +82,7 @@ export function MacroPanel() {
         if (cancelled) return;
         setMeta({ as_of: summary.as_of, source: summary.source });
 
+        // Fetch order matches display order (inflation → labor → activity → BS).
         const entries = await Promise.all(
           INDICATORS.map(async (ind) => {
             const limit = ind.key === 'fed_balance_sheet' ? 30 : 24;
@@ -123,61 +170,93 @@ export function MacroPanel() {
   }
 
   return (
-    <div className="flex flex-col gap-1 p-1 font-mono">
+    <div className="flex flex-col gap-1.5 p-1 font-mono">
       <div className="flex flex-wrap items-center gap-1.5 px-0.5">
-        <h2 className="text-type-xs font-bold text-foreground">MACRO</h2>
+        <h2 className="text-type-xs font-bold text-foreground">US MACRO</h2>
         <ApiSources apis={['FRED']} />
-        <span className="text-type-2xs text-muted-foreground">CPI · PCE · NFP · labor · housing · Fed BS</span>
+        <span className="text-type-2xs text-muted-foreground">
+          Relevance-first · inflation → labor → activity → Fed BS · live FRED only
+        </span>
       </div>
-      <div className="grid grid-cols-4 gap-1 md:grid-cols-8">
-        {INDICATORS.map((ind) => {
-          const e = cards[ind.key];
-          if (!e || e.value == null) {
-            return (
-              <div key={ind.key} className="rounded border border-border bg-card p-1.5">
-                <div className="text-type-2xs text-muted-foreground">{ind.label}</div>
-                <div className="text-sm font-bold text-foreground">—</div>
-              </div>
-            );
-          }
-          const isWarning = (ind.good === 'down' && e.value > 3) || (ind.good === 'up' && e.value < 0);
-          const arrowColor = e.trend === 'up' ? CHART.series.up : e.trend === 'down' ? CHART.series.down : CHART.series.muted;
-          const barColor = e.trend === 'up' ? CHART.series.up : e.trend === 'down' ? CHART.series.down : CHART.series.info;
-          return (
-            <div
-              key={ind.key}
-              className={`rounded border p-1.5 ${isWarning ? 'border-down/50 bg-down/15' : 'border-border bg-card'}`}
-            >
-              <div className="mb-0.5 text-type-2xs text-muted-foreground">{ind.label}</div>
-              <div className={`flex items-center gap-1 text-sm font-bold ${isWarning ? 'text-down' : 'text-foreground'}`}>
-                {e.value.toFixed(2)}
-                <span className="text-type-xs" style={{ color: arrowColor }}>
-                  {e.trend === 'up' ? '↑' : e.trend === 'down' ? '↓' : '→'}
-                </span>
-              </div>
-              {e.history.length > 0 && (
-                <div className="mt-1 flex h-4 items-end gap-px">
-                  {e.history.slice(-16).map((v, i) => (
-                    <div
-                      key={i}
-                      className="w-1 rounded-t"
-                      style={{
-                        height: `${Math.max((v / e.maxHist) * 100, 4)}%`,
-                        backgroundColor: barColor,
-                        opacity: 0.5 + 0.5 * (i / 16),
-                      }}
-                    />
-                  ))}
+
+      {GROUPS.map((group) => (
+        <div key={group.id} className="space-y-1">
+          <div className="flex flex-wrap items-baseline gap-2 px-0.5">
+            <span className="text-type-2xs font-bold tracking-wide text-muted-foreground">{group.title}</span>
+            <span className="text-type-2xs text-muted-foreground/80">{group.why}</span>
+          </div>
+          <div
+            className={`grid gap-1 ${
+              group.indicators.length >= 3
+                ? 'grid-cols-3'
+                : group.indicators.length === 2
+                  ? 'grid-cols-2 sm:grid-cols-4'
+                  : 'grid-cols-2 sm:grid-cols-4'
+            }`}
+          >
+            {group.indicators.map((ind) => {
+              const e = cards[ind.key];
+              if (!e || e.value == null) {
+                return (
+                  <div key={ind.key} className="rounded border border-border bg-card p-2">
+                    <div className="text-type-xs text-muted-foreground">{ind.label}</div>
+                    <div className="text-base font-bold text-muted-foreground">—</div>
+                    <div className="text-type-2xs text-muted-foreground">{ind.sublabel}</div>
+                  </div>
+                );
+              }
+              const isWarning = (ind.good === 'down' && e.value > 3) || (ind.good === 'up' && e.value < 0);
+              const arrowColor = e.trend === 'up' ? CHART.series.up : e.trend === 'down' ? CHART.series.down : CHART.series.muted;
+              const barColor = e.trend === 'up' ? CHART.series.up : e.trend === 'down' ? CHART.series.down : CHART.series.info;
+              // WALCL from FRED is USD millions → show $ trillions (÷1e6).
+              const display =
+                ind.key === 'fed_balance_sheet'
+                  ? (e.value / 1_000_000).toFixed(2)
+                  : ind.key === 'nfp_mom' || ind.key === 'retail_sales' || ind.key === 'housing_starts'
+                    ? e.value.toFixed(0)
+                    : e.value.toFixed(2);
+              return (
+                <div
+                  key={ind.key}
+                  className={`rounded border p-2 ${isWarning ? 'border-down/50 bg-down/15' : 'border-border bg-card'}`}
+                >
+                  <div className="mb-0.5 text-type-xs text-muted-foreground">{ind.label}</div>
+                  <div className={`flex items-center gap-1 text-base font-bold tabular-nums ${isWarning ? 'text-down' : 'text-foreground'}`}>
+                    {display}
+                    <span className="text-type-xs" style={{ color: arrowColor }}>
+                      {e.trend === 'up' ? '↑' : e.trend === 'down' ? '↓' : '→'}
+                    </span>
+                  </div>
+                  <div className="text-type-2xs text-muted-foreground">
+                    {ind.sublabel}
+                    {e.changeLabel ? ` · ${e.changeLabel}` : ''}
+                  </div>
+                  {e.history.length > 0 && (
+                    <div className="mt-1 flex h-5 items-end gap-px">
+                      {e.history.slice(-16).map((v, i) => (
+                        <div
+                          key={i}
+                          className="w-1 rounded-t"
+                          style={{
+                            height: `${Math.max((v / e.maxHist) * 100, 4)}%`,
+                            backgroundColor: barColor,
+                            opacity: 0.5 + 0.5 * (i / 16),
+                          }}
+                        />
+                      ))}
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+
       <DataBadge
         asOf={meta.as_of}
         source={meta.source || 'FRED'}
-        note="FRED live via MacroVol"
+        note="FRED live via MacroVol · YoY computed from index levels where applicable"
         staleThresholdMin={120}
         className="mt-0.5"
       />

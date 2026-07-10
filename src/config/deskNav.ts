@@ -8,22 +8,37 @@ export type DeskNavItem = {
   apis?: string[];
 };
 
-/** Macros & Rates section anchors (must match element ids). */
+/**
+ * Macros & Rates section anchors (must match element ids).
+ *
+ * Option A — relevance-first (USD regime → US rates → G10 → FX → Japan → risk):
+ *  1. US Macro — reserve currency sets the regime
+ *  2. Money markets — SOFR/EFFR/IORB/OBFR primary prints
+ *  3. ON basis history — visual for the same spreads
+ *  4. Fed plumbing — RRP / reserves
+ *  5. UST data then curves — discounting curve
+ *  6. STIR / NY Fed — path + official prints
+ *  7. Global 10Y → FX → Japan — DM relevance then carry special
+ *  8. Premium / corr — risk book last
+ */
 export const RATES_SECTIONS: DeskNavItem[] = [
-  { id: 'sec-macro', label: 'Macro', short: 'Macro', apis: ['FRED'] },
-  { id: 'sec-snapshot', label: 'Snapshot', short: 'Snap', apis: ['FRED'] },
-  { id: 'sec-curves', label: 'Curves', short: 'Crv', apis: ['FRED', 'yfinance', 'MacroVol'] },
+  { id: 'sec-macro', label: 'US Macro', short: 'Macro', apis: ['FRED'] },
+  { id: 'sec-mm-strip', label: 'Money Mkts', short: 'MM', apis: ['FRED', 'NYFed'] },
+  { id: 'sec-basis', label: 'ON Basis', short: 'Basis', apis: ['FRED', 'MacroVol'] },
+  { id: 'sec-plumbing', label: 'Plumbing', short: 'Plumb', apis: ['FRED'] },
+  { id: 'sec-ust-data', label: 'UST Yields', short: 'UST', apis: ['FRED'] },
+  { id: 'sec-curves', label: 'Curve Charts', short: 'Charts', apis: ['FRED', 'yfinance', 'MacroVol', 'FiscalData'] },
+  { id: 'sec-auctions', label: 'Auctions', short: 'Auct', apis: ['FiscalData'] },
   { id: 'sec-shape', label: 'Shape', short: 'Shape', apis: ['FRED'] },
   { id: 'sec-stir', label: 'STIR', short: 'STIR', apis: ['yfinance', 'NYFed', 'FRED'] },
   { id: 'sec-nyfed', label: 'NY Fed', short: 'NYFed', apis: ['NYFed'] },
-  { id: 'sec-basis', label: 'Basis', short: 'Basis', apis: ['FRED', 'MacroVol'] },
-  { id: 'sec-plumbing', label: 'Plumbing', short: 'Plumb', apis: ['FRED'] },
-  { id: 'sec-curve', label: 'UST table', short: 'UST', apis: ['FRED'] },
+  { id: 'sec-snapshot', label: 'Snapshot', short: 'Snap', apis: ['FRED'] },
   { id: 'sec-premium', label: 'Premium', short: 'Prem', apis: ['FRED', 'MacroVol'] },
-  { id: 'sec-corr', label: 'Corr', short: 'Corr', apis: ['yfinance'] },
-  { id: 'sec-carry', label: 'JPY', short: 'JPY', apis: ['FRED'] },
-  { id: 'sec-asset-corr', label: 'ACorr', short: 'ACorr', apis: ['yfinance'] },
-  { id: 'sec-dv01', label: 'DV01', short: 'DV01', apis: ['FRED', 'MacroVol'] },
+  { id: 'sec-corr', label: 'Rates Corr', short: 'RCorr', apis: ['yfinance'] },
+  { id: 'sec-global', label: 'Global 10Y', short: 'Glbl', apis: ['FRED'] },
+  { id: 'sec-fx', label: 'FX', short: 'FX', apis: ['Frankfurter', 'ECB'] },
+  { id: 'sec-japan', label: 'Japan', short: 'JGB', apis: ['MoF', 'FRED'] },
+  { id: 'sec-asset-corr', label: 'Asset Corr', short: 'ACorr', apis: ['yfinance'] },
 ];
 
 export const VOL_SECTIONS: DeskNavItem[] = [
@@ -33,12 +48,13 @@ export const VOL_SECTIONS: DeskNavItem[] = [
   { id: 'vol-sub-quality', label: 'Surface Fit', short: 'Fit' },
 ];
 
+/** Terminal chain Greeks (heatmap/profile/3D) share OTM + per-day charm units with MacroVol Greeks 1.0. */
 export const GREEKS_SECTIONS: DeskNavItem[] = [
   { id: 'greeks-sub-heatmap', label: 'Heatmap', short: 'Heat' },
   { id: 'greeks-sub-profile', label: 'Profile', short: 'Prof' },
   { id: 'greeks-sub-sensitivity', label: 'Sensitivity', short: 'Sens' },
   { id: 'greeks-sub-byexpiry', label: 'By Expiry', short: 'Exp' },
-  { id: 'greeks-sub-surface3d', label: '3D', short: '3D' },
+  { id: 'greeks-sub-surface3d', label: '3D Surface', short: '3D' },
 ];
 
 export const POSITIONING_SECTIONS: DeskNavItem[] = [
@@ -46,6 +62,7 @@ export const POSITIONING_SECTIONS: DeskNavItem[] = [
   { id: 'pos-sub-dealer', label: 'Dealer', short: 'Deal' },
   { id: 'pos-sub-levels', label: 'Levels', short: 'Lvl' },
   { id: 'pos-sub-edge', label: 'Parity Edge', short: 'Edge' },
+  { id: 'pos-sub-strategy', label: 'Strategy', short: 'Strat' },
 ];
 
 const TAB_LABELS: Record<string, string> = {

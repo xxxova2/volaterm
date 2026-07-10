@@ -30,6 +30,7 @@ import {
   type DualTapeSnap,
 } from '../../hooks/useCryptoDualBooks';
 import { classifyDomainFreshness } from '../../lib/data/freshness';
+import { PerpBasisBoard } from './PerpBasisBoard';
 
 function Stat({
   label, value, color, term, sub,
@@ -166,6 +167,7 @@ function DualCol({
   const kind = d.ok
     ? classifyDomainFreshness(d.asOf, 'crypto')
     : 'down';
+  const chg = d.change24hPct;
   return (
     <button
       type="button"
@@ -181,12 +183,37 @@ function DualCol({
         <span className="text-type-sm font-bold text-foreground">{d.ccy}</span>
         <FreshnessChip kind={kind} />
         {active && <span className="text-type-2xs text-muted-foreground">ACTIVE</span>}
+        {d.spotSource === 'coingecko' && (
+          <span className="text-type-2xs text-amber-500/90" title="Deribit index down — CoinGecko spot">
+            CG
+          </span>
+        )}
       </div>
       <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-type-xs">
         <span>
           <span className="text-muted-foreground">Spot </span>
           <span className="font-semibold tabular-nums text-foreground">
             {d.spot != null ? fmtPrice(d.spot, d.spot > 1000 ? 1 : 2) : '—'}
+          </span>
+        </span>
+        {d.basisBps != null && (
+          <span title="Deribit index − CoinGecko spot (bps of spot)">
+            <span className="text-muted-foreground">Basis </span>
+            <span className={cn(
+              'tabular-nums font-semibold',
+              d.basisBps >= 0 ? 'text-up' : 'text-down',
+            )}>
+              {`${d.basisBps >= 0 ? '+' : ''}${d.basisBps.toFixed(0)}bp`}
+            </span>
+          </span>
+        )}
+        <span>
+          <span className="text-muted-foreground">24h </span>
+          <span className={cn(
+            'tabular-nums font-semibold',
+            chg == null ? 'text-muted-foreground' : chg >= 0 ? 'text-up' : 'text-down',
+          )}>
+            {chg != null ? `${chg >= 0 ? '+' : ''}${chg.toFixed(2)}%` : '—'}
           </span>
         </span>
         <span>
@@ -224,7 +251,7 @@ export function BtcView() {
   const [proxy, setProxy] = useState<CryptoAsset>(
     symbol === 'ETH' || symbol === 'IBIT' || symbol === 'BITO' || symbol === 'MSTR' ? symbol : 'BTC',
   );
-  const { tape: dual, books } = useCryptoDualBooks({ dualCharts: cryptoDualCharts });
+  const { tape: dual, books, gecko } = useCryptoDualBooks({ dualCharts: cryptoDualCharts });
 
   // Auto-switch to a crypto underlier when entering this tab
   useEffect(() => {
@@ -331,7 +358,7 @@ export function BtcView() {
   // Independent desk: paint dual tape / dual charts without waiting on store chain snapshot
   if (!snapshot && !hasTape) {
     return (
-      <Panel title="Crypto Desk" apis={['Deribit']} className="h-full">
+      <Panel title="Crypto Desk" apis={['Deribit', 'CoinGecko']} className="h-full">
         <EmptyState kind="loading" title={UI_COPY.load.crypto} />
       </Panel>
     );
@@ -353,7 +380,9 @@ export function BtcView() {
         <div className="flex flex-col gap-1 rounded border border-border bg-card px-2 py-1.5 sm:flex-row sm:items-stretch">
           <div className="flex shrink-0 flex-col justify-center px-1">
             <DeskChromeLabel className="mr-0">CRYPTO</DeskChromeLabel>
-            <span className="font-mono text-type-2xs text-muted-foreground">BTC · ETH dual tape</span>
+            <span className="font-mono text-type-2xs text-muted-foreground">
+              BTC · ETH dual · Deribit{gecko ? ' + CoinGecko' : ''}
+            </span>
           </div>
           <DualCol d={dual.btc} active={symbol === 'BTC'} onSelect={selectCcy} />
           <DualCol d={dual.eth} active={symbol === 'ETH'} onSelect={selectCcy} />
@@ -388,6 +417,10 @@ export function BtcView() {
             </button>
           </div>
         </div>
+      </SectionErrorBoundary>
+
+      <SectionErrorBoundary name="Perp basis">
+        <PerpBasisBoard className="shrink-0" />
       </SectionErrorBoundary>
 
       {/* Optional dual-pane thin charts (PR-06 full charts path) */}

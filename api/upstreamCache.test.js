@@ -78,6 +78,23 @@ describe('upstreamCache', () => {
     expect(budgetAllows(provider, 10, 0.85)).toBe(false);
   });
 
+  it('monthBudgetAllows tracks monthly usage', async () => {
+    const { monthBudgetAllows, recordMonthBudget, getMonthBudgetUsed } = await import('./upstreamCache.js');
+    const provider = `test-month-${Date.now()}`;
+    expect(getMonthBudgetUsed(provider)).toBe(0);
+    expect(monthBudgetAllows(provider, 10, 0.85)).toBe(true);
+    for (let i = 0; i < 8; i++) recordMonthBudget(provider, 1);
+    expect(monthBudgetAllows(provider, 10, 0.85)).toBe(false);
+  });
+
+  it('cacheStats exposes multi-provider budgets', () => {
+    const s = cacheStats();
+    expect(s.budgets).toBeTruthy();
+    expect(s.budgets.alphavantage).toBeTruthy();
+    expect(s.budgets.tradingview).toBeTruthy();
+    expect(s.budgets.finnhub).toBeTruthy();
+  });
+
   it('exports TTLs used by options and Deribit routes', () => {
     expect(TTL.OPTIONS_MS).toBeGreaterThan(0);
     expect(TTL.DERIBIT_MS).toBeGreaterThan(0);

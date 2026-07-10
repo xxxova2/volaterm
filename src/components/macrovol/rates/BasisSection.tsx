@@ -11,11 +11,14 @@ export function BasisSection({
   basisHist,
   plumbing,
   basisChart,
+  compactData = false,
 }: {
   basis: BasisData;
   basisHist: BasisHistoryData | null;
   plumbing: PlumbingData | null;
   basisChart: { date: string; sofr_effr: number | null; sofr_iorb: number | null; effr_iorb: number | null }[];
+  /** When true, skip redundant spread cards (already on MoneyMarketStrip) — chart-first visual layer. */
+  compactData?: boolean;
 }) {
   const spreads = basis
     ? [
@@ -44,11 +47,15 @@ export function BasisSection({
     <CollapsibleSection
       id="sec-basis"
       className="order-5"
-      title="OVERNIGHT BASIS"
+      title="OVERNIGHT BASIS · HISTORY"
       apis={['FRED', 'MacroVol']}
       defaultOpen
       storageKey="rates.sec.basis"
-      subtitle={basis.regime_note}
+      subtitle={
+        compactData
+          ? 'Visual layer for the money-market spreads above · same series, time path'
+          : basis.regime_note
+      }
       badge={
         <span
           className={`rounded px-1.5 py-0.5 text-type-2xs font-bold ${
@@ -63,20 +70,22 @@ export function BasisSection({
         </span>
       }
     >
-      <div className="mt-3 grid grid-cols-3 gap-2">
-        {spreads.map((s) => (
-          <div
-            key={s.label}
-            className="rounded border border-border px-2 py-1.5 text-type-xs"
-            title={'hint' in s ? s.hint : undefined}
-          >
-            <span className="text-muted-foreground">{s.label}</span>
-            <div className="text-sm font-bold text-foreground">
-              {s.bps != null ? `${Number(s.bps).toFixed(1)} bps` : '—'}
+      {!compactData && (
+        <div className="mt-3 grid grid-cols-3 gap-2">
+          {spreads.map((s) => (
+            <div
+              key={s.label}
+              className="rounded border border-border px-2 py-1.5 text-type-xs"
+              title={'hint' in s ? s.hint : undefined}
+            >
+              <span className="text-muted-foreground">{s.label}</span>
+              <div className="text-sm font-bold text-foreground">
+                {s.bps != null ? `${Number(s.bps).toFixed(1)} bps` : '—'}
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
       {basisHist?.zscore && (
         <div className="mt-2 flex flex-wrap gap-3 text-type-xs">
           <span className="text-muted-foreground">Z-score ({basisHist.zscore.window}d)</span>

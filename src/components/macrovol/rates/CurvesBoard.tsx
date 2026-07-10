@@ -14,6 +14,7 @@ import { ImplyChip } from '../../common/ImplyDrawer';
 import { Spark } from './Spark';
 import { SofrFuturesCurve } from './SofrFuturesCurve';
 import { YieldCurveCompare, type CurveComparePoint } from './YieldCurveCompare';
+import { AuctionCard } from './AuctionCard';
 
 export type CurvePoint = { label: string; yield: number | null };
 export type StirPathPoint = {
@@ -160,11 +161,11 @@ export function CurvesBoard({
     <CollapsibleSection
       id="sec-curves"
       className="order-2"
-      title="CURVES & SPREADS"
-      apis={['FRED', 'yfinance', 'MacroVol']}
+      title="CURVES & SPREADS · CHARTS"
+      apis={['FRED', 'yfinance', 'MacroVol', 'FiscalData']}
       defaultOpen
       storageKey="rates.sec.curves"
-      subtitle="UST today vs last year · 3M SOFR strip (Sep24→Dec30, live vs prior) · every spread history"
+      subtitle="Visual layer for UST data strip above · same tenors / same SOFR path · auction calendar"
       badge={
         <span className="font-mono text-type-2xs text-muted-foreground">
           {compareLive.length} UST dual · {sofrPath.length} SOFR futs · {SPREAD_META.length} spreads
@@ -235,6 +236,9 @@ export function CurvesBoard({
         }
         className="mt-1.5"
       />
+
+      {/* Supply narrative under the UST curve (Phase 2 free API) */}
+      <AuctionCard />
     </CollapsibleSection>
   );
 }

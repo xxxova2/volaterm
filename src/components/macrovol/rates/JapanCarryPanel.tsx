@@ -6,8 +6,11 @@ import { macrovolApi } from '../../../lib/macrovol/api';
 import { DataBadge } from '../DataBadge';
 import { CollapsibleSection } from '../../terminal/CollapsibleSection';
 import { CHART, chartAxisTick, chartGridProps, chartTooltipStyle } from '../../../lib/chartTheme';
+import { JapanYieldCurve } from './JapanYieldCurve';
 
-/** USDJPY + US−JP yield differential — Japan carry context (FRED series). */
+/**
+ * Japan desk block: MoF JGB yield curve (real CMT) + USDJPY / US−JP carry context (FRED).
+ */
 export function JapanCarryPanel() {
   const [state, setState] = useState<{
     usdjpy: number | null;
@@ -96,58 +99,66 @@ export function JapanCarryPanel() {
 
   return (
     <CollapsibleSection
-      id="sec-carry"
-        belowFold
-      title="JAPAN CARRY · USDJPY"
-      apis={['FRED']}
-      defaultOpen={false}
-      storageKey="rates.sec.carry"
-      subtitle="US−JP 10Y yield gap + USDJPY spot — structural carry context, not a rec. Funding / FX vol / BoJ dominate P&L."
+      id="sec-japan"
+      belowFold={false}
+      title="JAPAN · JGB CURVE & CARRY"
+      apis={['MoF', 'FRED']}
+      defaultOpen
+      storageKey="rates.sec.japan"
+      subtitle="MoF JGB CMT curve (real) + US−JP 10Y gap / USDJPY — carry context, not a rec. BoJ / FX vol dominate P&L."
     >
-      {state?.error && (
-        <div className="text-type-xs text-down">{state.error}</div>
-      )}
-      <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-        <div className="rounded border border-border px-2 py-1.5">
-          <div className="text-type-2xs text-muted-foreground">USDJPY</div>
-          <div className="text-sm font-bold tabular-nums">{state?.usdjpy != null ? state.usdjpy.toFixed(2) : '—'}</div>
+      {/* Full JGB yield curve from Ministry of Finance Japan */}
+      <JapanYieldCurve height={260} />
+
+      <div className="mt-2 border-t border-border/60 pt-2">
+        <div className="mb-1 font-mono text-type-2xs font-semibold tracking-wide text-foreground">
+          CARRY CONTEXT · USDJPY / US−JP
         </div>
-        <div className="rounded border border-border px-2 py-1.5">
-          <div className="text-type-2xs text-muted-foreground">US 10Y</div>
-          <div className="text-sm font-bold tabular-nums">{state?.us10 != null ? `${state.us10.toFixed(2)}%` : '—'}</div>
-        </div>
-        <div className="rounded border border-border px-2 py-1.5">
-          <div className="text-type-2xs text-muted-foreground">JP 10Y</div>
-          <div className="text-sm font-bold tabular-nums">{state?.jp10 != null ? `${state.jp10.toFixed(2)}%` : '—'}</div>
-        </div>
-        <div className="rounded border border-border px-2 py-1.5">
-          <div className="text-type-2xs text-muted-foreground">US−JP 10Y</div>
-          <div className={`text-sm font-bold tabular-nums ${spread10 != null && spread10 > 2 ? 'text-warn' : 'text-foreground'}`}>
-            {spread10 != null ? `${spread10 >= 0 ? '+' : ''}${spread10.toFixed(2)} pp` : '—'}
+        {state?.error && (
+          <div className="text-type-xs text-down">{state.error}</div>
+        )}
+        <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+          <div className="rounded border border-border px-2 py-1.5">
+            <div className="text-type-2xs text-muted-foreground">USDJPY</div>
+            <div className="text-sm font-bold tabular-nums">{state?.usdjpy != null ? state.usdjpy.toFixed(2) : '—'}</div>
+          </div>
+          <div className="rounded border border-border px-2 py-1.5">
+            <div className="text-type-2xs text-muted-foreground">US 10Y</div>
+            <div className="text-sm font-bold tabular-nums">{state?.us10 != null ? `${state.us10.toFixed(2)}%` : '—'}</div>
+          </div>
+          <div className="rounded border border-border px-2 py-1.5">
+            <div className="text-type-2xs text-muted-foreground">JP 10Y (OECD/FRED)</div>
+            <div className="text-sm font-bold tabular-nums">{state?.jp10 != null ? `${state.jp10.toFixed(2)}%` : '—'}</div>
+          </div>
+          <div className="rounded border border-border px-2 py-1.5">
+            <div className="text-type-2xs text-muted-foreground">US−JP 10Y</div>
+            <div className={`text-sm font-bold tabular-nums ${spread10 != null && spread10 > 2 ? 'text-warn' : 'text-foreground'}`}>
+              {spread10 != null ? `${spread10 >= 0 ? '+' : ''}${spread10.toFixed(2)} pp` : '—'}
+            </div>
           </div>
         </div>
+        <p className="mt-2 text-type-xs leading-snug text-muted-foreground">{premiumNote}</p>
+        {state?.hist && state.hist.length > 2 && (
+          <div className="mt-3">
+            <div className="mb-1 text-type-xs text-muted-foreground">US−JP 10Y spread history (pp)</div>
+            <ResponsiveContainer width="100%" height={120}>
+              <AreaChart data={state.hist}>
+                <CartesianGrid {...chartGridProps} />
+                <XAxis dataKey="date" tick={{ ...chartAxisTick, fontSize: 8 }} interval="preserveStartEnd" />
+                <YAxis tick={{ ...chartAxisTick, fontSize: 8 }} width={32} />
+                <Tooltip contentStyle={chartTooltipStyle} />
+                <Area type="monotone" dataKey="spread" stroke={CHART.series.warn} fill={CHART.series.warn} fillOpacity={0.15} strokeWidth={1.5} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+        <DataBadge
+          asOf={state?.asOf}
+          source="FRED · DEXJPUS · IRLTLT01JPM156N · DGS10"
+          note="Carry premium ≈ yield differential; P&L often dominated by USDJPY path / vol, not the coupon. JGB curve above is MoF (daily), OECD 10Y is monthly."
+          className="mt-2"
+        />
       </div>
-      <p className="mt-2 text-type-xs leading-snug text-muted-foreground">{premiumNote}</p>
-      {state?.hist && state.hist.length > 2 && (
-        <div className="mt-3">
-          <div className="mb-1 text-type-xs text-muted-foreground">US−JP 10Y spread history (pp)</div>
-          <ResponsiveContainer width="100%" height={120}>
-            <AreaChart data={state.hist}>
-              <CartesianGrid {...chartGridProps} />
-              <XAxis dataKey="date" tick={{ ...chartAxisTick, fontSize: 8 }} interval="preserveStartEnd" />
-              <YAxis tick={{ ...chartAxisTick, fontSize: 8 }} width={32} />
-              <Tooltip contentStyle={chartTooltipStyle} />
-              <Area type="monotone" dataKey="spread" stroke={CHART.series.warn} fill={CHART.series.warn} fillOpacity={0.15} strokeWidth={1.5} />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-      )}
-      <DataBadge
-        asOf={state?.asOf}
-        source="FRED · DEXJPUS · IRLTLT01JPM156N · DGS10"
-        note="Carry premium ≈ yield differential; P&L often dominated by USDJPY path / vol, not the coupon."
-        className="mt-2"
-      />
     </CollapsibleSection>
   );
 }

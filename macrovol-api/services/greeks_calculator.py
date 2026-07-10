@@ -18,7 +18,12 @@ def bs_price(S, K, T, r, q, sigma, option_type="call"):
 
 
 def compute_greeks(S, K, T, r, q, sigma, option_type="call"):
-    """Black-Scholes greeks. Theta and charm are per calendar day (/365)."""
+    """
+    Black-Scholes greeks — market desk convention (aligned with terminal TS computeGreeks):
+      θ, charm → per calendar day (/365)
+      ν       → per 1 volatility point (/100)
+      vanna   → ∂²V/∂S∂σ on raw-σ scale
+    """
     if T <= 0 or sigma <= 0:
         return None
     d1 = (math.log(S / K) + (r - q + 0.5 * sigma ** 2) * T) / (sigma * math.sqrt(T))
@@ -67,6 +72,21 @@ def compute_greeks(S, K, T, r, q, sigma, option_type="call"):
         "vanna": round(vanna, 4) if math.isfinite(vanna) else 0,
         "charm": round(charm, 6) if math.isfinite(charm) else 0,
     }
+
+
+def otm_points(points: list, spot: float) -> list:
+    """Market OTM convention: put wing K < spot, call wing K ≥ spot."""
+    out = []
+    for p in points:
+        K = p.get("K")
+        t = p.get("type")
+        if K is None or t not in ("call", "put"):
+            continue
+        if t == "put" and K < spot:
+            out.append(p)
+        elif t == "call" and K >= spot:
+            out.append(p)
+    return out
 
 
 def compute_iv(market_price, S, K, T, r, q, option_type="call"):
@@ -277,8 +297,25 @@ def build_charm_exposure_grid(points: list, spot: float, n_T: int = 25, n_K: int
     return _interpolate_grid(data, n_T, n_K, decimals=2)
 
 
-def build_interpolated_surface(points: list, greek_key: str, n_T: int = 25, n_K: int = 35) -> dict:
-    data = [(p["T"], p["K"], p[greek_key]) for p in points if p.get(greek_key) is not None]
+def build_interpolated_surface(
+    points: list,
+    greek_key: str,
+    n_T: int = 25,
+    n_K: int = 35,
+    *,
+    spot: float | None = None,
+    otm_only: bool = True,
+) -> dict:
+    """
+    Interpolate a greek surface. Default otm_only=True so call/put deltas are
+    not averaged into nonsense near ATM (matches terminal 3D / heatmap OTM).
+    """
+    src = points
+    if otm_only and spot is not None and spot > 0:
+        filtered = otm_points(points, spot)
+        if len(filtered) >= 10:
+            src = filtered
+    data = [(p["T"], p["K"], p[greek_key]) for p in src if p.get(greek_key) is not None]
     if len(data) < 10:
         return {"T_vals": [], "K_vals": [], "grid": []}
     return _interpolate_grid(data, n_T, n_K, decimals=6)

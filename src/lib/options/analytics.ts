@@ -402,7 +402,8 @@ function flipFromSeries(points: { strike: number; net: number }[]): number | nul
  *   put  GEX = −γ · S² · 0.01 · w · mult
  *   DEX = δ · S · w · mult
  *   VEX = vanna · S · w · mult
- *   Charm = (charm/365) · S · w · mult   ($ delta change per calendar day)
+ *   Charm = charm · S · w · mult   ($ delta change per calendar day)
+ *   where q.charm is already per calendar day (aligned with MacroVol / θ)
  *
  * Matches macrovol-api `greeks_calculator._gex_unit`.
  * weight 'oi' = open interest (default); 'unit' = 1 per listed contract with OI>0.
@@ -443,8 +444,8 @@ export function dealerExposure(
       const gamma = q.gamma ?? 0;
       const delta = q.delta ?? 0;
       const vanna = q.vanna ?? 0;
-      // greeks.charm is dΔ/dT (year); convert to per calendar day
-      const charmDay = (q.charm ?? 0) / 365;
+      // computeGreeks stores charm per calendar day (same unit as θ)
+      const charmDay = q.charm ?? 0;
 
       if (q.type === 'call') {
         acc.callGEX += gamma * gexScale;

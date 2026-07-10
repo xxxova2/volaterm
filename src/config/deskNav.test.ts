@@ -11,11 +11,21 @@ describe('deskNav', () => {
     const secs = sectionsForTab('rates');
     expect(secs.length).toBeGreaterThan(5);
     expect(secs.find((s) => s.id === 'sec-stir')?.apis).toContain('yfinance');
-    expect(secs.find((s) => s.id === 'sec-dv01')?.label).toMatch(/DV01/i);
+    expect(secs.find((s) => s.id === 'sec-japan')?.label).toMatch(/Japan/i);
+    expect(secs.find((s) => s.id === 'sec-fx')?.apis).toContain('Frankfurter');
+    expect(secs.find((s) => s.id === 'sec-auctions')?.apis).toContain('FiscalData');
+    expect(secs.find((s) => s.id === 'sec-global')?.apis).toContain('FRED');
+    expect(secs.find((s) => s.id === 'sec-dv01')).toBeUndefined();
+  });
+
+  it('positioning includes strategy section', () => {
+    const secs = sectionsForTab('positioning');
+    expect(secs.find((s) => s.id === 'pos-sub-strategy')?.label).toMatch(/Strategy/i);
   });
 
   it('finds section meta', () => {
-    expect(findSectionMeta('sec-macro', 'rates')?.label).toBe('Macro');
+    expect(findSectionMeta('sec-macro', 'rates')?.label).toBe('US Macro');
+    expect(findSectionMeta('sec-mm-strip', 'rates')?.label).toMatch(/Money/i);
     expect(findSectionMeta('vol-sub-smile', 'vol')?.label).toBe('Smile');
   });
 });

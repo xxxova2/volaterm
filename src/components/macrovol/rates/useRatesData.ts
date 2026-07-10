@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   macrovolApi,
   type RatesSummary,
@@ -10,7 +10,6 @@ import {
   type BasisHistoryData,
   type StirStripData,
   type CurveShapeData,
-  type Dv01BookData,
 } from '../../../lib/macrovol/api';
 import { perfMark, perfMeasure } from '../../../config/perfBudget';
 
@@ -21,38 +20,12 @@ export function useRatesData() {
   const [basisHist, setBasisHist] = useState<BasisHistoryData | null>(null);
   const [stir, setStir] = useState<StirStripData | null>(null);
   const [shape, setShape] = useState<CurveShapeData | null>(null);
-  const [dv01, setDv01] = useState<Dv01BookData | null>(null);
   const [curve, setCurve] = useState<{ label: string; yield: number | null }[]>([]);
   const [curveMeta, setCurveMeta] = useState<{ as_of?: string; source?: string; note?: string }>({});
   const [curveCompare, setCurveCompare] = useState<RatesCurveHistory | null>(null);
   const [corr, setCorr] = useState<CorrelationData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-
-  const [n2, setN2] = useState(1);
-  const [n5, setN5] = useState(1);
-  const [n10, setN10] = useState(1);
-  const [n30, setN30] = useState(1);
-  const [sh2, setSh2] = useState(0);
-  const [sh5, setSh5] = useState(0);
-  const [sh10, setSh10] = useState(0);
-  const [sh30, setSh30] = useState(0);
-  const [dv01Loading, setDv01Loading] = useState(false);
-
-  const reloadDv01 = useCallback(async () => {
-    setDv01Loading(true);
-    try {
-      const book = await macrovolApi.ratesDv01({
-        n2, n5, n10, n30,
-        shock_2: sh2, shock_5: sh5, shock_10: sh10, shock_30: sh30,
-      });
-      setDv01(book);
-    } catch {
-      /* keep previous */
-    } finally {
-      setDv01Loading(false);
-    }
-  }, [n2, n5, n10, n30, sh2, sh5, sh10, sh30]);
 
   useEffect(() => {
     let cancelled = false;
@@ -66,10 +39,9 @@ export function useRatesData() {
       macrovolApi.ratesBasis(),
       macrovolApi.stirStrip().catch(() => null),
       macrovolApi.ratesShape(60).catch(() => null),
-      macrovolApi.ratesDv01({ n2: 1, n5: 1, n10: 1, n30: 1 }).catch(() => null),
       macrovolApi.ratesBasisHistory(90).catch(() => null),
       macrovolApi.ratesCurveHistory('1Y').catch(() => null),
-    ]).then(([s, p, c, cor, b, st, sh, d, bh, ch]) => {
+    ]).then(([s, p, c, cor, b, st, sh, bh, ch]) => {
       if (cancelled) return;
       perfMark('rates.load.end');
       perfMeasure('rates.load', 'rates.load.start', 'rates.load.end');
@@ -87,7 +59,6 @@ export function useRatesData() {
       if (b.status === 'fulfilled') setBasis(b.value);
       if (st.status === 'fulfilled' && st.value) setStir(st.value as StirStripData);
       if (sh.status === 'fulfilled' && sh.value) setShape(sh.value as CurveShapeData);
-      if (d.status === 'fulfilled' && d.value) setDv01(d.value as Dv01BookData);
       if (bh.status === 'fulfilled' && bh.value) setBasisHist(bh.value as BasisHistoryData);
       if (ch.status === 'fulfilled' && ch.value) setCurveCompare(ch.value as RatesCurveHistory);
       const failed = [s, p, c].every((x) => x.status === 'rejected');
@@ -185,11 +156,8 @@ export function useRatesData() {
   }, [curveCompare, curve]);
 
   return {
-    summary, plumbing, basis, basisHist, stir, shape, dv01, setDv01, curve, curveMeta, curveCompare, curveComparePoints, corr,
+    summary, plumbing, basis, basisHist, stir, shape, curve, curveMeta, curveCompare, curveComparePoints, corr,
     error, loading,
-    n2, setN2, n5, setN5, n10, setN10, n30, setN30,
-    sh2, setSh2, sh5, setSh5, sh10, setSh10, sh30, setSh30,
-    dv01Loading, setDv01Loading, reloadDv01,
     stirChart, shapeHistoryCharts, basisChart,
   };
 }

@@ -273,7 +273,8 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
         if (!liveWarned) {
           liveWarned = true;
           toast.warning('Live chain unavailable', {
-            description: 'No real option chain. Equities: yfinance/FMP · Crypto: BTC/ETH (Deribit).',
+            description:
+              'Equity chain: yfinance (delayed) or FMP if keyed failed/timeout. Crypto: Deribit. No synthetic chain shown.',
           });
         }
       }
@@ -547,7 +548,8 @@ async function fetchLiveSnapshot(symbol: string, force: boolean) {
       if (!liveWarned) {
         liveWarned = true;
         toast.warning('Live chain unavailable', {
-          description: 'No real option chain for this symbol. Equities: yfinance/FMP · Crypto: BTC/ETH.',
+          description:
+            'No live option chain for this symbol. Equities: yfinance (delayed) / FMP if keyed · Crypto: Deribit. Fail-closed.',
         });
       }
       return;
@@ -604,7 +606,7 @@ async function fetchLiveSnapshot(symbol: string, force: boolean) {
       liveWarned = true;
       toast.warning('Live chain unavailable', {
         description:
-          'No real option chain. Equities: yfinance/FMP · Crypto: BTC/ETH (Deribit).',
+          'Equity chain: yfinance (delayed) / FMP if keyed failed. Crypto: Deribit. No synthetic chain shown.',
       });
     }
   } catch (err) {

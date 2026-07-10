@@ -18,11 +18,11 @@ export function SnapshotCards({ summary }: { summary: RatesSummary | null }) {
     <CollapsibleSection
       id="sec-snapshot"
       className="order-1"
-      title="SNAPSHOT"
+      title="SNAPSHOT (detail)"
       apis={['FRED']}
-      defaultOpen
+      defaultOpen={false}
       storageKey="rates.sec.snapshot"
-      subtitle={summary?.spread_note}
+      subtitle={summary?.spread_note || 'Secondary detail — primary prints live in Money Markets + UST strips'}
     >
       <div className="grid grid-cols-3 gap-1 sm:grid-cols-6">
         {cards.map((card) => {

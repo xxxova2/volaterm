@@ -13,6 +13,7 @@ import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
 import { UI_COPY } from '../../config/uiCopy';
 import { DeskChrome } from '../terminal/DeskChrome';
 import { DeskModeBar } from '../terminal/DeskModeBar';
+import { GexLevelsStrip } from '../common/GexLevelsStrip';
 
 const SurfaceView = lazy(() =>
   import('./surface/SurfaceView').then((m) => ({ default: m.SurfaceView })),
@@ -90,6 +91,9 @@ export function VolStructureView() {
           asSectionButtons
         />
       </DeskChrome>
+
+      {/* Sticky dealer levels on vol surface / smile / term (Phase 3) */}
+      <GexLevelsStrip compact showSpark className="bg-card/40" />
 
       <div className="min-h-0 flex-1 term-crossfade" key={sub}>
         {sub === 'surface' && (

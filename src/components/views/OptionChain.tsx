@@ -120,8 +120,28 @@ export function OptionChain() {
     focusRow(index, 'strike');
   }, [focusRow]);
 
+  const chainUsed = useTerminalStore((s) => s.chainUsed);
+  const chainAvailable = useTerminalStore((s) => s.chainAvailable);
+  const loading = useTerminalStore((s) => s.loading);
+
   if (rows.length === 0) {
-    return <div className="flex items-center justify-center h-full text-muted-foreground text-xs font-mono">No chain data</div>;
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-1 px-4 text-center font-mono text-xs text-muted-foreground">
+        <div className="font-semibold text-foreground">
+          {loading ? 'Loading option chain…' : 'No live option chain'}
+        </div>
+        <div className="max-w-md text-type-2xs leading-relaxed">
+          {chainAvailable
+            ? 'Selected expiry has no rows. Pick another expiry.'
+            : 'Equities: yfinance delayed chain (bid/ask/OI/volume via /api/options) or FMP if keyed. BTC/ETH: Deribit. Fail-closed — no synthetic strikes shown as market data.'}
+        </div>
+        {!loading && (
+          <div className="text-type-2xs text-muted-foreground/80">
+            source: {chainUsed || 'none'}
+          </div>
+        )}
+      </div>
+    );
   }
 
   return (

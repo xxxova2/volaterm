@@ -33,14 +33,17 @@ import {
 import { PERF_BUDGET } from '../../config/perfBudget';
 import { DeskChrome } from '../terminal/DeskChrome';
 import { DeskModeBar } from '../terminal/DeskModeBar';
+import { GexLevelsStrip } from '../common/GexLevelsStrip';
+import { StrategyBuilderStrip } from '../common/StrategyBuilderStrip';
 
-type Sub = 'chain' | 'dealer' | 'levels' | 'edge';
+type Sub = 'chain' | 'dealer' | 'levels' | 'edge' | 'strategy';
 
 const SUBS: { id: Sub; label: string; blurb: string; domId: string }[] = [
   { id: 'chain', label: 'Option Chain', blurb: 'Bid/ask · IV · OI', domId: 'pos-sub-chain' },
   { id: 'dealer', label: 'Dealer Stack', blurb: 'GEX · DEX · VEX · Charm', domId: 'pos-sub-dealer' },
   { id: 'levels', label: 'Key Levels', blurb: 'Walls · flip · max pain · move', domId: 'pos-sub-levels' },
   { id: 'edge', label: 'Parity Edge', blurb: 'Put–call residual vs costs', domId: 'pos-sub-edge' },
+  { id: 'strategy', label: 'Strategy', blurb: 'Multi-leg mid + net greeks', domId: 'pos-sub-strategy' },
 ];
 
 const METRICS: { id: DealerMetric; label: string; term: string; unit: string }[] = [
@@ -131,6 +134,8 @@ export function PositioningView() {
   };
   const spotLabel = nearestLabel(snapshot?.spot);
   const flipLabel = metric === 'gex' ? nearestLabel(dealer?.gammaFlip) : null;
+  const callWallLabel = metric === 'gex' ? nearestLabel(dealer?.callWall) : null;
+  const putWallLabel = metric === 'gex' ? nearestLabel(dealer?.putWall) : null;
 
   const chartRef = useRef(chartData);
   chartRef.current = chartData;
@@ -168,7 +173,6 @@ export function PositioningView() {
 
   const tradeableParity = parity.filter((r) => r.tradeable);
 
-  const gexSign = (dealer?.totalGEX ?? 0) >= 0;
   const flip = dealer?.gammaFlip;
   const aboveFlip = flip != null && snapshot ? snapshot.spot >= flip : null;
 
@@ -202,74 +206,30 @@ export function PositioningView() {
         />
       </DeskChrome>
 
-      {/* Fixed GEX flip callout — Phase F */}
-      {snapshot && flip != null && (
-        <div
-          className={cn(
-            'flex flex-wrap items-center gap-x-3 gap-y-0.5 border-b px-3 py-1 font-mono text-type-xs',
-            aboveFlip
-              ? 'border-up/30 bg-up/10 text-up'
-              : 'border-down/30 bg-down/10 text-down',
-          )}
-          role="status"
-          aria-label="Gamma flip regime"
-        >
-          <span className="font-bold tracking-wider">
-            {aboveFlip ? 'ABOVE γ-FLIP' : 'BELOW γ-FLIP'}
-          </span>
-          <span className="text-foreground/90">
-            spot {fmtPrice(snapshot.spot)} · flip {fmtPrice(flip, 0)}
-            {aboveFlip
-              ? ' · dealers long-γ dampen (mean-revert bias)'
-              : ' · dealers short-γ amplify (trend / vol of vol)'}
-          </span>
-          <span className={cn('ml-auto font-semibold', gexSign ? 'text-up' : 'text-down')}>
-            net GEX {dealer ? fmtCompact(dealer.totalGEX) : '—'}
-          </span>
-        </div>
-      )}
+      {/* Sticky GEX walls + regime + session path (Phase 2.5 / 3) */}
+      <GexLevelsStrip className="bg-card/50" showSpark />
 
-      {/* Always-on levels strip */}
+      {/* Extra context under sticky strip */}
       {snapshot && (
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-border bg-card/40 px-3 py-1.5 font-mono text-type-xs">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-border bg-card/30 px-3 py-1 font-mono text-type-2xs text-muted-foreground">
+          {flip != null && (
+            <span className={aboveFlip ? 'text-up' : 'text-down'}>
+              {aboveFlip ? 'ABOVE γ-FLIP' : 'BELOW γ-FLIP'}
+            </span>
+          )}
           <span>
-            <span className="text-muted-foreground">Spot </span>
-            <span className="font-semibold text-foreground">{fmtPrice(snapshot.spot)}</span>
-          </span>
-          <span>
-            <span className="text-muted-foreground">Flip </span>
-            <span className="text-foreground">{dealer?.gammaFlip != null ? fmtPrice(dealer.gammaFlip, 0) : '—'}</span>
-          </span>
-          <span>
-            <span className="text-muted-foreground">Call wall </span>
-            <span className="text-up">{dealer?.callWall != null ? fmtPrice(dealer.callWall, 0) : '—'}</span>
-          </span>
-          <span>
-            <span className="text-muted-foreground">Put wall </span>
-            <span className="text-down">{dealer?.putWall != null ? fmtPrice(dealer.putWall, 0) : '—'}</span>
-          </span>
-          <span>
-            <span className="text-muted-foreground">Max pain </span>
+            Max pain{' '}
             <span className="text-foreground">{maxPain != null ? fmtPrice(maxPain, 0) : '—'}</span>
           </span>
           <span>
-            <span className="text-muted-foreground">GEX </span>
-            <span className={(dealer?.totalGEX ?? 0) >= 0 ? 'text-up' : 'text-down'}>
-              {dealer ? fmtCompact(dealer.totalGEX) : '—'}
-            </span>
-          </span>
-          <span>
-            <span className="text-muted-foreground">Move </span>
-            <span className="text-cyan">{move ? `±${fmtPrice(move.move)}` : '—'}</span>
+            Move <span className="text-cyan">{move ? `±${fmtPrice(move.move)}` : '—'}</span>
           </span>
           {tradeableParity.length > 0 && (
             <span className="text-foreground">
               {tradeableParity.length} parity flag{tradeableParity.length > 1 ? 's' : ''}
             </span>
           )}
-          <span className="ml-auto text-type-2xs text-muted-foreground">
-            {dealer?.unitNote ?? ''}
-          </span>
+          <span className="ml-auto">{dealer?.unitNote ?? ''}</span>
         </div>
       )}
 
@@ -427,6 +387,23 @@ export function PositioningView() {
                               stroke={CHART.series.down}
                               strokeDasharray="3 3"
                               label={{ value: 'Flip', position: 'top', fill: CHART.series.down, fontSize: 9, fontFamily: 'JetBrains Mono' }}
+                            />
+                          )}
+                          {callWallLabel && callWallLabel !== flipLabel && (
+                            <ReferenceLine
+                              x={callWallLabel}
+                              stroke={CHART.series.up}
+                              strokeDasharray="2 4"
+                              label={{ value: 'C-wall', position: 'top', fill: CHART.series.up, fontSize: 8, fontFamily: 'JetBrains Mono' }}
+                            />
+                          )}
+                          {putWallLabel && putWallLabel !== flipLabel && (
+                            <ReferenceLine
+                              x={putWallLabel}
+                              stroke={CHART.series.down}
+                              strokeOpacity={0.7}
+                              strokeDasharray="2 4"
+                              label={{ value: 'P-wall', position: 'top', fill: CHART.series.down, fontSize: 8, fontFamily: 'JetBrains Mono' }}
                             />
                           )}
                           {metric === 'gex' ? (
@@ -713,6 +690,18 @@ export function PositioningView() {
               </div>
             </div>
           </Panel>
+          </SectionErrorBoundary>
+        )}
+
+        {sub === 'strategy' && (
+          <SectionErrorBoundary name="Strategy">
+            <div id="pos-sub-strategy" data-desk-section="1" className="flex h-full flex-col gap-2 p-1">
+              <StrategyBuilderStrip />
+              <p className="px-1 font-mono text-type-2xs text-muted-foreground">
+                Same units as chain greeks (per contract). Source may differ from MacroVol Greeks 1.0 —
+                use MM Desk for path sim / hedge tools.
+              </p>
+            </div>
           </SectionErrorBoundary>
         )}
       </div>

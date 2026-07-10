@@ -127,7 +127,7 @@ describe('OptionChain', () => {
 
     // No-data placeholder is rendered; the diagnostics strip is only mounted
     // when there is at least one row of chain data to display.
-    expect(screen.getByText('No chain data')).toBeInTheDocument();
+    expect(screen.getByText('No live option chain')).toBeInTheDocument();
     expect(screen.queryByTestId('chain-diagnostics')).toBeNull();
   });
 });

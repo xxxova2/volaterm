@@ -12,7 +12,9 @@ describe('UI_COPY', () => {
   });
 
   it('exposes LIVE-only empty strings without demo CTAs', () => {
-    expect(UI_COPY.empty.chain).toMatch(/yfinance\/FMP\/Deribit/);
+    expect(UI_COPY.empty.chain).toMatch(/yfinance/);
+    expect(UI_COPY.empty.chain).toMatch(/Deribit/);
+    expect(UI_COPY.empty.chain).toMatch(/Fail-closed|synthetic/i);
     expect(UI_COPY.empty.macro).toMatch(/8765/);
     expect(UI_COPY.empty.demo).toMatch(/Refresh LIVE feeds/);
     expect(UI_COPY.empty.apiDown).toMatch(/MacroVol/);

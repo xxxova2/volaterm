@@ -94,7 +94,7 @@ describe('GreeksView heatmap selector', () => {
     expect(canvas).toBeInTheDocument();
 
     // All 5 sub-view buttons must be present.
-    for (const label of ['Heatmap', 'Profile', 'Sensitivity', 'By Expiry', '3D (visual)']) {
+    for (const label of ['Heatmap', 'Profile', 'Sensitivity', 'By Expiry', '3D Surface']) {
       expect(screen.getByText(label)).toBeInTheDocument();
     }
   });

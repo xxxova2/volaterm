@@ -20,6 +20,23 @@ vi.mock('../../lib/macrovol/api', () => ({
       unemployment: 4.2,
       nfp_mom: 120,
     })),
+    ratesFx: vi.fn(async () => ({
+      pairs: [
+        { pair: 'USDJPY', rate: 161.5, decimals: 2 },
+        { pair: 'EURUSD', rate: 1.14, decimals: 4 },
+      ],
+      as_of: '2026-07-10T00:00:00Z',
+      source: 'Frankfurter',
+    })),
+    ratesAuctions: vi.fn(async () => ({
+      auctions: [],
+      next: { auction_date: '2026-07-23', security_type: 'Note', security_term: '10-Year' },
+      next_coupon: { auction_date: '2026-07-23', security_type: 'Note', security_term: '10-Year' },
+    })),
+    cryptoSpot: vi.fn(async () => ({
+      assets: [],
+      btc: { id: 'bitcoin', symbol: 'BTC', spot_usd: 64000, change_24h_pct: 1.2 },
+    })),
   },
 }));
 

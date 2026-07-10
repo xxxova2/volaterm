@@ -15,9 +15,17 @@ import {
 import { Explain } from '../common/Explain';
 import { DeskLoading } from '../common/Skeleton';
 import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
+import { GexLevelsStrip } from '../common/GexLevelsStrip';
+import { WatchlistStrip } from '../common/WatchlistStrip';
+import { NewsStrip } from '../common/NewsStrip';
+import { AlertsBar } from '../common/AlertsBar';
+import { StrategyBuilderStrip } from '../common/StrategyBuilderStrip';
+import { DeskLayoutControls } from '../common/DeskLayoutControls';
+import { SharedDeskStrip } from '../common/SharedDeskStrip';
 import { UI_COPY } from '../../config/uiCopy';
 import { macrovolApi, type RatesSummary, type StirStripData, type MacroSummary } from '../../lib/macrovol/api';
 import type { ActiveTab } from '../../lib/options/types';
+import { classifyGammaRegime } from '../../lib/options/gexSession';
 
 export function DashboardView() {
   const snapshot = useTerminalStore(s => s.snapshot);
@@ -173,7 +181,8 @@ export function DashboardView() {
     ? fmpQuote.changePercentage / 100
     : changePct;
 
-  const gexSign = (gex?.totalGEX ?? 0) >= 0 ? 'GEX+' : 'GEX−';
+  const gammaRegime = classifyGammaRegime(gex?.totalGEX, snapshot?.spot, gex?.gammaFlip);
+  const gexSign = gammaRegime.short;
   const ivrLabel = ivData.percentile >= 70 ? 'IV RICH' : ivData.percentile <= 30 ? 'IV CHEAP' : 'IV MID';
   const cuts = stir?.path?.approx_25bp_cuts_priced;
   const fitLabel = arbClean ? 'FIT OK' : 'FIT FLAGS';
@@ -247,9 +256,21 @@ export function DashboardView() {
           {ivrLabel} {ivData.percentile.toFixed(0)}%
         </span>
         <Sep />
-        <span className={(gex?.totalGEX ?? 0) >= 0 ? 'text-up' : 'text-down'}>{gexSign}</span>
+        <span
+          className={
+            gammaRegime.tone === 'up' ? 'text-up'
+              : gammaRegime.tone === 'down' ? 'text-down'
+                : gammaRegime.tone === 'warn' ? 'text-warn'
+                  : 'text-muted-foreground'
+          }
+          title={gammaRegime.note}
+        >
+          {gexSign} · {gammaRegime.label}
+        </span>
         <span className="text-muted-foreground">
           flip {gex?.gammaFlip != null ? fmtPrice(gex.gammaFlip, 0) : '—'}
+          {gex?.callWall != null ? ` · C ${fmtPrice(gex.callWall, 0)}` : ''}
+          {gex?.putWall != null ? ` · P ${fmtPrice(gex.putWall, 0)}` : ''}
         </span>
         <Sep />
         {cuts != null && (
@@ -271,6 +292,8 @@ export function DashboardView() {
         )}
       </div>
 
+      <GexLevelsStrip className="mb-2 rounded border border-border" showSpark />
+
       <FeedHealth
         source={source}
         chainUsed={chainUsed}
@@ -279,6 +302,28 @@ export function DashboardView() {
         hasHistory={(fmpHistory?.length ?? 0) > 0}
         onRetryMacro={() => setMacroRetry((n) => n + 1)}
       />
+
+      <SectionErrorBoundary name="Watchlist">
+        <WatchlistStrip className="mb-2" />
+      </SectionErrorBoundary>
+
+      <SectionErrorBoundary name="Shared free-API desk">
+        <SharedDeskStrip symbol="SPY" className="mb-2" />
+      </SectionErrorBoundary>
+
+      <SectionErrorBoundary name="News events">
+        <NewsStrip symbol={symbol} className="mb-2" />
+      </SectionErrorBoundary>
+
+      <SectionErrorBoundary name="Alerts">
+        <AlertsBar className="mb-2" />
+      </SectionErrorBoundary>
+
+      <SectionErrorBoundary name="Strategy">
+        <StrategyBuilderStrip className="mb-2" />
+      </SectionErrorBoundary>
+
+      <DeskLayoutControls className="mb-2 px-1" />
 
       <SectionErrorBoundary name="Macro strip">
         <RatesStrip

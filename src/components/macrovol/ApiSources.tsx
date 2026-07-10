@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 /** Hover legend for known upstreams (Phase D trust). */
 const API_LEGEND: Record<string, string> = {
   FRED: 'Federal Reserve Economic Data — free key recommended · daily/monthly macro & UST',
+  MoF: 'Ministry of Finance Japan — free public CSV · JGB constant-maturity yields (real, not demo)',
   NYFed: 'NY Fed Markets API — free, no key · SOFR/EFFR ref prints + volume',
   yfinance: 'Yahoo Finance via local proxy — delayed futures/equity · free',
   MacroVol: 'Local MacroVol service (:8765) — STIR path, DV01, plumbing glue',

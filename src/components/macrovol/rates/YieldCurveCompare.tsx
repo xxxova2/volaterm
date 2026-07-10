@@ -31,16 +31,28 @@ export function YieldCurveCompare({
   compareAsOf,
   height = 280,
   source,
+  title = 'UST YIELD CURVE · TODAY VS LAST YEAR',
+  currencyLabel = 'USD',
+  emptyMessage = 'Awaiting FRED UST curve (today vs last year)…',
+  legendLivePrefix = 'UST CMT · Live',
+  legendHistPrefix = 'UST CMT · Yield',
+  sourceHint,
 }: {
   points: CurveComparePoint[];
   todayAsOf?: string | null;
   compareAsOf?: string | null;
   height?: number;
   source?: string | null;
+  title?: string;
+  currencyLabel?: string;
+  emptyMessage?: string;
+  legendLivePrefix?: string;
+  legendHistPrefix?: string;
+  sourceHint?: string;
 }) {
   const rows = points.filter((p) => p.today != null || p.historical != null);
-  const liveLabel = `UST CMT · Live · ${fmtDate(todayAsOf)}`;
-  const histLabel = `UST CMT · Yield · ${fmtDate(compareAsOf)}`;
+  const liveLabel = `${legendLivePrefix} · ${fmtDate(todayAsOf)}`;
+  const histLabel = `${legendHistPrefix} · ${fmtDate(compareAsOf)}`;
 
   if (rows.length < 2) {
     return (
@@ -48,7 +60,7 @@ export function YieldCurveCompare({
         className="flex items-center justify-center rounded border border-border bg-black/90 font-mono text-type-xs text-muted-foreground"
         style={{ height }}
       >
-        Awaiting FRED UST curve (today vs last year)…
+        {emptyMessage}
       </div>
     );
   }
@@ -57,10 +69,11 @@ export function YieldCurveCompare({
     <div className="rounded border border-border bg-black p-1.5">
       <div className="mb-1 flex flex-wrap items-center justify-between gap-1 px-1">
         <span className="font-mono text-type-xs font-semibold tracking-wide text-zinc-100">
-          UST YIELD CURVE · TODAY VS LAST YEAR
+          {title}
         </span>
         <span className="font-mono text-type-2xs text-zinc-500">
-          {source || 'FRED'} · white = live · blue = ~1Y ago · USD %
+          {sourceHint
+            || `${source || 'FRED'} · white = live · blue = ~1Y ago · ${currencyLabel} %`}
         </span>
       </div>
       <ResponsiveContainer width="100%" height={height}>
@@ -81,7 +94,7 @@ export function YieldCurveCompare({
             axisLine={{ stroke: CHART.axisLine }}
             tickLine={{ stroke: CHART.axisLine }}
             label={{
-              value: 'USD',
+              value: currencyLabel,
               angle: -90,
               position: 'insideLeft',
               fill: CHART.axisMuted,

@@ -1,6 +1,7 @@
 /**
  * Shared in-process cache for upstream market data.
- * Many browser users → one cached snapshot; background refresh fills keys.
+ * Many browser users → one cached snapshot; background warmer fills keys.
+ * Railway (or any single Node process) is the sole owner of free-tier API keys.
  */
 
 /** @typedef {{ data: unknown, timestamp: number, source?: string }} CacheEntry */
@@ -9,22 +10,39 @@ const store = new Map();
 /** @type {Map<string, Promise<unknown>>} */
 const inflight = new Map();
 
-/** Per-day call counters for hard-budgeted providers (e.g. FMP free 250/day). */
+/** Per-day call counters for hard-budgeted providers. */
 const dayBudget = new Map();
+/** Per-calendar-month counters (TradingView RapidAPI 150/mo). */
+const monthBudget = new Map();
 
 function dayKey(provider) {
   const d = new Date();
   return `${provider}:${d.getUTCFullYear()}-${d.getUTCMonth() + 1}-${d.getUTCDate()}`;
 }
 
+function monthKey(provider) {
+  const d = new Date();
+  return `${provider}:${d.getUTCFullYear()}-${d.getUTCMonth() + 1}`;
+}
+
 export function getBudgetUsed(provider) {
   return dayBudget.get(dayKey(provider)) || 0;
+}
+
+export function getMonthBudgetUsed(provider) {
+  return monthBudget.get(monthKey(provider)) || 0;
 }
 
 export function recordBudget(provider, n = 1) {
   const k = dayKey(provider);
   dayBudget.set(k, (dayBudget.get(k) || 0) + n);
   return dayBudget.get(k);
+}
+
+export function recordMonthBudget(provider, n = 1) {
+  const k = monthKey(provider);
+  monthBudget.set(k, (monthBudget.get(k) || 0) + n);
+  return monthBudget.get(k);
 }
 
 /**
@@ -34,6 +52,15 @@ export function recordBudget(provider, n = 1) {
  */
 export function budgetAllows(provider, maxPerDay, headroom = 0.85) {
   return getBudgetUsed(provider) < Math.floor(maxPerDay * headroom);
+}
+
+/**
+ * @param {string} provider
+ * @param {number} maxPerMonth
+ * @param {number} [headroom=0.85]
+ */
+export function monthBudgetAllows(provider, maxPerMonth, headroom = 0.85) {
+  return getMonthBudgetUsed(provider) < Math.floor(maxPerMonth * headroom);
 }
 
 /**
@@ -73,6 +100,7 @@ export async function getOrFetch(key, ttlMs, loader, opts = {}) {
   const data = await pending;
   const entry = store.get(key);
   const ageMs = entry ? Date.now() - entry.timestamp : 0;
+  // Fresh network fill (or single-flight join on a miss) reports fromCache: false.
   return { data, fromCache: false, ageMs };
 }
 
@@ -84,6 +112,33 @@ export function setCache(key, data) {
   store.set(key, { data, timestamp: Date.now() });
 }
 
+/** Free-tier caps (documented; use with headroom 0.85). */
+export const FMP_FREE_DAILY = 250;
+export const ALPHA_VANTAGE_FREE_DAILY = 25;
+/** Finnhub free is high per-minute; we still track daily for transparency. */
+export const FINNHUB_SOFT_DAILY = 5_000;
+/** RapidAPI TradingView free/hobby — user plan: 150/month. */
+export const TRADINGVIEW_FREE_MONTHLY = 150;
+
+/** TTLs aligned to provider limits (shared board refresh cadence). */
+export const TTL = {
+  OPTIONS_MS: 3 * 60_000,       // yfinance — 3 min shared chain
+  OPTIONS_PROBE_MS: 60_000,
+  DERIBIT_MS: 45_000,           // public market data
+  FMP_QUOTE_MS: 5 * 60_000,     // free 250/day → ~every 5+ min
+  FMP_HEAVY_MS: 30 * 60_000,    // history / rare endpoints
+  BRIEFING_MS: 5 * 60_000,      // rates + macro snapshot for boot UI
+  YF_ENRICH_MS: 10 * 60_000,
+  FINNHUB_NEWS_MS: 5 * 60_000,  // company/market news
+  FINNHUB_EARNINGS_MS: 30 * 60_000,
+  FINNHUB_QUOTE_MS: 2 * 60_000, // SPY quote — shared 2 min
+  /** Alpha Vantage ~25/day → ~every 90–120 min for a few symbols */
+  ALPHA_VANTAGE_MS: 90 * 60_000,
+  /** TradingView RapidAPI ~5/day usable → multi-hour TTL */
+  TRADINGVIEW_MS: 6 * 60 * 60_000,
+  DESK_STATUS_MS: 30_000,
+};
+
 export function cacheStats() {
   const keys = [];
   const now = Date.now();
@@ -94,20 +149,20 @@ export function cacheStats() {
     entries: keys.length,
     keys,
     budgets: {
-      fmp: getBudgetUsed('fmp'),
+      fmp: { used: getBudgetUsed('fmp'), capDaily: FMP_FREE_DAILY },
+      alphavantage: {
+        used: getBudgetUsed('alphavantage'),
+        capDaily: ALPHA_VANTAGE_FREE_DAILY,
+      },
+      finnhub: {
+        used: getBudgetUsed('finnhub'),
+        capDailySoft: FINNHUB_SOFT_DAILY,
+      },
+      tradingview: {
+        usedMonth: getMonthBudgetUsed('tradingview'),
+        capMonthly: TRADINGVIEW_FREE_MONTHLY,
+        usedToday: getBudgetUsed('tradingview'),
+      },
     },
   };
 }
-
-/** TTLs aligned to provider limits (see rate-limit research). */
-export const TTL = {
-  OPTIONS_MS: 3 * 60_000,       // yfinance — 3 min shared chain
-  OPTIONS_PROBE_MS: 60_000,
-  DERIBIT_MS: 45_000,           // public market data
-  FMP_QUOTE_MS: 5 * 60_000,     // free 250/day → ~every 5+ min
-  FMP_HEAVY_MS: 30 * 60_000,    // history / rare endpoints
-  BRIEFING_MS: 5 * 60_000,      // rates + macro snapshot for boot UI
-  YF_ENRICH_MS: 10 * 60_000,
-};
-
-export const FMP_FREE_DAILY = 250;

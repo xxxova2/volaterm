@@ -44,19 +44,6 @@ export const macrovolApi = {
     fetchJson<RatesCurveHistory>(`${BASE}/rates/curve-history?periods=${encodeURIComponent(periods)}`),
   ratesShape: (history = 60) =>
     fetchJson<CurveShapeData>(`${BASE}/rates/shape?history=${history}`),
-  ratesDv01: (params?: {
-    n2?: number; n5?: number; n10?: number; n30?: number;
-    shock_2?: number; shock_5?: number; shock_10?: number; shock_30?: number;
-  }) => {
-    const q = new URLSearchParams();
-    if (params) {
-      Object.entries(params).forEach(([k, v]) => {
-        if (v != null) q.set(k, String(v));
-      });
-    }
-    const qs = q.toString();
-    return fetchJson<Dv01BookData>(`${BASE}/rates/dv01${qs ? `?${qs}` : ''}`);
-  },
   ratesTermStructure: (T = 0.25) =>
     fetchJson<TermStructureData>(`${BASE}/rates/term-structure?T=${T}`),
   correlations: (window = 30, period = '1y') =>
@@ -67,6 +54,30 @@ export const macrovolApi = {
     fetchJson<SeriesData>(`${BASE}/macro/series/${encodeURIComponent(id)}?limit=${limit}`),
 
   stirStrip: () => fetchJson<StirStripData>(`${BASE}/stir/strip`),
+
+  /** Japanese Government Bond curve from MoF Japan (real yields, not demo). */
+  ratesJgbCurve: (compareDays = 365) =>
+    fetchJson<JgbCurveData>(`${BASE}/rates/jgb-curve?compare_days=${compareDays}`),
+
+  /** Multi-pair FX via Frankfurter / ECB (no key). */
+  ratesFx: () => fetchJson<FxBoardData>(`${BASE}/rates/fx`),
+
+  /** Upcoming U.S. Treasury auctions via FiscalData (no key). */
+  ratesAuctions: (limit = 20) =>
+    fetchJson<TreasuryAuctionsData>(`${BASE}/rates/auctions?limit=${limit}`),
+
+  /** BTC/ETH spot from CoinGecko — Deribit backup (no key). */
+  cryptoSpot: () => fetchJson<CryptoSpotData>(`${BASE}/crypto/spot`),
+
+  /** US/DE/UK/FR/JP 10Y sovereign yields (FRED). */
+  ratesGlobalYields: () => fetchJson<GlobalYieldsData>(`${BASE}/rates/global-yields`),
+
+  /** BTC/ETH linear perp mark−index basis (Bybit public). */
+  cryptoPerpBasis: () => fetchJson<PerpBasisData>(`${BASE}/crypto/perp-basis`),
+
+  /** SEC EDGAR recent filings for equity ticker. */
+  secContext: (symbol: string, limit = 8) =>
+    fetchJson<SecContextData>(`${BASE}/sec/context/${encodeURIComponent(symbol)}?limit=${limit}`),
 
   /** Omit r to let MacroVol API default to live SOFR. */
   surface: (ticker: string, r?: number | null, q = 0.0) => {
@@ -139,6 +150,160 @@ export interface RatesCurveHistory {
   as_of?: string;
   source?: string;
   note?: string;
+}
+
+/** FX multi-pair board (Frankfurter / ECB). */
+export interface FxPair {
+  pair: string;
+  rate: number | null;
+  decimals?: number;
+  note?: string;
+}
+
+export interface FxBoardData {
+  base?: string;
+  pairs: FxPair[];
+  raw_usd_quotes?: Record<string, number>;
+  ecb_date?: string | null;
+  as_of?: string;
+  source?: string;
+  note?: string;
+  error?: string;
+}
+
+/** Upcoming Treasury auctions (FiscalData). */
+export interface TreasuryAuctionRow {
+  auction_date?: string | null;
+  issue_date?: string | null;
+  announce_date?: string | null;
+  security_type?: string | null;
+  security_term?: string | null;
+  cusip?: string | null;
+  reopening?: string | null;
+  offering_amt?: number | null;
+  offering_label?: string | null;
+}
+
+export interface TreasuryAuctionsData {
+  auctions: TreasuryAuctionRow[];
+  next?: TreasuryAuctionRow | null;
+  next_coupon?: TreasuryAuctionRow | null;
+  count?: number;
+  total_count?: number;
+  total_offering_usd?: number | null;
+  total_offering_label?: string | null;
+  filter_from?: string;
+  as_of?: string;
+  source?: string;
+  note?: string;
+  error?: string;
+}
+
+/** CoinGecko BTC/ETH spot backup. */
+export interface CryptoSpotAsset {
+  id: string;
+  symbol: 'BTC' | 'ETH' | string;
+  spot_usd: number;
+  change_24h_pct?: number | null;
+  volume_24h_usd?: number | null;
+  market_cap_usd?: number | null;
+  last_updated_at?: number | null;
+}
+
+export interface CryptoSpotData {
+  assets: CryptoSpotAsset[];
+  btc?: CryptoSpotAsset | null;
+  eth?: CryptoSpotAsset | null;
+  as_of?: string;
+  as_of_ms?: number | null;
+  source?: string;
+  note?: string;
+  error?: string;
+}
+
+export interface GlobalYieldPoint {
+  code: string;
+  label: string;
+  series_id?: string;
+  yield_pct: number | null;
+  obs_date?: string | null;
+  source?: string;
+}
+
+export interface GlobalYieldsData {
+  points: GlobalYieldPoint[];
+  spreads_vs_us_bps?: Array<{ pair: string; bps: number; foreign: string }>;
+  count_live?: number;
+  as_of?: string;
+  source?: string;
+  note?: string;
+  error?: string | null;
+}
+
+export interface PerpBasisRow {
+  symbol: string;
+  ccy: string;
+  mark: number | null;
+  index: number | null;
+  last?: number | null;
+  funding_rate?: number | null;
+  funding_ann_approx?: number | null;
+  basis_bps: number | null;
+  open_interest?: number | null;
+  error?: string;
+}
+
+export interface PerpBasisData {
+  rows: PerpBasisRow[];
+  btc?: PerpBasisRow | null;
+  eth?: PerpBasisRow | null;
+  count_live?: number;
+  as_of?: string;
+  source?: string;
+  note?: string;
+  error?: string | null;
+}
+
+export interface SecFiling {
+  form: string;
+  filing_date: string;
+  description?: string | null;
+  url?: string | null;
+}
+
+export interface SecContextData {
+  symbol: string;
+  cik?: string | null;
+  name?: string | null;
+  filings: SecFiling[];
+  latest?: SecFiling | null;
+  as_of?: string;
+  source?: string;
+  note?: string;
+  error?: string | null;
+}
+
+/** Japanese Government Bond CMT curve (MoF Japan) — live vs ~1Y. */
+export interface JgbCurveData {
+  labels: string[];
+  today: (number | null)[];
+  historical: (number | null)[];
+  points?: Array<{
+    label: string;
+    today: number | null;
+    historical: number | null;
+    delta_bps?: number | null;
+  }>;
+  today_as_of?: string | null;
+  compare_as_of?: string | null;
+  compare_label?: string;
+  periods?: string;
+  as_of?: string;
+  source?: string;
+  note?: string;
+  currency?: string;
+  unit?: string;
+  error?: string;
 }
 
 export interface PlumbingData {
@@ -400,35 +565,6 @@ export interface CurveShapeData {
   source?: string;
 }
 
-export interface Dv01Row {
-  tenor: string;
-  years: number;
-  yield_pct: number | null;
-  face_mm: number;
-  mac_duration?: number | null;
-  mod_duration?: number | null;
-  dv01_usd: number | null;
-  dv01_per_mm?: number | null;
-}
-
-export interface Dv01BookData {
-  rows: Dv01Row[];
-  parallel_dv01_usd: number;
-  key_rate_dv01_usd: Record<string, number | null>;
-  shock_bp?: number;
-  pnl_if_parallel_up_1bp_usd?: number;
-  pnl_if_parallel_down_1bp_usd?: number;
-  note?: string;
-  scenario?: {
-    total_pnl_usd: number;
-    details: Array<{ tenor: string; shock_bp: number; dv01_usd?: number; pnl_usd: number | null }>;
-    note?: string;
-  };
-  curve_yields?: Record<string, number | null>;
-  as_of?: string;
-  source?: string;
-}
-
 export interface TermStructureData {
   T: number;
   r: number;
@@ -508,7 +644,16 @@ export interface GreeksData {
   r?: number;
   q?: number;
   r_source?: string;
+  r_mode?: string;
+  units?: {
+    theta?: string;
+    vega?: string;
+    charm?: string;
+    vanna?: string;
+    surface_side?: string;
+  };
   charm_note?: string;
+  surface_note?: string;
   as_of?: string;
   source?: string;
   error?: string;

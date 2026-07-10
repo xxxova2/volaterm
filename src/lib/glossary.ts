@@ -41,7 +41,7 @@ export const GLOSSARY: Record<string, GlossaryEntry> = {
   },
   charm: {
     title: 'Charm',
-    body: 'How delta changes as time passes (delta decay overnight). Traders watch it into earnings and expires.',
+    body: 'How delta changes as time passes (delta decay). Shown per calendar day — same unit family as theta. Terminal 3D surface and Greeks 1.0 both use this convention.',
   },
   speed: {
     title: 'Speed',

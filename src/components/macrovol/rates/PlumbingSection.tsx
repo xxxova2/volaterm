@@ -34,12 +34,13 @@ export function PlumbingSection({ plumbing }: { plumbing: PlumbingData | null })
       apis={['FRED']}
       defaultOpen
       storageKey="rates.sec.plumbing"
+      subtitle="Data (IORB/SOFR/EFFR/RRP) then RRP volume & reserve balance charts · RRP rate is derived (IORB−10bp) when not overridden"
     >
       <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
         {rateCards.map((c) => (
           <div key={c.key} className="rounded-lg border border-border bg-background/50 p-3">
-            <div className="text-type-xs text-muted-foreground">{c.label}</div>
-            <div className="text-xl font-bold text-foreground">
+            <div className="text-type-xs font-semibold text-muted-foreground">{c.label}</div>
+            <div className="text-2xl font-bold tabular-nums text-foreground">
               {c.val != null ? `${c.val.toFixed(2)}%` : '—'}
             </div>
           </div>

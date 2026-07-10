@@ -3,6 +3,7 @@ import cors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
 import rateLimit from '@fastify/rate-limit';
 import { execFile } from 'child_process';
+import { readFileSync, existsSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { FMP_BASE, FMP_ALLOWED_ENDPOINTS, isFmpEndpointAllowed, buildSpyHistoryAsync, proxyFmp } from './api/_shared.js';
@@ -14,8 +15,44 @@ import {
   budgetAllows,
   recordBudget,
   getBudgetUsed,
+  getMonthBudgetUsed,
   FMP_FREE_DAILY,
+  ALPHA_VANTAGE_FREE_DAILY,
+  TRADINGVIEW_FREE_MONTHLY,
+  FINNHUB_SOFT_DAILY,
 } from './api/upstreamCache.js';
+import {
+  alphaVantageGlobalQuote,
+  alphaVantageDaily,
+  alphaVantageOverview,
+  tradingViewSnapshot,
+  providerKeysStatus,
+} from './api/deskFeeds.js';
+
+// Load root .env into process.env (no dotenv dependency; keys never shipped to browser).
+function loadEnvFile(filePath) {
+  try {
+    if (!existsSync(filePath)) return;
+    const text = readFileSync(filePath, 'utf8');
+    for (const line of text.split('\n')) {
+      const t = line.trim();
+      if (!t || t.startsWith('#')) continue;
+      const eq = t.indexOf('=');
+      if (eq <= 0) continue;
+      const k = t.slice(0, eq).trim();
+      let v = t.slice(eq + 1).trim();
+      if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
+        v = v.slice(1, -1);
+      }
+      if (k && process.env[k] == null) process.env[k] = v;
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+loadEnvFile(join(__dirname, '.env'));
 
 // The FMP key must come from the environment — no hardcoded fallback.
 // If absent, equity enrichment falls back to yfinance only (never synthetic market data).
@@ -24,8 +61,23 @@ if (!FMP_API_KEY) {
   console.warn('WARN: FMP_API_KEY not set — FMP enrichment endpoints will return 503.');
 }
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
+// Finnhub free-tier key (news + earnings + quote). Server-only; fail-closed if missing.
+const FINNHUB_API_KEY = process.env.FINNHUB_API_KEY || null;
+if (!FINNHUB_API_KEY) {
+  console.warn('WARN: FINNHUB_API_KEY not set — Finnhub news/earnings/quote will return 503.');
+}
+if (!(process.env.ALPHA_VANTAGE_API_KEY || process.env.ALPHAVANTAGE_API_KEY)) {
+  console.warn('WARN: ALPHA_VANTAGE_API_KEY not set — Alpha Vantage desk feeds disabled.');
+}
+if (!(process.env.RAPIDAPI_KEY || process.env.X_RAPIDAPI_KEY)) {
+  console.warn('WARN: RAPIDAPI_KEY not set — TradingView RapidAPI desk feeds disabled.');
+}
+
 const PORT = parseInt(process.env.PORT || '3001', 10);
+const FINNHUB_BASE = 'https://finnhub.io/api/v1';
+/** Desk symbols always kept warm for all visitors (shared board). */
+const DESK_WARM_SYMBOLS = ['SPY'];
+const DESK_WARM_CRYPTO = ['BTC'];
 
 // Restrict CORS to an explicit allowlist (comma-separated CORS_ORIGIN env var).
 // Defaults to localhost dev origins. Production also allows Railway public host
@@ -100,14 +152,33 @@ function validateSymbol(symbol) {
   return sanitized;
 }
 
-fastify.get('/api/health', async () => ({ status: 'ok', timestamp: Date.now() }));
+fastify.get('/api/health', async () => ({
+  status: 'ok',
+  timestamp: Date.now(),
+  keys: providerKeysStatus(),
+}));
 
-/** Shared cache stats (HIT ages + FMP daily budget). */
+/** Shared cache stats + free-tier budgets (all visitors share one board). */
 fastify.get('/api/cache/status', async () => ({
   status: 'ok',
   ...cacheStats(),
   fmpDailyBudget: { used: getBudgetUsed('fmp'), cap: FMP_FREE_DAILY },
+  alphavantageDailyBudget: {
+    used: getBudgetUsed('alphavantage'),
+    cap: ALPHA_VANTAGE_FREE_DAILY,
+  },
+  finnhubDailyBudget: {
+    used: getBudgetUsed('finnhub'),
+    capSoft: FINNHUB_SOFT_DAILY,
+  },
+  tradingviewMonthlyBudget: {
+    used: getMonthBudgetUsed('tradingview'),
+    cap: TRADINGVIEW_FREE_MONTHLY,
+  },
+  keys: providerKeysStatus(),
+  desk: { equities: DESK_WARM_SYMBOLS, crypto: DESK_WARM_CRYPTO },
   ttlsMs: TTL,
+  note: 'Shared desk: browsers never call Finnhub/AV/TV directly. Railway Node owns keys + refresh.',
 }));
 
 /**
@@ -720,6 +791,429 @@ fastify.get('/api/fmp/stable/*', async (request, reply) => {
   }
 });
 
+// ── Finnhub (news + earnings calendar) ─────────────────────────
+// Key stays server-side. Fail-closed empty arrays when missing/errors.
+
+function finnhubDate(d = new Date()) {
+  return d.toISOString().slice(0, 10);
+}
+
+async function finnhubGet(path, params = {}) {
+  if (!FINNHUB_API_KEY) {
+    const err = new Error('FINNHUB_API_KEY not configured');
+    err.code = 'no_api_key';
+    throw err;
+  }
+  const u = new URL(`${FINNHUB_BASE}${path}`);
+  for (const [k, v] of Object.entries(params)) {
+    if (v != null && v !== '') u.searchParams.set(k, String(v));
+  }
+  u.searchParams.set('token', FINNHUB_API_KEY);
+  const res = await fetch(u.toString(), {
+    headers: { Accept: 'application/json' },
+    signal: AbortSignal.timeout(15_000),
+  });
+  recordBudget('finnhub', 1);
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`Finnhub HTTP ${res.status}: ${body.slice(0, 200)}`);
+  }
+  return res.json();
+}
+
+/** Company + general news strip for Home. */
+fastify.get('/api/finnhub/news', async (request, reply) => {
+  const raw = String(request.query.symbol || 'SPY').toUpperCase();
+  const symbol = validateSymbol(raw) || 'SPY';
+  const limit = Math.min(30, Math.max(1, parseInt(String(request.query.limit || '12'), 10) || 12));
+  const cacheKey = `finnhub:news:${symbol}:${limit}`;
+  try {
+    const { data, fromCache, ageMs } = await getOrFetch(
+      cacheKey,
+      TTL.FINNHUB_NEWS_MS,
+      async () => {
+        const to = new Date();
+        const from = new Date(to.getTime() - 14 * 24 * 3600 * 1000);
+        let company = [];
+        try {
+          const rows = await finnhubGet('/company-news', {
+            symbol,
+            from: finnhubDate(from),
+            to: finnhubDate(to),
+          });
+          company = Array.isArray(rows) ? rows : [];
+        } catch {
+          company = [];
+        }
+        let general = [];
+        try {
+          const rows = await finnhubGet('/news', { category: 'general' });
+          general = Array.isArray(rows) ? rows : [];
+        } catch {
+          general = [];
+        }
+        const mapItem = (n, related) => ({
+          id: n.id ?? `${n.datetime}-${n.headline}`,
+          datetime: n.datetime ?? null,
+          headline: n.headline || '',
+          summary: n.summary || '',
+          source: n.source || '',
+          url: n.url || null,
+          related: related || n.related || '',
+          category: n.category || '',
+        });
+        const items = [
+          ...company.slice(0, limit).map((n) => mapItem(n, symbol)),
+          ...general.slice(0, Math.max(0, limit - Math.min(company.length, limit))).map((n) => mapItem(n, 'MARKET')),
+        ]
+          .filter((n) => n.headline)
+          .slice(0, limit);
+        return {
+          symbol,
+          items,
+          count: items.length,
+          as_of: new Date().toISOString(),
+          source: 'Finnhub',
+          note: items.length
+            ? 'Company + general headlines. Not trade advice.'
+            : 'No headlines returned (rate limit or empty).',
+          error: items.length ? null : 'empty',
+        };
+      },
+      { allowStaleOnError: true },
+    );
+    return { ...data, fromCache, ageMs };
+  } catch (err) {
+    if (err?.code === 'no_api_key' || String(err?.message || '').includes('not configured')) {
+      reply.code(503);
+      return {
+        symbol,
+        items: [],
+        error: 'no_api_key',
+        source: 'Finnhub',
+        note: 'Set FINNHUB_API_KEY in server .env. Fail-closed — no demo headlines.',
+      };
+    }
+    reply.code(502);
+    return {
+      symbol,
+      items: [],
+      error: err.message,
+      source: 'Finnhub',
+      note: 'Finnhub news failed. No synthetic headlines.',
+    };
+  }
+});
+
+/** Next earnings window for active symbol. */
+fastify.get('/api/finnhub/earnings', async (request, reply) => {
+  const raw = String(request.query.symbol || 'SPY').toUpperCase();
+  const symbol = validateSymbol(raw) || 'SPY';
+  const cacheKey = `finnhub:earnings:${symbol}`;
+  try {
+    const { data, fromCache, ageMs } = await getOrFetch(
+      cacheKey,
+      TTL.FINNHUB_EARNINGS_MS,
+      async () => {
+        const from = new Date();
+        const to = new Date(from.getTime() + 120 * 24 * 3600 * 1000);
+        let rows = [];
+        try {
+          const payload = await finnhubGet('/calendar/earnings', {
+            symbol,
+            from: finnhubDate(from),
+            to: finnhubDate(to),
+          });
+          rows = Array.isArray(payload?.earningsCalendar) ? payload.earningsCalendar : [];
+        } catch {
+          // Fallback: historical earnings estimate endpoint
+          try {
+            const hist = await finnhubGet('/stock/earnings', { symbol, limit: 4 });
+            rows = Array.isArray(hist) ? hist.map((h) => ({
+              symbol,
+              date: h.period || null,
+              epsActual: h.actual,
+              epsEstimate: h.estimate,
+              hour: null,
+              quarter: h.quarter,
+              year: h.year,
+            })) : [];
+          } catch {
+            rows = [];
+          }
+        }
+        const normalized = rows.map((r) => ({
+          symbol: r.symbol || symbol,
+          date: r.date || null,
+          hour: r.hour || null,
+          eps_estimate: r.epsEstimate ?? r.eps_estimate ?? null,
+          eps_actual: r.epsActual ?? r.eps_actual ?? null,
+          revenue_estimate: r.revenueEstimate ?? null,
+          revenue_actual: r.revenueActual ?? null,
+          quarter: r.quarter ?? null,
+          year: r.year ?? null,
+        }));
+        // Prefer upcoming (date >= today)
+        const today = finnhubDate();
+        const upcoming = normalized
+          .filter((r) => r.date && r.date >= today)
+          .sort((a, b) => String(a.date).localeCompare(String(b.date)));
+        const next = upcoming[0] || normalized[0] || null;
+        return {
+          symbol,
+          next,
+          upcoming: upcoming.slice(0, 6),
+          recent: normalized.slice(0, 6),
+          as_of: new Date().toISOString(),
+          source: 'Finnhub',
+          note: next
+            ? 'Next report from Finnhub earnings calendar (when available).'
+            : 'No earnings date returned for symbol.',
+          error: next ? null : 'empty',
+        };
+      },
+      { allowStaleOnError: true },
+    );
+    return { ...data, fromCache, ageMs };
+  } catch (err) {
+    if (err?.code === 'no_api_key' || String(err?.message || '').includes('not configured')) {
+      reply.code(503);
+      return {
+        symbol,
+        next: null,
+        upcoming: [],
+        error: 'no_api_key',
+        source: 'Finnhub',
+        note: 'Set FINNHUB_API_KEY in server .env.',
+      };
+    }
+    reply.code(502);
+    return {
+      symbol,
+      next: null,
+      upcoming: [],
+      error: err.message,
+      source: 'Finnhub',
+      note: 'Finnhub earnings failed. No synthetic date.',
+    };
+  }
+});
+
+// ── Finnhub quote (shared desk tape) ───────────────────────────
+fastify.get('/api/finnhub/quote', async (request, reply) => {
+  const raw = String(request.query.symbol || 'SPY').toUpperCase();
+  const symbol = validateSymbol(raw) || 'SPY';
+  const cacheKey = `finnhub:quote:${symbol}`;
+  try {
+    const { data, fromCache, ageMs } = await getOrFetch(
+      cacheKey,
+      TTL.FINNHUB_QUOTE_MS,
+      async () => {
+        const q = await finnhubGet('/quote', { symbol });
+        const price = Number(q?.c);
+        return {
+          symbol,
+          price: price > 0 ? price : null,
+          change: q?.d != null ? Number(q.d) : null,
+          change_pct: q?.dp != null ? Number(q.dp) : null,
+          high: q?.h != null ? Number(q.h) : null,
+          low: q?.l != null ? Number(q.l) : null,
+          open: q?.o != null ? Number(q.o) : null,
+          previous_close: q?.pc != null ? Number(q.pc) : null,
+          as_of: new Date().toISOString(),
+          source: 'Finnhub',
+          error: price > 0 ? null : 'empty',
+          note: 'Shared desk quote · server budget · not per-visitor.',
+        };
+      },
+      { allowStaleOnError: true },
+    );
+    return { ...data, fromCache, ageMs };
+  } catch (err) {
+    if (err?.code === 'no_api_key' || String(err?.message || '').includes('not configured')) {
+      reply.code(503);
+      return {
+        symbol,
+        price: null,
+        error: 'no_api_key',
+        source: 'Finnhub',
+        note: 'Set FINNHUB_API_KEY. Fail-closed.',
+      };
+    }
+    reply.code(502);
+    return {
+      symbol,
+      price: null,
+      error: err.message,
+      source: 'Finnhub',
+      note: 'Finnhub quote failed. No synthetic price.',
+    };
+  }
+});
+
+// ── Alpha Vantage (shared, daily budget ~25) ───────────────────
+fastify.get('/api/alphavantage/quote', async (request, reply) => {
+  const raw = String(request.query.symbol || 'SPY').toUpperCase();
+  const symbol = validateSymbol(raw) || 'SPY';
+  try {
+    const { data, fromCache, ageMs } = await getOrFetch(
+      `av:quote:${symbol}`,
+      TTL.ALPHA_VANTAGE_MS,
+      () => alphaVantageGlobalQuote(symbol),
+      { allowStaleOnError: true },
+    );
+    return { ...data, fromCache, ageMs };
+  } catch (err) {
+    const code = err?.code === 'no_api_key' || err?.code === 'budget_exhausted' ? 503 : 502;
+    reply.code(code);
+    return {
+      symbol,
+      price: null,
+      error: err?.code || err.message,
+      source: 'Alpha Vantage',
+      note: 'Fail-closed. Existing yfinance/FMP paths unchanged.',
+    };
+  }
+});
+
+fastify.get('/api/alphavantage/daily', async (request, reply) => {
+  const raw = String(request.query.symbol || 'SPY').toUpperCase();
+  const symbol = validateSymbol(raw) || 'SPY';
+  const limit = Math.min(100, Math.max(10, parseInt(String(request.query.limit || '60'), 10) || 60));
+  try {
+    const { data, fromCache, ageMs } = await getOrFetch(
+      `av:daily:${symbol}:${limit}`,
+      TTL.ALPHA_VANTAGE_MS,
+      () => alphaVantageDaily(symbol, limit),
+      { allowStaleOnError: true },
+    );
+    return { ...data, fromCache, ageMs };
+  } catch (err) {
+    const code = err?.code === 'no_api_key' || err?.code === 'budget_exhausted' ? 503 : 502;
+    reply.code(code);
+    return {
+      symbol,
+      bars: [],
+      error: err?.code || err.message,
+      source: 'Alpha Vantage',
+      note: 'Fail-closed. No synthetic bars.',
+    };
+  }
+});
+
+fastify.get('/api/alphavantage/overview', async (request, reply) => {
+  const raw = String(request.query.symbol || 'SPY').toUpperCase();
+  const symbol = validateSymbol(raw) || 'SPY';
+  try {
+    const { data, fromCache, ageMs } = await getOrFetch(
+      `av:overview:${symbol}`,
+      TTL.ALPHA_VANTAGE_MS,
+      () => alphaVantageOverview(symbol),
+      { allowStaleOnError: true },
+    );
+    return { ...data, fromCache, ageMs };
+  } catch (err) {
+    const code = err?.code === 'no_api_key' || err?.code === 'budget_exhausted' ? 503 : 502;
+    reply.code(code);
+    return {
+      symbol,
+      overview: null,
+      error: err?.code || err.message,
+      source: 'Alpha Vantage',
+      note: 'Fail-closed.',
+    };
+  }
+});
+
+// ── TradingView RapidAPI (scarce monthly budget — SPY/BTC only) ─
+// NOT used for SOFR/EFFR (NY Fed + FRED already better + free).
+fastify.get('/api/tradingview/snapshot', async (request, reply) => {
+  const raw = String(request.query.symbol || 'SPY').toUpperCase();
+  const allowed = new Set(['SPY', 'BTC', 'BTCUSD', 'ETH', 'ETHUSD']);
+  const symbol = allowed.has(raw) ? raw : 'SPY';
+  try {
+    const { data, fromCache, ageMs } = await getOrFetch(
+      `tv:snap:${symbol}`,
+      TTL.TRADINGVIEW_MS,
+      () => tradingViewSnapshot(symbol),
+      { allowStaleOnError: true },
+    );
+    return { ...data, fromCache, ageMs };
+  } catch (err) {
+    const code = err?.code === 'no_api_key' || err?.code === 'budget_exhausted' ? 503 : 502;
+    reply.code(code);
+    return {
+      symbol,
+      price: null,
+      bars: [],
+      error: err?.code || err.message,
+      source: 'TradingView RapidAPI',
+      note: 'Fail-closed. Does not replace Deribit/yfinance/FRED.',
+    };
+  }
+});
+
+/** Combined shared desk pack for Home — prefer cache; never stampede scarce APIs. */
+fastify.get('/api/desk/pack', async (request, reply) => {
+  const symbol = validateSymbol(String(request.query.symbol || 'SPY')) || 'SPY';
+  try {
+    const base = `http://127.0.0.1:${PORT}`;
+    // Finnhub is generous — always warm quote + short news.
+    // AV/TV: serve from cache when present; only fill on miss if budget allows (warmer owns slow fills).
+    const avQuotePeek = peek(`av:quote:${symbol}`);
+    const avDailyPeek = peek(`av:daily:${symbol}:40`) || peek(`av:daily:${symbol}:60`);
+    const tvPeek = peek(`tv:snap:${symbol}`) || peek('tv:snap:SPY');
+
+    const [fhQuote, fhNews, cache] = await Promise.all([
+      fetch(`${base}/api/finnhub/quote?symbol=${symbol}`).then((r) => r.json()).catch((e) => ({ error: e.message })),
+      fetch(`${base}/api/finnhub/news?symbol=${symbol}&limit=6`).then((r) => r.json()).catch((e) => ({ error: e.message })),
+      fetch(`${base}/api/cache/status`).then((r) => r.json()).catch(() => null),
+    ]);
+
+    let avQuote = avQuotePeek
+      ? { ...avQuotePeek.data, fromCache: true, ageMs: Date.now() - avQuotePeek.timestamp }
+      : null;
+    let avDaily = avDailyPeek
+      ? { ...avDailyPeek.data, fromCache: true, ageMs: Date.now() - avDailyPeek.timestamp }
+      : null;
+    let tv = tvPeek
+      ? { ...tvPeek.data, fromCache: true, ageMs: Date.now() - tvPeek.timestamp }
+      : null;
+
+    // Optional fill only if warmer has not yet run and budget remains (1 AV call max here).
+    if (!avQuote && budgetAllows('alphavantage', ALPHA_VANTAGE_FREE_DAILY, 0.85)) {
+      avQuote = await fetch(`${base}/api/alphavantage/quote?symbol=${symbol}`)
+        .then((r) => r.json())
+        .catch((e) => ({ error: e.message, source: 'Alpha Vantage' }));
+    }
+    if (!tv && process.env.RAPIDAPI_KEY) {
+      // Do not force TV on every pack — only if never cached (warmer fills slowly).
+      tv = {
+        price: null,
+        error: 'awaiting_warmer',
+        note: 'TradingView fills on server warmer (~few times/day). Not used for rates.',
+        source: 'TradingView RapidAPI',
+      };
+    }
+
+    return {
+      symbol,
+      finnhub_quote: fhQuote,
+      alphavantage_quote: avQuote,
+      alphavantage_daily: avDaily,
+      finnhub_news: fhNews,
+      tradingview: tv,
+      budgets: cache?.budgets || null,
+      keys: cache?.keys || providerKeysStatus(),
+      as_of: new Date().toISOString(),
+      note: 'Shared desk pack · Finnhub live-cached · AV/TV from server board (warmer-owned).',
+    };
+  } catch (err) {
+    reply.code(502);
+    return { error: err.message, note: 'Desk pack failed.' };
+  }
+});
+
 // ── MacroVol API proxy ─────────────────────────────────────────
 // Forwards /api/macrovol/* → MacroVol FastAPI (FRED rates/macro + yfinance greeks/surface).
 // Lightweight rates/macro paths are shared-cached so page loads do not stampede FRED.
@@ -732,6 +1226,9 @@ const MACRO_LIGHT_PREFIXES = [
   '/rates/shape',
   '/rates/basis',
   '/rates/plumbing',
+  '/rates/fx',
+  '/rates/auctions',
+  '/crypto/spot',
 ];
 
 function isMacroLightPath(suffix) {
@@ -864,14 +1361,71 @@ fastify.setNotFoundHandler((request, reply) => {
   return reply.sendFile('index.html');
 });
 
-/** Background warmer: pre-fill shared cache so first visitors get fast hits. */
-async function warmSharedCaches() {
+/**
+ * Background warmer — ONLY the server refreshes free APIs.
+ * Browsers only read /api/* cache. Cadence respects free caps:
+ *  - yfinance SPY chain / Deribit BTC: ~3 min
+ *  - Finnhub news+quote: every warm cycle (TTL 2–5 min)
+ *  - Macro briefing: every warm cycle (TTL 5 min)
+ *  - Alpha Vantage: only when TTL expired (~90 min) + daily budget allows
+ *  - TradingView: only when TTL expired (~6 h) + monthly budget allows
+ */
+let warmTick = 0;
+async function warmSharedCaches(mode = 'fast') {
+  const base = `http://127.0.0.1:${PORT}`;
   try {
-    // Boot briefing (rates + macro)
-    await fetch(`http://127.0.0.1:${PORT}/api/boot/briefing`).catch(() => null);
-    // SPY chain — expensive; only one in-flight via getOrFetch
-    await fetch(`http://127.0.0.1:${PORT}/api/options/SPY`).catch(() => null);
-    console.log('[warm] shared caches refreshed', cacheStats().entries, 'keys');
+    await fetch(`${base}/api/boot/briefing`).catch(() => null);
+    await fetch(`${base}/api/options/SPY`).catch(() => null);
+    await fetch(`${base}/api/deribit/market/BTC`).catch(() => null);
+
+    // Finnhub — high free allowance; keep SPY news + quote warm for all users
+    for (const sym of DESK_WARM_SYMBOLS) {
+      await fetch(`${base}/api/finnhub/quote?symbol=${sym}`).catch(() => null);
+      await fetch(`${base}/api/finnhub/news?symbol=${sym}&limit=8`).catch(() => null);
+    }
+
+    // Alpha Vantage — scarce daily + 5/min: one call per slow cycle, staggered
+    // OPTIONS_MS ~3 min → every 30 ticks ≈ 90 min for quote; +15 ticks later for daily
+    if (mode === 'slow' || warmTick % 30 === 0) {
+      for (const sym of DESK_WARM_SYMBOLS) {
+        if (budgetAllows('alphavantage', ALPHA_VANTAGE_FREE_DAILY, 0.85)) {
+          await fetch(`${base}/api/alphavantage/quote?symbol=${sym}`).catch(() => null);
+        }
+      }
+    } else if (warmTick % 30 === 15) {
+      for (const sym of DESK_WARM_SYMBOLS) {
+        if (budgetAllows('alphavantage', ALPHA_VANTAGE_FREE_DAILY, 0.85)) {
+          await fetch(`${base}/api/alphavantage/daily?symbol=${sym}&limit=40`).catch(() => null);
+        }
+      }
+    } else if (warmTick % 60 === 45) {
+      for (const sym of DESK_WARM_SYMBOLS) {
+        if (budgetAllows('alphavantage', ALPHA_VANTAGE_FREE_DAILY, 0.85)) {
+          await fetch(`${base}/api/alphavantage/overview?symbol=${sym}`).catch(() => null);
+        }
+      }
+    }
+
+    // TradingView — very scarce monthly: SPY only first, then BTC alternate; ~every 6h
+    if (mode === 'slow' || warmTick % 120 === 0) {
+      const tvSym = warmTick % 240 === 0 ? 'BTC' : 'SPY';
+      await fetch(`${base}/api/tradingview/snapshot?symbol=${tvSym}`).catch(() => null);
+    }
+
+    warmTick += 1;
+    const stats = cacheStats();
+    console.log(
+      '[warm]',
+      mode,
+      'keys=',
+      stats.entries,
+      'av=',
+      stats.budgets?.alphavantage?.used,
+      'fh=',
+      stats.budgets?.finnhub?.used,
+      'tv_mo=',
+      stats.budgets?.tradingview?.usedMonth,
+    );
   } catch (err) {
     console.warn('[warm] skipped:', err?.message || err);
   }
@@ -879,7 +1433,8 @@ async function warmSharedCaches() {
 
 await fastify.listen({ port: PORT, host: '0.0.0.0' });
 console.log(`Server running at http://localhost:${PORT}${OPRA_ENABLED ? ` · OPRA skeleton (${OPRA_VENDOR})` : ''}`);
+console.log('[desk] keys', providerKeysStatus());
 
-// Warm shortly after boot, then on a cadence under Yahoo/FMP limits.
-setTimeout(() => { void warmSharedCaches(); }, 2_000);
-setInterval(() => { void warmSharedCaches(); }, TTL.OPTIONS_MS);
+// Warm shortly after boot, then on a cadence under free-tier limits.
+setTimeout(() => { void warmSharedCaches('slow'); }, 2_000);
+setInterval(() => { void warmSharedCaches('fast'); }, TTL.OPTIONS_MS);

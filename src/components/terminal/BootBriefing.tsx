@@ -1,5 +1,12 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { macrovolApi, type RatesSummary, type MacroSummary } from '../../lib/macrovol/api';
+import {
+  macrovolApi,
+  type RatesSummary,
+  type MacroSummary,
+  type FxBoardData,
+  type TreasuryAuctionsData,
+  type CryptoSpotData,
+} from '../../lib/macrovol/api';
 import { cn } from '../../lib/utils';
 
 const BOOT_MS = 30_000;
@@ -33,6 +40,9 @@ export type BootBriefingProps = {
 export function BootBriefing({ heavyReady, onEnter }: BootBriefingProps) {
   const [rates, setRates] = useState<RatesSummary | null>(null);
   const [macro, setMacro] = useState<MacroSummary | null>(null);
+  const [fx, setFx] = useState<FxBoardData | null>(null);
+  const [auctions, setAuctions] = useState<TreasuryAuctionsData | null>(null);
+  const [crypto, setCrypto] = useState<CryptoSpotData | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const [loadingBrief, setLoadingBrief] = useState(true);
@@ -44,19 +54,25 @@ export function BootBriefing({ heavyReady, onEnter }: BootBriefingProps) {
     onEnter();
   }, [onEnter]);
 
-  // Pull lightweight rates + macro (shared backend cache) ASAP.
+  // Pull lightweight rates + macro + free APIs ASAP.
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const [r, m] = await Promise.all([
+        const [r, m, f, a, c] = await Promise.all([
           macrovolApi.ratesSummary().catch(() => null),
           macrovolApi.macroSummary().catch(() => null),
+          macrovolApi.ratesFx().catch(() => null),
+          macrovolApi.ratesAuctions(8).catch(() => null),
+          macrovolApi.cryptoSpot().catch(() => null),
         ]);
         if (cancelled) return;
         setRates(r);
         setMacro(m);
-        if (!r && !m) setErr('Rates feed warming up — terminal will open shortly.');
+        setFx(f);
+        setAuctions(a);
+        setCrypto(c);
+        if (!r && !m && !f) setErr('Rates feed warming up — terminal will open shortly.');
       } catch (e) {
         if (!cancelled) setErr(e instanceof Error ? e.message : 'Briefing unavailable');
       } finally {
@@ -88,6 +104,12 @@ export function BootBriefing({ heavyReady, onEnter }: BootBriefingProps) {
   const progress = Math.min(100, (elapsed / BOOT_MS) * 100);
   const secsLeft = Math.max(0, Math.ceil((BOOT_MS - elapsed) / 1000));
 
+  const usdjpy = fx?.pairs?.find((p) => p.pair === 'USDJPY')?.rate;
+  const eurusd = fx?.pairs?.find((p) => p.pair === 'EURUSD')?.rate;
+  const nextAuct = auctions?.next_coupon || auctions?.next;
+  const btc = crypto?.btc;
+  const btcChg = btc?.change_24h_pct;
+
   const cards: { label: string; value: string; sub?: string }[] = [
     { label: 'SOFR', value: fmtPct(rates?.sofr), sub: 'overnight funding' },
     { label: 'EFFR', value: fmtPct(rates?.effr), sub: 'fed funds effective' },
@@ -95,6 +117,24 @@ export function BootBriefing({ heavyReady, onEnter }: BootBriefingProps) {
     { label: 'UST 10Y', value: fmtPct(rates?.usy10), sub: 'DGS10' },
     { label: '2s10s', value: fmtBpsFromPp(rates?.spread_2s10s), sub: 'curve steepness' },
     { label: '3m10y', value: fmtBpsFromPp(rates?.spread_3m10y), sub: 'T10Y3M' },
+    { label: 'USDJPY', value: usdjpy != null ? usdjpy.toFixed(2) : '—', sub: 'Frankfurter / ECB' },
+    { label: 'EURUSD', value: eurusd != null ? eurusd.toFixed(4) : '—', sub: 'Frankfurter / ECB' },
+    {
+      label: 'Next auction',
+      value: nextAuct?.auction_date
+        ? `${nextAuct.security_type || ''} ${nextAuct.security_term || ''}`.trim() || nextAuct.auction_date
+        : '—',
+      sub: nextAuct?.auction_date
+        ? `${nextAuct.auction_date}${nextAuct.offering_label ? ` · ${nextAuct.offering_label}` : ''}`
+        : 'FiscalData',
+    },
+    {
+      label: 'BTC',
+      value: btc?.spot_usd != null
+        ? (btc.spot_usd >= 1000 ? `$${(btc.spot_usd / 1000).toFixed(1)}k` : `$${btc.spot_usd.toFixed(0)}`)
+        : '—',
+      sub: btcChg != null ? `24h ${btcChg >= 0 ? '+' : ''}${btcChg.toFixed(1)}% · CoinGecko` : 'CoinGecko',
+    },
     { label: 'CPI YoY', value: fmtPct(macro?.cpi_yoy), sub: 'inflation' },
     { label: 'Core PCE', value: fmtPct(macro?.core_pce_yoy), sub: 'Fed preferred' },
     { label: 'Unemployment', value: fmtPct(macro?.unemployment, 1), sub: 'U-3' },
@@ -129,7 +169,7 @@ export function BootBriefing({ heavyReady, onEnter }: BootBriefingProps) {
 
       <main className="relative flex flex-1 flex-col gap-4 overflow-y-auto p-4 md:p-6">
         <p className="max-w-2xl text-type-sm text-muted-foreground">
-          Basics from FRED / macro feeds while option chains and surfaces load in the background.
+          Basics from FRED · Frankfurter FX · FiscalData auctions · CoinGecko while option chains load.
           You are not blocked on the heavy APIs.
         </p>
 
@@ -180,7 +220,7 @@ export function BootBriefing({ heavyReady, onEnter }: BootBriefingProps) {
             />
           </div>
           <div className="font-mono text-type-2xs text-muted-foreground/80">
-            Source: MacroVol · FRED
+            Source: MacroVol · FRED · Frankfurter · FiscalData · CoinGecko
             {rates?.as_of ? ` · as of ${new Date(rates.as_of).toLocaleString()}` : ''}
           </div>
         </div>

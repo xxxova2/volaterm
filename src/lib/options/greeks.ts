@@ -72,15 +72,17 @@ export function computeGreeks(
     ? S * eq * normCdf(d1) - K * ert * normCdf(d2)
     : K * ert * normCdf(-d2) - S * eq * normCdf(-d1);
 
-  // Higher-order greeks on mathematical (raw-σ, year) scale of BS.
-  // Charm = ∂Δ/∂T (Haug / Wikipedia). Call vs put differ by the q·N(·) term.
-  // Consumers that want per-calendar-day charm divide by 365 (see dealerExposure).
+  // Higher-order greeks. Market desk convention (aligned with MacroVol / Greeks 1.0):
+  //   charm → per calendar day (raw ∂Δ/∂T / 365) — same unit family as θ
+  //   vanna → ∂²V/∂S∂σ on raw-σ scale
+  //   volga / veta / color stay on mathematical year / raw-σ scale
   const vanna = -eq * pdf * d2 / vol;
   const charmCore = pdf * (2 * (r - q) * T - d2 * volSqrtT) / (2 * T * volSqrtT);
   const nd1Call = type === 'call' ? normCdf(d1) : normCdf(-d1);
-  const charm = type === 'call'
+  const charmAnnual = type === 'call'
     ? -eq * (charmCore - q * nd1Call)
     : -eq * (charmCore + q * nd1Call);
+  const charm = charmAnnual / 365;
   const volga = vegaRaw * d1 * d2 / vol;
   const speed = -gamma * (d1 / volSqrtT + 1 / S);
   // Veta = ∂ν/∂T (year); includes full Haug terms

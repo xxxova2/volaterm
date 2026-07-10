@@ -4,9 +4,9 @@ import { EmptyState, SectionSkeleton } from '../common/EmptyState';
 import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
 import type { ImplyRead } from '../../lib/macrovol/api';
 import { useRatesData } from './rates/useRatesData';
+import { MoneyMarketStrip } from './rates/MoneyMarketStrip';
 import { SnapshotCards } from './rates/SnapshotCards';
 import { ShapeSection } from './rates/ShapeSection';
-import { Dv01Book } from './rates/Dv01Book';
 import { NyFedBoard } from './rates/NyFedBoard';
 import { StirSection } from './rates/StirSection';
 import { BasisSection } from './rates/BasisSection';
@@ -16,15 +16,27 @@ import { CorrSection } from './rates/CorrSection';
 import { PremiumSection } from './rates/PremiumSection';
 import { JapanCarryPanel } from './rates/JapanCarryPanel';
 import { CurvesBoard } from './rates/CurvesBoard';
+import { FxBoard } from './rates/FxBoard';
+import { GlobalYieldsBoard } from './rates/GlobalYieldsBoard';
+import { UstDataStrip } from './rates/UstDataStrip';
 
-export function RatesPanel() {
+/**
+ * US rates desk — information hierarchy:
+ *   money markets (data → chart) → UST (data → chart) → STIR → plumbing
+ * Global/FX/Japan are rendered by RatesView after this panel (relevance order).
+ *
+ * Rule: every block is *data first, then meaning (chart)* for the same series.
+ */
+export function RatesPanel({
+  includeGlobalBlocks = false,
+}: {
+  /** When true, also render Global 10Y / FX / Japan (standalone use). RatesView sets false. */
+  includeGlobalBlocks?: boolean;
+}) {
   const {
-    summary, plumbing, basis, basisHist, stir, shape, dv01, setDv01, curve, curveMeta,
+    summary, plumbing, basis, basisHist, stir, shape, curve, curveMeta,
     curveCompare, curveComparePoints, corr,
     error, loading,
-    n2, setN2, n5, setN5, n10, setN10, n30, setN30,
-    sh2, setSh2, sh5, setSh5, sh10, setSh10, sh30, setSh30,
-    dv01Loading, setDv01Loading, reloadDv01,
     stirChart, shapeHistoryCharts, basisChart,
   } = useRatesData();
   const [implyDrawer, setImplyDrawer] = useState<{ imply: ImplyRead; context?: string } | null>(null);
@@ -59,7 +71,6 @@ export function RatesPanel() {
 
   return (
     <SectionErrorBoundary name="Rates panel">
-      {/* Dense content stack — curves first, boards second; less chrome/padding */}
       <div className="flex flex-col gap-1.5 p-1 font-mono [&>*]:min-w-0">
         <ImplyDrawer
           open={!!implyDrawer}
@@ -68,7 +79,34 @@ export function RatesPanel() {
           onClose={() => setImplyDrawer(null)}
         />
 
-        <SnapshotCards summary={summary} />
+        {/* ── 1. MONEY MARKETS: data → chart ─────────────────────────── */}
+        <MoneyMarketStrip
+          summary={summary}
+          basis={basis}
+          plumbing={plumbing}
+          basisHist={basisHist}
+          stir={stir}
+        />
+
+        {basis && (
+          <BasisSection
+            basis={basis}
+            basisHist={basisHist}
+            plumbing={plumbing}
+            basisChart={basisChart}
+            compactData
+          />
+        )}
+
+        <PlumbingSection plumbing={plumbing} />
+
+        {/* ── 2. UST CURVE: data strip → dual curve + spread history ── */}
+        <UstDataStrip
+          summary={summary}
+          curve={curve}
+          curveMeta={curveMeta}
+          shape={shape}
+        />
 
         <CurvesBoard
           curve={curve}
@@ -90,49 +128,30 @@ export function RatesPanel() {
           />
         )}
 
+        {/* Compact dual-source table (secondary to UstDataStrip + CurvesBoard) */}
+        <CurveSection curve={curve} curveMeta={curveMeta} />
+
+        {/* ── 3. STIR / NY Fed path ─────────────────────────────────── */}
         <StirSection stir={stir} stirChart={stirChart} onOpenImply={openImply} />
 
         {stir?.nyfed?.ref_print && stir.nyfed.ref_print.length > 0 && (
           <NyFedBoard nyfed={stir.nyfed} />
         )}
 
-        {basis && (
-          <BasisSection
-            basis={basis}
-            basisHist={basisHist}
-            plumbing={plumbing}
-            basisChart={basisChart}
-          />
-        )}
-
-        <PlumbingSection plumbing={plumbing} />
-
-        {/* UST curve also lives in CurvesBoard hero — keep compact table section below fold */}
-        <CurveSection curve={curve} curveMeta={curveMeta} />
-
-        {corr && corr.matrix?.length > 0 && <CorrSection corr={corr} />}
+        {/* Snapshot kept as foldable detail (primary prints are in MM + UST strips) */}
+        <SnapshotCards summary={summary} />
 
         <PremiumSection basis={basis} plumbing={plumbing} stir={stir} shape={shape} />
 
-        <div className="order-11 min-w-0">
-          <JapanCarryPanel />
-        </div>
+        {corr && corr.matrix?.length > 0 && <CorrSection corr={corr} />}
 
-        <Dv01Book
-          dv01={dv01}
-          setDv01={setDv01}
-          n2={n2} setN2={setN2}
-          n5={n5} setN5={setN5}
-          n10={n10} setN10={setN10}
-          n30={n30} setN30={setN30}
-          sh2={sh2} setSh2={setSh2}
-          sh5={sh5} setSh5={setSh5}
-          sh10={sh10} setSh10={setSh10}
-          sh30={sh30} setSh30={setSh30}
-          dv01Loading={dv01Loading}
-          setDv01Loading={setDv01Loading}
-          reloadDv01={reloadDv01}
-        />
+        {includeGlobalBlocks && (
+          <>
+            <GlobalYieldsBoard />
+            <FxBoard />
+            <JapanCarryPanel />
+          </>
+        )}
       </div>
     </SectionErrorBoundary>
   );

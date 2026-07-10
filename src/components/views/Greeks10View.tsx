@@ -52,7 +52,11 @@ type Section = 'greeks' | 'iv';
 
 export function Greeks10View() {
   const storeSymbol = useTerminalStore((s) => s.symbol);
-  const [ticker, setTicker] = useState(storeSymbol || 'SPY');
+  const snapshot = useTerminalStore((s) => s.snapshot);
+  const [ticker, setTicker] = useState(() => {
+    const s = storeSymbol || 'SPY';
+    return /^[A-Z.^]{1,12}$/i.test(s) ? s : 'SPY';
+  });
   const [selectedGreek, setSelectedGreek] = useState('delta');
   const [data, setData] = useState<GreeksData | null>(null);
   const [ohlc, setOhlc] = useState<HistoryData['data']>([]);
@@ -60,6 +64,8 @@ export function Greeks10View() {
   const [error, setError] = useState('');
   const [section, setSection] = useState<Section>('greeks');
   const [custom, setCustom] = useState('');
+  /** When true, follow terminal symbol changes so both editions compare the same underlier. */
+  const [followTerminal, setFollowTerminal] = useState(true);
 
   async function load(t: string) {
     setLoading(true);
@@ -67,9 +73,14 @@ export function Greeks10View() {
     setData(null);
     setOhlc([]);
     try {
-      // r omitted → MacroVol uses live SOFR (not hardcoded 5%)
+      // r omitted → MacroVol uses live SOFR / treasury term (not hardcoded 5%)
+      // q: prefer terminal snapshot dividend yield when comparing same symbol
+      const q =
+        snapshot && snapshot.symbol === t && Number.isFinite(snapshot.dividendYield)
+          ? snapshot.dividendYield
+          : 0.013;
       const [greeksRes, ohlcRes] = await Promise.all([
-        macrovolApi.greeks(t, null, 0.013),
+        macrovolApi.greeks(t, null, q),
         macrovolApi.greeksHistory(t, '1mo').catch(() => ({ ticker: t, data: [] } as HistoryData)),
       ]);
       setData(greeksRes);
@@ -83,14 +94,15 @@ export function Greeks10View() {
 
   useEffect(() => {
     load(ticker);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reload on ticker; q refreshed via load body
   }, [ticker]);
 
-  // Sync from terminal symbol when it looks like an equity ticker
+  // Keep Greeks 1.0 underlier in lockstep with terminal when follow is on
   useEffect(() => {
-    if (storeSymbol && /^[A-Z.^]{1,8}$/.test(storeSymbol) && storeSymbol !== ticker) {
-      // don't auto-override if user picked a custom greek ticker — only seed once
-    }
-  }, [storeSymbol, ticker]);
+    if (!followTerminal || !storeSymbol) return;
+    if (!/^[A-Z.^]{1,12}$/i.test(storeSymbol)) return;
+    if (storeSymbol !== ticker) setTicker(storeSymbol);
+  }, [storeSymbol, followTerminal, ticker]);
 
   const greek = GREEKS.find((g) => g.key === selectedGreek)!;
   const surfaceData = data?.surfaces?.[selectedGreek];
@@ -117,10 +129,12 @@ export function Greeks10View() {
       <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2">
         <span className="text-type-xs font-mono font-bold tracking-wider text-foreground">GREEKS 1.0</span>
         <span className="text-type-xs font-mono text-muted-foreground">
-          MacroVol · BS · yfinance
+          MacroVol · BS · yfinance · OTM surfaces
           {data?.r != null && (
             <> · r={(data.r * 100).toFixed(2)}% ({data.r_source || 'SOFR'}) · q={((data.q ?? 0.013) * 100).toFixed(2)}%</>
           )}
+          {' · '}θ &amp; charm /day · ν /1vol
+          {' · '}synced with terminal 3D units
         </span>
         <div className="ml-auto flex gap-1">
           {([
@@ -154,7 +168,10 @@ export function Greeks10View() {
                 <button
                   key={t.value}
                   type="button"
-                  onClick={() => setTicker(t.value)}
+                  onClick={() => {
+                    setFollowTerminal(false);
+                    setTicker(t.value);
+                  }}
                   className={`rounded-lg border px-3 py-1.5 text-xs ${
                     ticker === t.value
                       ? 'border-primary bg-primary text-primary-foreground font-bold'
@@ -171,11 +188,29 @@ export function Greeks10View() {
                 onChange={(e) => setCustom(e.target.value.toUpperCase())}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && custom.trim()) {
+                    setFollowTerminal(false);
                     setTicker(custom.trim());
                   }
                 }}
               />
-              {storeSymbol && storeSymbol !== ticker && (
+              <button
+                type="button"
+                onClick={() => {
+                  setFollowTerminal((f) => !f);
+                  if (!followTerminal && storeSymbol && /^[A-Z.^]{1,12}$/i.test(storeSymbol)) {
+                    setTicker(storeSymbol);
+                  }
+                }}
+                className={`rounded border px-2 py-1 text-type-xs ${
+                  followTerminal
+                    ? 'border-primary/50 bg-primary/10 text-foreground'
+                    : 'border-border text-muted-foreground'
+                }`}
+                title="When on, Greeks 1.0 tracks the terminal symbol so 3D Surface and this desk share the same underlier"
+              >
+                {followTerminal ? `Follow terminal: ${storeSymbol || '—'}` : 'Follow off'}
+              </button>
+              {!followTerminal && storeSymbol && storeSymbol !== ticker && (
                 <button
                   type="button"
                   onClick={() => setTicker(storeSymbol)}
@@ -185,6 +220,12 @@ export function Greeks10View() {
                 </button>
               )}
             </div>
+            {data?.surface_note && (
+              <p className="text-type-2xs leading-snug text-muted-foreground">{data.surface_note}</p>
+            )}
+            {data?.charm_note && (
+              <p className="text-type-2xs leading-snug text-muted-foreground">{data.charm_note}</p>
+            )}
 
             {loading && (
               <div className="text-type-xs text-muted-foreground">

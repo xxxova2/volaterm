@@ -192,9 +192,14 @@ export function GreeksSurface3D() {
       const dte = info.dtes[cell.expiryIdx];
       const slice = snapshot.expiries[cell.expiryIdx];
       if (strike == null || dte == null || !slice) return null;
-      const callQuote = slice.calls.find(q => q.strike === strike);
-      const putQuote = callQuote ? null : slice.puts.find(q => q.strike === strike);
-      const q = callQuote ?? putQuote;
+      // OTM convention — must match useGreekSurfaceGeometry mesh (put K<S, call K≥S)
+      const preferPut = strike < info.spot;
+      const primary = preferPut ? slice.puts : slice.calls;
+      const secondary = preferPut ? slice.calls : slice.puts;
+      const q =
+        primary.find(qq => qq.strike === strike)
+        ?? secondary.find(qq => qq.strike === strike)
+        ?? null;
       const v = q?.[greek];
       if (v == null || !Number.isFinite(v)) return null;
       return { strike, dte, expiry: slice.expiry, value: v };
@@ -240,10 +245,19 @@ export function GreeksSurface3D() {
       onPointerEnter={() => setPointerOver(true)}
       onPointerLeave={() => setPointerOver(false)}
     >
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex flex-wrap gap-x-2 gap-y-0.5 border-b border-border/50 bg-background/90 px-2 py-0.5 font-mono text-type-2xs text-muted-foreground backdrop-blur-sm">
+        <span className="text-foreground">OTM listed</span>
+        <span>· θ &amp; charm /day · ν /1vol</span>
+        <span>· same units as Greeks 1.0</span>
+        <span className="text-muted-foreground/80">
+          chain {snapshot.symbol} · levels may differ vs MacroVol yfinance when r/q or IV source differ
+        </span>
+      </div>
       <Canvas
         camera={{ position: [3.4, 2.8, 3.8], fov: 42 }}
         gl={{ antialias: true, alpha: false }}
-        style={{ background: 'var(--background)' }}
+        style={{ background: 'var(--background)', paddingTop: 22 }}
+        className="pt-5"
       >
         <ambientLight intensity={0.45} />
         <directionalLight position={[5, 10, 5]} intensity={0.8} />
@@ -279,7 +293,7 @@ export function GreeksSurface3D() {
         />
       )}
 
-      <div className="absolute top-3 left-3 flex flex-col gap-2">
+      <div className="absolute left-3 top-8 flex flex-col gap-2">
         <div className="flex items-center gap-1">
           <button
             data-testid="wireframe-toggle"
