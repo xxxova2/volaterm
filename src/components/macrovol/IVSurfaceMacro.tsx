@@ -1,5 +1,11 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { macrovolApi, type IVSurfaceData } from '../../lib/macrovol/api';
+import {
+  CHART_RESOLVED,
+  PLOTLY_CS_IV,
+  PLOTLY_LAYOUT_BASE,
+  PLOTLY_SCENE_AXIS,
+} from '../../lib/chartTheme';
 import { DataBadge } from './DataBadge';
 import { useTerminalStore } from '../../store/terminalStore';
 
@@ -193,7 +199,7 @@ export function IVSurfaceMacro({ defaultTicker }: { defaultTicker?: string }) {
             <span>API: <strong className="text-up">yfinance · MacroVol</strong></span>
           </div>
 
-          <div className="overflow-hidden rounded-xl border border-border bg-[#0a0a0a]">
+          <div className="overflow-hidden rounded-xl border border-border bg-card">
             <Suspense fallback={<div className="p-8 text-center text-xs text-muted-foreground">Loading Plotly…</div>}>
               <Plot
                 data={[{
@@ -201,47 +207,41 @@ export function IVSurfaceMacro({ defaultTicker }: { defaultTicker?: string }) {
                   x: filteredExpiries,
                   y: yAxis === 'strike' ? data.strikes : yValues,
                   z: filteredGrid,
-                  colorscale: [
-                    [0, '#2d1b69'],
-                    [0.2, '#11998e'],
-                    [0.4, '#38ef7d'],
-                    [0.6, '#38ef7d'],
-                    [0.8, '#f7971e'],
-                    [1, '#FFD200'],
-                  ],
+                  colorscale: PLOTLY_CS_IV,
                   showscale: true,
                   colorbar: {
-                    title: { text: 'IV %' },
+                    title: { text: 'IV %', font: { color: CHART_RESOLVED.mutedForeground, size: 11 } },
                     thickness: 16,
                     len: 0.8,
-                    tickfont: { color: '#00ff41', size: 9 },
+                    tickfont: { color: CHART_RESOLVED.mutedForeground, size: 9 },
                   },
                   hovertemplate: 'T: %{x:.2f}yr · Y: %{y:.2f} · IV: %{z:.1f}%<extra></extra>',
                   contours: {
-                    z: { show: true, usecolormap: true, highlightcolor: '#ffffff', project: { z: true } },
+                    z: {
+                      show: true,
+                      usecolormap: true,
+                      highlightcolor: CHART_RESOLVED.foreground,
+                      project: { z: true },
+                    },
                   },
                 } as never]}
                 layout={{
-                  paper_bgcolor: '#0a0a0a',
-                  plot_bgcolor: '#0a0a0a',
-                  font: { color: '#00ff41', size: 11, family: 'JetBrains Mono, monospace' },
+                  ...PLOTLY_LAYOUT_BASE,
+                  font: { ...PLOTLY_LAYOUT_BASE.font, size: 11 },
                   margin: { l: 0, r: 70, t: 36, b: 0 },
                   title: {
                     text: `${ticker} IMPLIED VOLATILITY SURFACE`,
-                    font: { color: '#00ff41', size: 12 },
+                    font: { color: CHART_RESOLVED.brand, size: 12 },
                     x: 0.05,
                   },
                   scene: {
-                    xaxis: { title: 'T (years)', color: '#00ff41', gridcolor: '#1a2a1a', backgroundcolor: '#050f05', showbackground: true },
+                    xaxis: { title: 'T (years)', ...PLOTLY_SCENE_AXIS },
                     yaxis: {
                       title: yAxis === 'strike' ? 'STRIKE ($)' : 'LOG-MONEYNESS (%)',
-                      color: '#00ff41',
-                      gridcolor: '#1a2a1a',
-                      backgroundcolor: '#050f05',
-                      showbackground: true,
+                      ...PLOTLY_SCENE_AXIS,
                     },
-                    zaxis: { title: 'IV %', color: '#00ff41', gridcolor: '#1a2a1a', backgroundcolor: '#050f05', showbackground: true },
-                    bgcolor: '#0a0a0a',
+                    zaxis: { title: 'IV %', ...PLOTLY_SCENE_AXIS },
+                    bgcolor: CHART_RESOLVED.card,
                     camera: { eye: { x: 1.6, y: -1.6, z: 0.9 } },
                     aspectmode: 'manual',
                     aspectratio: { x: 2, y: 1.2, z: 0.8 },

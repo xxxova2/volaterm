@@ -139,6 +139,7 @@ export function chartTooltipProps() {
 // ── Canvas 2D / R3F / Plotly resolved colors (hex OK only here) ─────────────
 
 /**
+/**
  * Static hex fallbacks for canvas, Three.js, and Plotly.
  * Hex literals are intentional and confined to this module (KD-UI-04).
  * Approximate graphite–amber theme oklch tokens from `src/index.css`.
@@ -156,9 +157,15 @@ export const CHART_RESOLVED = {
   gridMinor: '#1f1f26',
   /** Axis / muted labels */
   label: '#9ca3af',
+  mutedForeground: '#9ca3af',
   foreground: '#ebe6dc',
   background: '#1c1a16',
+  card: '#130f09',
+  muted: '#1c1711',
+  border: '#2b261f',
   emptyCell: 'rgba(0,0,0,0.04)',
+  /** Near-black graphite for dense zero cells (not pure #000) */
+  ink: '#0a0806',
 } as const;
 
 /**
@@ -183,8 +190,12 @@ export const CANVAS = {
 /** Read a CSS custom property from `:root`. Returns fallback when SSR/missing. */
 export function cssVar(name: string, fallback: string): string {
   if (typeof document === 'undefined') return fallback;
-  const raw = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-  return raw || fallback;
+  try {
+    const raw = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    return raw || fallback;
+  } catch {
+    return fallback;
+  }
 }
 
 let _colorProbe: HTMLSpanElement | null = null;
@@ -307,5 +318,143 @@ export function canvasCellColor(
     return colorWithAlpha(colors.down, 0.12 + Math.min(1, -t) * 0.78);
   }
   const t = max > min ? (v - min) / (max - min) : 0.5;
-  return colorWithAlpha(colors.info, 0.08 + t * 0.85);
+  return colorWithAlpha(colors.info, 0.1 + Math.max(0, Math.min(1, t)) * 0.75);
 }
+
+/**
+ * Shared Plotly chrome — paper/plot/font/grid from terminal tokens.
+ * Plotly paints on canvas; prefers concrete colors (use CHART_RESOLVED).
+ */
+export const PLOTLY_LAYOUT_BASE = {
+  paper_bgcolor: CHART_RESOLVED.card,
+  plot_bgcolor: CHART_RESOLVED.card,
+  font: {
+    color: CHART_RESOLVED.mutedForeground,
+    size: 10,
+    family: 'JetBrains Mono, ui-monospace, monospace',
+  },
+} as const;
+
+/** 2D axis chrome for Plotly heatmaps / candles */
+export const PLOTLY_AXIS = {
+  color: CHART_RESOLVED.mutedForeground,
+  gridcolor: CHART_RESOLVED.grid,
+  tickfont: { size: 9, color: CHART_RESOLVED.mutedForeground },
+  zerolinecolor: CHART_RESOLVED.border,
+} as const;
+
+/** 3D scene axis chrome (surfaces) */
+export const PLOTLY_SCENE_AXIS = {
+  color: CHART_RESOLVED.mutedForeground,
+  gridcolor: CHART_RESOLVED.grid,
+  backgroundcolor: CHART_RESOLVED.background,
+  showbackground: true as const,
+};
+
+export const PLOTLY_COLORBAR = {
+  thickness: 14,
+  tickfont: { color: CHART_RESOLVED.mutedForeground, size: 10 },
+  title: { font: { color: CHART_RESOLVED.mutedForeground, size: 11 } },
+} as const;
+
+/**
+ * Diverging analytic scales — negative = down, positive = up, mid = card.
+ * Positions span -1..1 so Plotly zmid:0 heatmaps stay symmetric.
+ */
+export const PLOTLY_CS_GEX: [number, string][] = [
+  [-1, '#4a0a0e'],
+  [-0.667, '#9a1820'],
+  [-0.334, CHART_RESOLVED.down],
+  [-0.001, '#3a2c22'],
+  [0, CHART_RESOLVED.card],
+  [0.001, '#1a2a1c'],
+  [0.334, '#2d9a48'],
+  [0.667, CHART_RESOLVED.up],
+  [1, '#1a5c28'],
+];
+
+export const PLOTLY_CS_CHARM: [number, string][] = [
+  [-1, '#2a1038'],
+  [-0.667, '#6a3a8a'],
+  [-0.334, CHART_RESOLVED.rate],
+  [-0.001, '#3a2c22'],
+  [0, CHART_RESOLVED.card],
+  [0.001, '#1a2a1c'],
+  [0.334, '#2d9a48'],
+  [0.667, CHART_RESOLVED.up],
+  [1, '#1a5c28'],
+];
+
+/** Sequential IV surface: graphite → info → brand → warn (no Matrix green) */
+export const PLOTLY_CS_IV: [number, string][] = [
+  [0, CHART_RESOLVED.muted],
+  [0.2, '#1e3a42'],
+  [0.4, CHART_RESOLVED.info],
+  [0.6, '#5a9a6a'],
+  [0.8, CHART_RESOLVED.brand],
+  [1, CHART_RESOLVED.warn],
+];
+
+/** Per-greek surface colorscales (Plotly hex; sequential / diverging) */
+export const PLOTLY_CS_GREEK: Record<string, string | [number, string][]> = {
+  delta: [
+    [0, CHART_RESOLVED.background],
+    [0.5, '#0a5a6a'],
+    [1, CHART_RESOLVED.info],
+  ],
+  gamma: [
+    [0, CHART_RESOLVED.background],
+    [0.5, '#1a5c28'],
+    [1, CHART_RESOLVED.up],
+  ],
+  vega: [
+    [0, CHART_RESOLVED.background],
+    [0.5, CHART_RESOLVED.brand],
+    [1, CHART_RESOLVED.foreground],
+  ],
+  theta: [
+    [0, CHART_RESOLVED.background],
+    [0.5, CHART_RESOLVED.down],
+    [1, CHART_RESOLVED.foreground],
+  ],
+  vanna: [
+    [0, CHART_RESOLVED.down],
+    [0.5, CHART_RESOLVED.card],
+    [1, CHART_RESOLVED.up],
+  ],
+  charm: [
+    [0, CHART_RESOLVED.background],
+    [0.4, CHART_RESOLVED.rate],
+    [0.7, CHART_RESOLVED.info],
+    [1, CHART_RESOLVED.up],
+  ],
+};
+
+/** Named greek accent colors for labels / ATM chips (CSS vars OK in DOM) */
+export const CHART_GREEK_EXT = {
+  delta: CHART.series.info,
+  gamma: CHART.series.up,
+  vega: CHART.series.brand,
+  theta: CHART.series.down,
+  vanna: CHART.series.rate,
+  charm: CHART.series.info,
+} as const;
+
+/** Hex accents for Plotly candle / bar fills that need concrete colors */
+export const CHART_HEX = {
+  up: CHART_RESOLVED.up,
+  down: CHART_RESOLVED.down,
+  brand: CHART_RESOLVED.brand,
+  info: CHART_RESOLVED.info,
+  warn: CHART_RESOLVED.warn,
+  rate: CHART_RESOLVED.rate,
+  muted: CHART_RESOLVED.mutedForeground,
+  grid: CHART_RESOLVED.grid,
+  card: CHART_RESOLVED.card,
+  border: CHART_RESOLVED.border,
+  foreground: CHART_RESOLVED.foreground,
+  ink: CHART_RESOLVED.ink,
+  /** GEX calendar positive intensity base */
+  gexPos: CHART_RESOLVED.up,
+  gexNeg: CHART_RESOLVED.down,
+} as const;

@@ -1,13 +1,29 @@
 /**
  * Greeks 1.0 — MacroVol-style rich Greeks desk.
  * Uses MacroVol FastAPI (yfinance) for interpolated greek surfaces, GEX/Charm heatmaps,
- * ATM snapshot, OI ladder, GEX calendar — plus the Bloomberg-green IV surface.
+ * ATM snapshot, OI ladder, GEX calendar — plus terminal-token IV surface.
  */
 import { lazy, Suspense, useEffect, useState } from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Cell,
 } from 'recharts';
 import { macrovolApi, type GreeksData, type HistoryData } from '../../lib/macrovol/api';
+import {
+  CHART,
+  CHART_GREEK_EXT,
+  CHART_HEX,
+  CHART_RESOLVED,
+  PLOTLY_AXIS,
+  PLOTLY_COLORBAR,
+  PLOTLY_CS_CHARM,
+  PLOTLY_CS_GEX,
+  PLOTLY_CS_GREEK,
+  PLOTLY_LAYOUT_BASE,
+  PLOTLY_SCENE_AXIS,
+  chartAxisTick,
+  chartGridProps,
+  chartTooltipStyle,
+} from '../../lib/chartTheme';
 import { DataBadge } from '../macrovol/DataBadge';
 import { IVSurfaceMacro } from '../macrovol/IVSurfaceMacro';
 import { useTerminalStore } from '../../store/terminalStore';
@@ -24,24 +40,12 @@ const TICKERS = [
 ];
 
 const GREEKS = [
-  { key: 'delta', label: 'DELTA', desc: 'Rate of price change per $1 move in spot', formula: '∂V/∂S = Φ(d₁)', color: '#3b82f6' },
-  { key: 'gamma', label: 'GAMMA', desc: 'Rate of delta change. Peaks ATM', formula: '∂²V/∂S² = φ(d₁)/(S·σ·√T)', color: '#22c55e' },
-  { key: 'vega', label: 'VEGA', desc: 'P&L per 1% IV move. Always positive', formula: '∂V/∂σ = S·φ(d₁)·√T', color: '#f59e0b' },
-  { key: 'theta', label: 'THETA', desc: 'Daily time decay. Negative for long options', formula: '∂V/∂t = −(S·φ(d₁)·σ)/(2√T)', color: '#ef4444' },
-  { key: 'vanna', label: 'VANNA', desc: 'dVega/dSpot. How vega changes with spot', formula: '∂²V/∂S∂σ = −φ(d₁)·d₂/σ', color: '#a78bfa' },
-  { key: 'charm', label: 'CHARM', desc: 'dDelta/dTime. Delta decay per day', formula: '∂²V/∂S∂t', color: '#06b6d4' },
-];
-
-const GEX_COLORSCALE = [
-  [-1, '#7f0000'], [-0.667, '#b30000'], [-0.334, '#e34a33'], [-0.001, '#fee8c8'],
-  [0, '#ffffff'],
-  [0.001, '#e5f5e0'], [0.334, '#31a354'], [0.667, '#006d2c'], [1, '#002d0b'],
-];
-
-const CHARM_COLORSCALE = [
-  [-1, '#2d004b'], [-0.667, '#8073ac'], [-0.334, '#c2a5cf'], [-0.001, '#f7f7f7'],
-  [0, '#ffffff'],
-  [0.001, '#f7f7f7'], [0.334, '#a6dba0'], [0.667, '#5aae61'], [1, '#1b7837'],
+  { key: 'delta', label: 'DELTA', desc: 'Rate of price change per $1 move in spot', formula: '∂V/∂S = Φ(d₁)', color: CHART_GREEK_EXT.delta },
+  { key: 'gamma', label: 'GAMMA', desc: 'Rate of delta change. Peaks ATM', formula: '∂²V/∂S² = φ(d₁)/(S·σ·√T)', color: CHART_GREEK_EXT.gamma },
+  { key: 'vega', label: 'VEGA', desc: 'P&L per 1% IV move. Always positive', formula: '∂V/∂σ = S·φ(d₁)·√T', color: CHART_GREEK_EXT.vega },
+  { key: 'theta', label: 'THETA', desc: 'Daily time decay. Negative for long options', formula: '∂V/∂t = −(S·φ(d₁)·σ)/(2√T)', color: CHART_GREEK_EXT.theta },
+  { key: 'vanna', label: 'VANNA', desc: 'dVega/dSpot. How vega changes with spot', formula: '∂²V/∂S∂σ = −φ(d₁)·d₂/σ', color: CHART_GREEK_EXT.vanna },
+  { key: 'charm', label: 'CHARM', desc: 'dDelta/dTime. Delta decay per day', formula: '∂²V/∂S∂t', color: CHART_GREEK_EXT.charm },
 ];
 
 type Section = 'greeks' | 'iv';
@@ -105,13 +109,7 @@ export function Greeks10View() {
     }))
     .sort((a, b) => a.strike - b.strike);
 
-  const colorscale =
-    selectedGreek === 'delta' ? 'Blues'
-      : selectedGreek === 'gamma' ? 'Greens'
-        : selectedGreek === 'vega' ? ([[0, '#1a0a00'], [0.5, '#f59e0b'], [1, '#ffffff']] as [number, string][])
-          : selectedGreek === 'theta' ? ([[0, '#1a0000'], [0.5, '#ef4444'], [1, '#ffffff']] as [number, string][])
-            : selectedGreek === 'vanna' ? 'RdBu'
-              : 'Viridis';
+  const colorscale = PLOTLY_CS_GREEK[selectedGreek] ?? PLOTLY_CS_GREEK.delta;
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -181,7 +179,7 @@ export function Greeks10View() {
                 <button
                   type="button"
                   onClick={() => setTicker(storeSymbol)}
-                  className="rounded border border-amber-500/40 px-2 py-1 text-type-xs text-amber-400"
+                  className="rounded border border-brand/40 px-2 py-1 text-type-xs text-brand"
                 >
                   Use terminal: {storeSymbol}
                 </button>
@@ -242,7 +240,7 @@ export function Greeks10View() {
                       <h3 className="text-xs font-semibold" style={{ color: greek.color }}>{greek.label} SURFACE</h3>
                       <span className="text-type-xs text-muted-foreground">{greek.desc}</span>
                     </div>
-                    <div className="overflow-hidden rounded-xl border border-border bg-[#0a0a0a]">
+                    <div className="overflow-hidden rounded-xl border border-border bg-card">
                       <Suspense fallback={<div className="p-8 text-center text-xs text-muted-foreground">Loading surface…</div>}>
                         <Plot
                           data={[{
@@ -252,28 +250,24 @@ export function Greeks10View() {
                             z: surfaceData.grid,
                             colorscale,
                             colorbar: {
-                              title: { text: greek.label, font: { color: '#a1a1aa', size: 11 } },
-                              thickness: 14,
-                              tickfont: { color: '#a1a1aa', size: 10 },
+                              ...PLOTLY_COLORBAR,
+                              title: { text: greek.label, font: PLOTLY_COLORBAR.title.font },
                             },
                             hovertemplate: `Strike: $%{y:.0f}<br>${greek.label}: %{z:.4f}<extra></extra>`,
                           } as never]}
                           layout={{
-                            paper_bgcolor: 'rgba(0,0,0,0)',
-                            plot_bgcolor: 'rgba(0,0,0,0)',
-                            font: { color: '#a1a1aa', size: 10 },
+                            ...PLOTLY_LAYOUT_BASE,
                             margin: { l: 0, r: 50, t: 24, b: 0 },
                             scene: {
                               xaxis: {
                                 title: { text: 'DTE' },
                                 ticktext: surfaceData.T_vals.map((t) => `${Math.round(t * 365)}d`),
                                 tickvals: surfaceData.T_vals,
-                                color: '#71717a',
-                                gridcolor: '#1f1f1f',
+                                ...PLOTLY_SCENE_AXIS,
                               },
-                              yaxis: { title: { text: 'Strike ($)' }, color: '#71717a', gridcolor: '#1f1f1f' },
-                              zaxis: { title: { text: greek.label }, color: '#71717a', gridcolor: '#1f1f1f' },
-                              bgcolor: 'rgba(0,0,0,0)',
+                              yaxis: { title: { text: 'Strike ($)' }, ...PLOTLY_SCENE_AXIS },
+                              zaxis: { title: { text: greek.label }, ...PLOTLY_SCENE_AXIS },
+                              bgcolor: CHART_RESOLVED.card,
                               camera: { eye: { x: 1.6, y: -1.6, z: 0.9 } },
                               aspectmode: 'manual',
                               aspectratio: { x: 2, y: 1.2, z: 0.8 },
@@ -313,7 +307,7 @@ export function Greeks10View() {
                       </div>
                       <div className="rounded-lg border border-border bg-card p-3">
                         <div className="text-type-xs text-muted-foreground">GEX FLIP</div>
-                        <div className="text-lg font-bold text-amber-400">
+                        <div className="text-lg font-bold text-brand">
                           {flipStrike != null ? `$${flipStrike.toFixed(0)}` : '—'}
                         </div>
                       </div>
@@ -332,26 +326,26 @@ export function Greeks10View() {
                     <div className="mt-2 rounded-xl border border-border bg-card p-3">
                       <ResponsiveContainer width="100%" height={260}>
                         <BarChart data={gexChartData} margin={{ top: 5, right: 16, left: 8, bottom: 32 }}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#1f1f1f" />
-                          <XAxis dataKey="strike" tick={{ fill: '#8892a4', fontSize: 9 }} angle={-45} textAnchor="end" />
-                          <YAxis tick={{ fill: '#8892a4', fontSize: 9 }} tickFormatter={(v) => `$${v}M`} />
+                          <CartesianGrid {...chartGridProps} />
+                          <XAxis dataKey="strike" tick={{ ...chartAxisTick, fontSize: 9 }} angle={-45} textAnchor="end" />
+                          <YAxis tick={{ ...chartAxisTick, fontSize: 9 }} tickFormatter={(v) => `$${v}M`} />
                           <Tooltip
-                            contentStyle={{ background: '#0d1117', border: '1px solid #1e2d3d', fontSize: 11 }}
+                            contentStyle={chartTooltipStyle}
                             formatter={(v: number) => [`$${v}M`, 'GEX']}
                             labelFormatter={(l) => `Strike: $${l}`}
                           />
-                          <ReferenceLine y={0} stroke="#8892a4" strokeWidth={1.5} />
+                          <ReferenceLine y={0} stroke={CHART.refLine} strokeWidth={1.5} />
                           <ReferenceLine
                             x={Math.round(data.spot)}
-                            stroke="#f59e0b"
+                            stroke={CHART.series.brand}
                             strokeDasharray="4 2"
-                            label={{ value: `Spot $${data.spot?.toFixed(0)}`, fill: '#f59e0b', fontSize: 9 }}
+                            label={{ value: `Spot $${data.spot?.toFixed(0)}`, fill: CHART.series.brand, fontSize: 9 }}
                           />
                           <Bar dataKey="gex" radius={[2, 2, 0, 0]}>
                             {gexChartData.map((entry, index) => (
                               <Cell
                                 key={index}
-                                fill={entry.isAtm ? '#f59e0b' : entry.gex >= 0 ? '#166534' : '#7f1d1d'}
+                                fill={entry.isAtm ? CHART.series.brand : entry.gex >= 0 ? CHART.series.up : CHART.series.down}
                               />
                             ))}
                           </Bar>
@@ -386,7 +380,7 @@ function HeatMaps({
   ticker: string;
   ohlc: HistoryData['data'];
 }) {
-  const makeHeatmap = (grid: GreeksData['gex_grid'], colorscale: typeof GEX_COLORSCALE, label: string) => {
+  const makeHeatmap = (grid: GreeksData['gex_grid'], colorscale: [number, string][], label: string) => {
     if (!grid?.T_vals?.length || !grid?.K_vals?.length) return null;
     const dteLabels = grid.T_vals.map((t) => Math.round(t * 365));
     return (
@@ -400,27 +394,26 @@ function HeatMaps({
             colorscale,
             zsmooth: 'best',
             colorbar: {
-              title: { text: label, font: { color: '#a1a1aa', size: 10 } },
+              title: { text: label, font: { color: CHART_RESOLVED.mutedForeground, size: 10 } },
               thickness: 12,
-              tickfont: { color: '#a1a1aa', size: 9 },
+              tickfont: { color: CHART_RESOLVED.mutedForeground, size: 9 },
             },
             hovertemplate: `DTE: %{x}d<br>Strike: $%{y:.0f}<br>${label}: %{z:.2f}<extra></extra>`,
           } as never]}
           layout={{
-            paper_bgcolor: 'rgba(0,0,0,0)',
-            plot_bgcolor: 'rgba(0,0,0,0)',
-            font: { color: '#a1a1aa', size: 9 },
+            ...PLOTLY_LAYOUT_BASE,
+            font: { ...PLOTLY_LAYOUT_BASE.font, size: 9 },
             margin: { l: 48, r: 36, t: 28, b: 40 },
-            title: { text: `${label} HEAT MAP`, font: { color: '#e4e4e7', size: 11 }, x: 0.05 },
-            xaxis: { title: { text: 'DTE' }, tickfont: { size: 9, color: '#71717a' }, gridcolor: '#1f1f1f' },
-            yaxis: { title: { text: 'Strike ($)' }, tickfont: { size: 9, color: '#71717a' }, gridcolor: '#1f1f1f' },
+            title: { text: `${label} HEAT MAP`, font: { color: CHART_RESOLVED.foreground, size: 11 }, x: 0.05 },
+            xaxis: { title: { text: 'DTE' }, ...PLOTLY_AXIS },
+            yaxis: { title: { text: 'Strike ($)' }, ...PLOTLY_AXIS },
             shapes: [{
               type: 'line',
               x0: Math.min(...dteLabels),
               y0: spot,
               x1: Math.max(...dteLabels),
               y1: spot,
-              line: { color: '#f59e0b', width: 2, dash: 'dash' },
+              line: { color: CHART_HEX.brand, width: 2, dash: 'dash' },
             }],
             height: 340,
           } as never}
@@ -444,18 +437,17 @@ function HeatMaps({
                 high: ohlc.map((d) => d.high),
                 low: ohlc.map((d) => d.low),
                 close: ohlc.map((d) => d.close),
-                increasing: { line: { color: '#22c55e' } },
-                decreasing: { line: { color: '#ef4444' } },
+                increasing: { line: { color: CHART_HEX.up } },
+                decreasing: { line: { color: CHART_HEX.down } },
                 name: ticker,
               } as never]}
               layout={{
-                paper_bgcolor: 'rgba(0,0,0,0)',
-                plot_bgcolor: 'rgba(0,0,0,0)',
-                font: { color: '#a1a1aa', size: 9 },
+                ...PLOTLY_LAYOUT_BASE,
+                font: { ...PLOTLY_LAYOUT_BASE.font, size: 9 },
                 margin: { l: 48, r: 16, t: 28, b: 40 },
-                title: { text: `${ticker} PRICE HISTORY`, font: { color: '#e4e4e7', size: 11 }, x: 0.05 },
-                xaxis: { rangeslider: { visible: false }, gridcolor: '#1f1f1f' },
-                yaxis: { title: { text: 'Price ($)' }, gridcolor: '#1f1f1f' },
+                title: { text: `${ticker} PRICE HISTORY`, font: { color: CHART_RESOLVED.foreground, size: 11 }, x: 0.05 },
+                xaxis: { rangeslider: { visible: false }, gridcolor: PLOTLY_AXIS.gridcolor },
+                yaxis: { title: { text: 'Price ($)' }, gridcolor: PLOTLY_AXIS.gridcolor },
                 height: 220,
                 showlegend: false,
               } as never}
@@ -468,18 +460,18 @@ function HeatMaps({
       <div>
         <h3 className="text-xs font-semibold text-foreground">GEX &amp; CHARM EXPOSURE HEAT MAPS</h3>
         <p className="text-type-xs text-muted-foreground">
-          GEX = γ × OI × sign · Red = dealers short gamma · Green = long gamma · Dashed = spot
+          GEX = γ × OI × sign · Down = dealers short gamma · Up = long gamma · Dashed = spot
         </p>
       </div>
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-        {makeHeatmap(gexGrid, GEX_COLORSCALE, 'GEX') && (
+        {makeHeatmap(gexGrid, PLOTLY_CS_GEX, 'GEX') && (
           <div className="overflow-hidden rounded-xl border border-border bg-card">
-            {makeHeatmap(gexGrid, GEX_COLORSCALE, 'GEX')}
+            {makeHeatmap(gexGrid, PLOTLY_CS_GEX, 'GEX')}
           </div>
         )}
-        {makeHeatmap(charmGrid, CHARM_COLORSCALE, 'CHARM EXPOSURE') && (
+        {makeHeatmap(charmGrid, PLOTLY_CS_CHARM, 'CHARM EXPOSURE') && (
           <div className="overflow-hidden rounded-xl border border-border bg-card">
-            {makeHeatmap(charmGrid, CHARM_COLORSCALE, 'CHARM EXPOSURE')}
+            {makeHeatmap(charmGrid, PLOTLY_CS_CHARM, 'CHARM EXPOSURE')}
           </div>
         )}
       </div>
@@ -515,16 +507,16 @@ function OiByStrike({ data }: { data: GreeksData }) {
       <div className="mt-2 rounded-xl border border-border bg-card p-3">
         <ResponsiveContainer width="100%" height={Math.max(320, strikeOIData.length * 18)}>
           <BarChart data={strikeOIData} layout="vertical" margin={{ top: 5, right: 16, left: 48, bottom: 5 }} barGap={0}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#1f1f1f" />
-            <XAxis type="number" tick={{ fill: '#8892a4', fontSize: 9 }} tickFormatter={(v) => Math.abs(v).toLocaleString()} />
-            <YAxis type="category" dataKey="strike" tick={{ fill: '#8892a4', fontSize: 9 }} width={48} />
+            <CartesianGrid {...chartGridProps} />
+            <XAxis type="number" tick={{ ...chartAxisTick, fontSize: 9 }} tickFormatter={(v) => Math.abs(v).toLocaleString()} />
+            <YAxis type="category" dataKey="strike" tick={{ ...chartAxisTick, fontSize: 9 }} width={48} />
             <Tooltip
-              contentStyle={{ background: '#0d1117', border: '1px solid #1e2d3d', fontSize: 11 }}
+              contentStyle={chartTooltipStyle}
               formatter={(v: number, name: string) => [Math.abs(v).toLocaleString(), name === 'calls' ? 'Calls OI' : 'Puts OI']}
             />
-            <ReferenceLine x={0} stroke="#52525b" strokeWidth={2} />
-            <Bar dataKey="puts" fill="#d97706" name="puts" radius={[2, 0, 0, 2]} stackId="a" />
-            <Bar dataKey="calls" fill="#3b82f6" name="calls" radius={[0, 2, 2, 0]} stackId="a" />
+            <ReferenceLine x={0} stroke={CHART.refLine} strokeWidth={2} />
+            <Bar dataKey="puts" fill={CHART.series.warn} name="puts" radius={[2, 0, 0, 2]} stackId="a" />
+            <Bar dataKey="calls" fill={CHART.series.info} name="calls" radius={[0, 2, 2, 0]} stackId="a" />
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -558,19 +550,26 @@ function GexCalendar({ data }: { data: GreeksData }) {
   ), 1);
 
   function gexColor(value: number): string {
-    if (value === 0) return '#0d1117';
+    if (value === 0) return CHART_HEX.ink;
     const intensity = Math.min(Math.abs(value) / maxGex, 1);
+    // Anchor to up/down hex (terminal language, not Matrix/blue)
     if (value > 0) {
-      return `rgb(${Math.round(20 + intensity * 30)},${Math.round(80 + intensity * 120)},${Math.round(180 + intensity * 75)})`;
+      const r = Math.round(0x1a + intensity * (0x51 - 0x1a));
+      const g = Math.round(0x3a + intensity * (0xd7 - 0x3a));
+      const b = Math.round(0x20 + intensity * (0x5e - 0x20));
+      return `rgb(${r},${g},${b})`;
     }
-    return `rgb(${Math.round(180 + intensity * 75)},${Math.round(20 + intensity * 20)},${Math.round(20 + intensity * 20)})`;
+    const r = Math.round(0x5a + intensity * (0xff - 0x5a));
+    const g = Math.round(0x14 + intensity * (0x2f - 0x14));
+    const b = Math.round(0x18 + intensity * (0x3a - 0x18));
+    return `rgb(${r},${g},${b})`;
   }
 
   return (
     <div>
       <h3 className="text-xs font-semibold text-foreground">GAMMA EXPOSURE CALENDAR</h3>
       <p className="text-type-xs text-muted-foreground">
-        Strike vs Expiry · Blue = MM long gamma · Red = MM short gamma
+        Strike vs Expiry · Up = MM long gamma · Down = MM short gamma
       </p>
       <div className="mt-2 max-h-[400px] overflow-auto rounded-xl border border-border bg-card p-2">
         <table className="w-full border-collapse text-type-xs">
@@ -589,7 +588,7 @@ function GexCalendar({ data }: { data: GreeksData }) {
               const isSpot = Math.abs(K - data.spot) < data.spot * 0.003;
               return (
                 <tr key={K}>
-                  <td className={`p-1 text-right ${isSpot ? 'font-bold text-amber-400' : 'text-muted-foreground'}`}>
+                  <td className={`p-1 text-right ${isSpot ? 'font-bold text-brand' : 'text-muted-foreground'}`}>
                     {isSpot ? '▶' : ''}{K}
                   </td>
                   {expiries.map((T) => {

@@ -1,18 +1,24 @@
-import { describe, expect, it } from 'vitest';
 import {
-  CANVAS,
   CHART,
   CHART_GREEK,
+  CHART_HEX,
   CHART_RESOLVED,
   CHART_SCENARIO,
   CHART_SERIES_ORDINAL,
   CHART_SPREAD,
+  PLOTLY_CS_GEX,
+  PLOTLY_CS_IV,
+  PLOTLY_LAYOUT_BASE,
   canvasCellColor,
   chartCorrColors,
   chartGridProps,
   chartTooltipStyle,
   colorWithAlpha,
   cssVar,
+  describe,
+  expect,
+  it } from 'vitest';import {  CANVAS,
+  it } from 'vitest';import {  CHART,
   parseRgbChannels,
   resolveCanvasColors,
 } from './chartTheme';
@@ -136,3 +142,5 @@ describe('chartTheme', () => {
     expect(c.down).toBeTruthy();
   });
 });
+
+
