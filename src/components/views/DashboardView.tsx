@@ -237,7 +237,7 @@ export function DashboardView() {
     <div className="h-full overflow-y-auto p-1">
       {/* Regime banner — persistent top band (gaze anchor) */}
       <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 rounded border border-border border-l-2 border-l-primary bg-card/80 px-3 py-2 font-mono text-type-sm">
-        <span className="font-bold tracking-wider text-primary">{symbol}</span>
+        <span className="font-bold tracking-wider text-foreground">{symbol}</span>
         <span className="text-foreground font-semibold tabular-nums">{fmtPrice(snapshot.spot)}</span>
         <span className={dayChg >= 0 ? 'text-up' : 'text-down'}>{fmtSignedPct(dayChgPct)}</span>
         <Sep />
@@ -326,7 +326,7 @@ export function DashboardView() {
             key={id}
             type="button"
             onClick={() => go(id)}
-            className="rounded border border-border bg-card px-2 py-0.5 font-mono text-type-xs text-muted-foreground hover:border-primary hover:text-primary"
+            className="rounded border border-border bg-card px-2 py-0.5 font-mono text-type-xs text-muted-foreground hover:border-border hover:text-foreground"
           >
             {label} →
           </button>
@@ -360,7 +360,7 @@ export function DashboardView() {
               <button
                 type="button"
                 onClick={() => go('vol')}
-                className="w-full border-t border-border px-3 py-1.5 text-left font-mono text-type-2xs text-primary hover:bg-muted/40"
+                className="w-full border-t border-border px-3 py-1.5 text-left font-mono text-type-2xs text-muted-foreground hover:bg-muted/40 hover:text-foreground"
               >
                 Open Vol Structure (surface · smile · term · surface fit) →
               </button>
@@ -414,7 +414,7 @@ export function DashboardView() {
             <button
               type="button"
               onClick={() => go('positioning')}
-              className="w-full border-t border-border px-3 py-1.5 text-left font-mono text-type-2xs text-primary hover:bg-muted/40"
+              className="w-full border-t border-border px-3 py-1.5 text-left font-mono text-type-2xs text-muted-foreground hover:bg-muted/40 hover:text-foreground"
             >
               Open Positioning (chain · dealer · edge) →
             </button>
@@ -504,7 +504,7 @@ export function DashboardView() {
             <button
               type="button"
               onClick={() => go('vol')}
-              className="w-full border-t border-border px-3 py-1.5 text-left font-mono text-type-2xs text-primary hover:bg-muted/40"
+              className="w-full border-t border-border px-3 py-1.5 text-left font-mono text-type-2xs text-muted-foreground hover:bg-muted/40 hover:text-foreground"
             >
               Inspect under Vol Structure → Surface Fit
             </button>
@@ -655,9 +655,9 @@ function RatesStrip({
     <button
       type="button"
       onClick={onOpen}
-      className="mb-2 grid w-full grid-cols-2 items-center gap-x-4 gap-y-1 rounded border border-border bg-card/60 px-3 py-1.5 text-left hover:border-primary/50 md:flex md:flex-wrap"
+      className="mb-2 grid w-full grid-cols-2 items-center gap-x-4 gap-y-1 rounded border border-border bg-card/60 px-3 py-1.5 text-left hover:border-border md:flex md:flex-wrap"
     >
-      <span className="col-span-2 font-mono text-type-xs font-bold tracking-wider text-primary md:col-span-1">
+      <span className="col-span-2 font-mono text-type-xs font-bold tracking-wider text-foreground md:col-span-1">
         RATES · MACRO
       </span>
       {items ? items.map((it) => (
@@ -670,7 +670,7 @@ function RatesStrip({
           {offlineLabel}
         </span>
       )}
-      <span className="col-span-2 ml-auto font-mono text-type-2xs text-primary md:col-span-1">Rates desk →</span>
+      <span className="col-span-2 ml-auto font-mono text-type-2xs text-muted-foreground md:col-span-1">Rates desk →</span>
     </button>
   );
 }

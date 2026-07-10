@@ -23,7 +23,7 @@ export function PlaybackBar() {
       </button>
       <button
         onClick={togglePlay}
-        className="text-primary hover:text-primary/80 px-1 font-bold"
+        className="text-foreground hover:text-foreground/80 px-1 font-bold"
         aria-label={isPlaying ? 'Pause playback' : 'Start playback'}
       >
         {isPlaying ? '⏸' : '▶'}
@@ -67,7 +67,7 @@ export function PlaybackBar() {
         {frameIndex + 1}/{historicalFrames.length}
       </span>
 
-      {isPlaying && <span className="text-primary text-type-xs" aria-live="polite">LIVE EDGE</span>}
+      {isPlaying && <span className="text-muted-foreground text-type-xs" aria-live="polite">LIVE EDGE</span>}
 
       <select
         value={speed}

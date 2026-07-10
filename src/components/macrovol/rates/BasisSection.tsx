@@ -55,7 +55,7 @@ export function BasisSection({
             basis.regime === 'corridor_normal'
               ? 'bg-up/15 text-up'
               : basis.regime === 'above_floor'
-                ? 'bg-amber-500/15 text-amber-400'
+                ? 'bg-warn/15 text-warn'
                 : 'bg-down/15 text-down'
           }`}
         >
@@ -82,19 +82,19 @@ export function BasisSection({
           <span className="text-muted-foreground">Z-score ({basisHist.zscore.window}d)</span>
           <span>
             SOFR−EFFR{' '}
-            <b className={Math.abs(basisHist.zscore.sofr_effr ?? 0) > 2 ? 'text-amber-400' : ''}>
+            <b className={Math.abs(basisHist.zscore.sofr_effr ?? 0) > 2 ? 'text-warn' : ''}>
               {basisHist.zscore.sofr_effr != null ? basisHist.zscore.sofr_effr.toFixed(2) : '—'}
             </b>
           </span>
           <span>
             SOFR−IORB{' '}
-            <b className={Math.abs(basisHist.zscore.sofr_iorb ?? 0) > 2 ? 'text-amber-400' : ''}>
+            <b className={Math.abs(basisHist.zscore.sofr_iorb ?? 0) > 2 ? 'text-warn' : ''}>
               {basisHist.zscore.sofr_iorb != null ? basisHist.zscore.sofr_iorb.toFixed(2) : '—'}
             </b>
           </span>
           <span>
             EFFR−IORB{' '}
-            <b className={Math.abs(basisHist.zscore.effr_iorb ?? 0) > 2 ? 'text-amber-400' : ''}>
+            <b className={Math.abs(basisHist.zscore.effr_iorb ?? 0) > 2 ? 'text-warn' : ''}>
               {basisHist.zscore.effr_iorb != null ? basisHist.zscore.effr_iorb.toFixed(2) : '—'}
             </b>
           </span>

@@ -92,7 +92,7 @@ describe('desk section ids after DeskChrome extraction', () => {
     }
     const active = document.getElementById('vol-sub-surface');
     expect(active?.getAttribute('data-desk-section-active')).toBe('1');
-    expect(active?.className).toContain('bg-primary/20');
+    expect(active?.className).toContain('bg-secondary');
   });
 
   it('GreeksView mounts all GREEKS_SECTIONS button ids with soft active', () => {
@@ -105,7 +105,7 @@ describe('desk section ids after DeskChrome extraction', () => {
     }
     const heat = document.getElementById('greeks-sub-heatmap');
     expect(heat?.getAttribute('data-desk-section-active')).toBe('1');
-    expect(heat?.className).toContain('bg-primary/20');
+    expect(heat?.className).toContain('bg-secondary');
   });
 
   it('PositioningView mounts all POSITIONING_SECTIONS button ids (dealer default)', () => {
@@ -118,7 +118,7 @@ describe('desk section ids after DeskChrome extraction', () => {
     }
     const dealer = document.getElementById('pos-sub-dealer');
     expect(dealer?.getAttribute('data-desk-section-active')).toBe('1');
-    expect(dealer?.className).toContain('bg-primary/20');
+    expect(dealer?.className).toContain('bg-secondary');
   });
 
   it('RatesView jump chips + section anchors stay in registry', () => {
@@ -179,7 +179,7 @@ describe('desk section ids after DeskChrome extraction', () => {
     fireEvent.click(document.getElementById('vol-sub-term')!);
     const term = document.getElementById('vol-sub-term')!;
     expect(term.getAttribute('data-desk-section-active')).toBe('1');
-    expect(term.className).toContain('bg-primary/20');
+    expect(term.className).toContain('bg-secondary');
     expect(term.className).not.toContain('text-primary-foreground');
   });
 });

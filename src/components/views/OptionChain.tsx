@@ -45,7 +45,7 @@ function HeaderRow() {
         <Explain term="openInterest" className={`${COL_WIDTHS.sm} text-right px-1`}>OI</Explain>
         <Explain term="volume" className={`${COL_WIDTHS.sm} text-right px-1`}>Vol</Explain>
       </div>
-      <span className="flex-[1] text-center font-semibold text-amber"><Explain term="strike">Strike</Explain></span>
+      <span className="flex-[1] text-center font-semibold text-muted-foreground"><Explain term="strike">Strike</Explain></span>
       <div className="flex-[4] flex">
         <Explain term="volume" className={`${COL_WIDTHS.sm} text-right px-1`}>Vol</Explain>
         <Explain term="openInterest" className={`${COL_WIDTHS.sm} text-right px-1`}>OI</Explain>
@@ -165,7 +165,7 @@ export function OptionChain() {
                 <span className={`${COL_WIDTHS.sm} text-right px-1 tabular-nums`}>{r.callOI}</span>
                 <span className={`${COL_WIDTHS.sm} text-right px-1 tabular-nums`}>{r.callVol}</span>
               </div>
-              <span className="flex-[1] text-center text-amber font-semibold tabular-nums">{fmtPrice(r.strike, 0)}</span>
+              <span className="flex-[1] text-center text-foreground font-semibold tabular-nums">{fmtPrice(r.strike, 0)}</span>
               <div className="flex-[4] flex text-down">
                 <span className={`${COL_WIDTHS.sm} text-right px-1 tabular-nums`}>{r.putVol}</span>
                 <span className={`${COL_WIDTHS.sm} text-right px-1 tabular-nums`}>{r.putOI}</span>

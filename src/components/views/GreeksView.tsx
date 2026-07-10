@@ -531,7 +531,7 @@ export function GreeksView() {
         <button
           type="button"
           onClick={() => setEdition('greeks10')}
-          className="mr-1 rounded px-2 py-0.5 font-mono text-type-xs text-muted-foreground hover:bg-primary/20 hover:text-primary"
+          className="mr-1 rounded px-2 py-0.5 font-mono text-type-xs text-muted-foreground hover:bg-muted hover:text-foreground"
           title="MacroVol Greeks desk with IV surface"
         >
           Greeks 1.0
@@ -571,7 +571,7 @@ export function GreeksView() {
           {subView === 'surface3d' && (
             <SectionErrorBoundary name="3D">
               <div className="flex h-full flex-col">
-                <div className="border-b border-border px-3 py-1 font-mono text-type-2xs text-amber">
+                <div className="border-b border-border px-3 py-1 font-mono text-type-2xs text-muted-foreground">
                   3D mesh = OTM-wing greeks (put K&lt;S, call K≥S), height-scaled min→max for visualization only —
                   not OI-weighted exposure. Prefer Greeks 1.0 surfaces / heatmap for desk work.
                 </div>
@@ -599,7 +599,7 @@ export function GreeksView() {
                         ? 'bg-down/20 text-down'
                         : s.id === 'calls'
                           ? 'bg-up/20 text-up'
-                          : 'bg-primary/20 text-primary'
+                          : 'bg-secondary text-foreground ring-1 ring-border'
                       : 'text-muted-foreground hover:text-foreground',
                   )}
                 >
@@ -613,7 +613,7 @@ export function GreeksView() {
                   key={m.id}
                   onClick={() => setMoneynessRange(m.id)}
                   className={cn('px-1.5 py-0.5 rounded text-type-2xs',
-                    moneynessRange === m.id ? 'bg-amber/20 text-amber' : 'text-muted-foreground hover:text-foreground'
+                    moneynessRange === m.id ? 'bg-secondary text-foreground ring-1 ring-border' : 'text-muted-foreground hover:text-foreground'
                   )}
                 >
                   {m.label}
@@ -624,7 +624,7 @@ export function GreeksView() {
             <button
               onClick={() => setSortMode(s => s === 'delta' ? 'strike' : 'delta')}
               className={cn('px-1.5 py-0.5 rounded text-type-2xs',
-                sortMode === 'delta' ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:text-foreground'
+                sortMode === 'delta' ? 'bg-secondary text-foreground ring-1 ring-border' : 'text-muted-foreground hover:text-foreground'
               )}
             >
               Sort: {sortMode === 'delta' ? 'Δ' : 'K'}
@@ -636,7 +636,7 @@ export function GreeksView() {
                   key={g.key}
                   onClick={() => setSelectedGreek(g.key)}
                   className={cn('px-1.5 py-0.5 rounded text-type-2xs',
-                    selectedGreek === g.key ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:text-foreground'
+                    selectedGreek === g.key ? 'bg-secondary text-foreground ring-1 ring-border' : 'text-muted-foreground hover:text-foreground'
                   )}
                 >
                   <Explain term={g.key}>{g.label}</Explain>
@@ -651,7 +651,7 @@ export function GreeksView() {
                   key={g.key}
                   onClick={() => setSelectedGreek(g.key)}
                   className={cn('px-1.5 py-0.5 rounded text-type-2xs',
-                    selectedGreek === g.key ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:text-foreground'
+                    selectedGreek === g.key ? 'bg-secondary text-foreground ring-1 ring-border' : 'text-muted-foreground hover:text-foreground'
                   )}
                 >
                   <Explain term={g.key}>{g.label}</Explain>
@@ -692,7 +692,7 @@ export function GreeksView() {
             <div data-heatmap-inspector="" className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-amber/40 bg-card px-3 py-1.5 text-type-sm font-mono flex-shrink-0">
               <span className="flex items-center gap-1.5">
                 <span className="text-muted-foreground">K</span>
-                <span className="text-amber font-semibold tabular-nums">{fmtPrice(selectedCell.strike, 0)}</span>
+                <span className="text-foreground font-semibold tabular-nums">{fmtPrice(selectedCell.strike, 0)}</span>
                 <span className="text-muted-foreground">·</span>
                 <span className="text-foreground tabular-nums">{selectedCell.dte}d</span>
               </span>
@@ -734,7 +734,7 @@ export function GreeksView() {
                   <span><Explain term="delta">Δ</Explain> <span className="tabular-nums text-cyan">{fmtSigned(portfolio.delta, 2)}</span></span>
                   <span><Explain term="gamma">Γ</Explain> <span className="tabular-nums text-up">{fmtSigned(portfolio.gamma, 4)}</span></span>
                   <span><Explain term="theta">Θ</Explain> <span className="tabular-nums text-down">{fmtSigned(portfolio.theta, 2)}</span></span>
-                  <span><Explain term="vega">ν</Explain> <span className="tabular-nums text-amber">{fmtSigned(portfolio.vega, 2)}</span></span>
+                  <span><Explain term="vega">ν</Explain> <span className="tabular-nums text-foreground">{fmtSigned(portfolio.vega, 2)}</span></span>
                   {move && <span><Explain term="expectedMove">EM</Explain> <span className="tabular-nums">{fmtPrice(move.move)}</span></span>}
                 </span>
               )}

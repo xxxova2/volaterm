@@ -311,7 +311,7 @@ export function GreeksSurface3D() {
                 onClick={() => setGreek(g.key)}
                 className={cn(
                   'px-1.5 py-0.5 text-type-xs font-mono rounded',
-                  greek === g.key ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:text-foreground',
+                  greek === g.key ? 'bg-secondary text-foreground ring-1 ring-border' : 'text-muted-foreground hover:text-foreground',
                 )}
               >
                 {g.label}
@@ -326,7 +326,7 @@ export function GreeksSurface3D() {
                 onClick={() => setGreek(g.key)}
                 className={cn(
                   'px-1.5 py-0.5 text-type-xs font-mono rounded',
-                  greek === g.key ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:text-foreground',
+                  greek === g.key ? 'bg-secondary text-foreground ring-1 ring-border' : 'text-muted-foreground hover:text-foreground',
                 )}
               >
                 {g.label}

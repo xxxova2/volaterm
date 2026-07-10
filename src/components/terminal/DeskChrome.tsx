@@ -22,7 +22,7 @@ export function DeskChromeLabel({
       className={cn(
         // Base size is text-type-xs; override with another text-type-* token (same group)
         // so twMerge drops the default (e.g. className="text-type-sm").
-        'mr-1 shrink-0 font-mono text-type-xs font-bold tracking-wider text-primary',
+        'mr-1 shrink-0 font-mono text-type-xs font-semibold tracking-wider text-muted-foreground',
         className,
       )}
       data-desk-chrome-label=""

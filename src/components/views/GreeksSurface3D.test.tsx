@@ -204,8 +204,8 @@ describe('GreeksSurface3D component', () => {
     expect(deltaBtn).toBeTruthy();
     fireEvent.click(deltaBtn!);
     // After clicking delta, the delta button should have the "active" classes
-    // (bg-primary/20 text-primary).
-    expect(deltaBtn!.className).toContain('text-primary');
+    // (bg-secondary text-foreground ring-1 ring-border).
+    expect(deltaBtn!.className).toContain('text-foreground');
   });
 
   it('shows a placeholder when no snapshot is available', () => {

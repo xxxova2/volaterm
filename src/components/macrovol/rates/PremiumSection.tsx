@@ -76,7 +76,7 @@ export function PremiumSection({
           <div key={card.title} className="rounded-lg border border-border bg-background/40 p-3">
             <div className="flex items-center justify-between gap-2">
               <span className="text-type-sm font-semibold text-foreground">{card.title}</span>
-              <span className="text-type-xs font-bold text-primary">{card.signal}</span>
+              <span className="text-type-xs font-bold text-foreground">{card.signal}</span>
             </div>
             <p className="mt-1 text-type-xs leading-snug text-muted-foreground">{card.body}</p>
           </div>

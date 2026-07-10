@@ -145,7 +145,7 @@ export function YieldCurveCompare({
           return (
             <span key={p.label}>
               <span className="text-zinc-400">{p.label}</span>{' '}
-              <span className={d > 0 ? 'text-amber-400' : d < 0 ? 'text-emerald-400' : 'text-zinc-300'}>
+              <span className={d > 0 ? 'text-warn' : d < 0 ? 'text-up' : 'text-foreground'}>
                 {d > 0 ? '+' : ''}
                 {d.toFixed(0)}bp
               </span>

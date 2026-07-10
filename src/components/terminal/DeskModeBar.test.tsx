@@ -5,10 +5,10 @@ import { DeskModeBar, deskModeChipClass } from './DeskModeBar';
 import { DeskChrome, DeskChromeLabel } from './DeskChrome';
 
 describe('deskModeChipClass', () => {
-  it('uses soft primary active grammar', () => {
-    expect(deskModeChipClass(true)).toContain('bg-primary/20');
-    expect(deskModeChipClass(true)).toContain('text-primary');
-    expect(deskModeChipClass(true)).not.toContain('bg-primary text-primary-foreground');
+  it('uses neutral active chip grammar (no brand body text)', () => {
+    expect(deskModeChipClass(true)).toContain('bg-secondary');
+    expect(deskModeChipClass(true)).toContain('text-foreground');
+    expect(deskModeChipClass(true)).not.toContain('text-primary');
     expect(deskModeChipClass(false)).toContain('text-muted-foreground');
   });
 });
@@ -47,9 +47,9 @@ describe('DeskModeBar', () => {
       />,
     );
     const smile = document.getElementById('vol-sub-smile')!;
-    expect(smile.className).toContain('bg-primary/20');
-    expect(smile.className).toContain('text-primary');
-    expect(smile.className).not.toMatch(/bg-primary\s/);
+    expect(smile.className).toContain('bg-secondary');
+    expect(smile.className).toContain('text-foreground');
+    expect(smile.className).not.toContain('text-primary');
   });
 
   it('fires onSelect when clicked (jump path)', () => {
@@ -127,7 +127,7 @@ describe('DeskChrome', () => {
     render(<DeskChromeLabel>CRYPTO</DeskChromeLabel>);
     const el = screen.getByText('CRYPTO');
     expect(el.getAttribute('data-desk-chrome-label')).toBe('');
-    expect(el.className).toContain('text-primary');
+    expect(el.className).toContain('text-muted-foreground');
     expect(el.className).toContain('tracking-wider');
   });
 

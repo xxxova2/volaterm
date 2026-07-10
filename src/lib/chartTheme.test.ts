@@ -127,8 +127,8 @@ describe('chartTheme', () => {
     const neg = canvasCellColor(-1, -1, 1, true);
     const seq = canvasCellColor(1, 0, 1, false);
     expect(pos).toMatch(/^rgba\(63, 185, 80,/);
-    expect(neg).toMatch(/^rgba\(240, 136, 62,/);
-    expect(seq).toMatch(/^rgba\(77, 143, 240,/);
+    expect(neg).toMatch(/^rgba\(224, 112, 80,/);
+    expect(seq).toMatch(/^rgba\(107, 159, 212,/);
   });
 
   it('resolveCanvasColors returns brand/grid/label roles', () => {

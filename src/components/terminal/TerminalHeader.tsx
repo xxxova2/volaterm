@@ -78,12 +78,12 @@ export function TerminalHeader({ onOpenShortcuts }: TerminalHeaderProps) {
     <>
       <header className="flex h-7 shrink-0 items-center justify-between border-b border-border bg-card px-1.5 text-type-xs font-mono sm:px-2">
         <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-          <span className="shrink-0 text-primary font-bold text-xs tracking-wider sm:text-sm">VOLATERM</span>
+          <span className="shrink-0 text-foreground font-semibold text-xs tracking-[0.14em] sm:text-sm">VOLATERM</span>
           <button
             onClick={() => setDialogOpen(true)}
             className="flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 font-semibold transition-colors hover:bg-secondary"
           >
-            <span className="text-amber">{symbol}</span>
+            <span className="text-foreground tabular-nums">{symbol}</span>
             <span className="text-muted-foreground text-type-2xs">▼</span>
           </button>
           {fmpQuote?.name && (

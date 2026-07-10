@@ -239,7 +239,7 @@ export function PositioningView() {
           </span>
           <span>
             <span className="text-muted-foreground">Flip </span>
-            <span className="text-amber">{dealer?.gammaFlip != null ? fmtPrice(dealer.gammaFlip, 0) : '—'}</span>
+            <span className="text-foreground">{dealer?.gammaFlip != null ? fmtPrice(dealer.gammaFlip, 0) : '—'}</span>
           </span>
           <span>
             <span className="text-muted-foreground">Call wall </span>
@@ -251,7 +251,7 @@ export function PositioningView() {
           </span>
           <span>
             <span className="text-muted-foreground">Max pain </span>
-            <span className="text-primary">{maxPain != null ? fmtPrice(maxPain, 0) : '—'}</span>
+            <span className="text-foreground">{maxPain != null ? fmtPrice(maxPain, 0) : '—'}</span>
           </span>
           <span>
             <span className="text-muted-foreground">GEX </span>
@@ -264,7 +264,7 @@ export function PositioningView() {
             <span className="text-cyan">{move ? `±${fmtPrice(move.move)}` : '—'}</span>
           </span>
           {tradeableParity.length > 0 && (
-            <span className="text-amber">
+            <span className="text-foreground">
               {tradeableParity.length} parity flag{tradeableParity.length > 1 ? 's' : ''}
             </span>
           )}
@@ -309,7 +309,7 @@ export function PositioningView() {
                         className={cn(
                           'rounded px-2 py-0.5 font-mono text-type-xs border transition-colors',
                           metric === m.id
-                            ? 'border-primary bg-primary/15 text-primary'
+                            ? 'border-primary bg-secondary text-foreground ring-1 ring-border'
                             : 'border-border text-muted-foreground hover:text-foreground',
                         )}
                       >
@@ -326,7 +326,7 @@ export function PositioningView() {
                         className={cn(
                           'rounded px-2 py-0.5 font-mono text-type-xs border',
                           weight === w
-                            ? 'border-amber bg-amber/10 text-amber'
+                            ? 'border-border bg-secondary text-foreground'
                             : 'border-border text-muted-foreground',
                         )}
                       >
@@ -475,7 +475,7 @@ export function PositioningView() {
                     label="Gamma Flip"
                     term="gammaFlip"
                     value={dealer?.gammaFlip != null ? fmtPrice(dealer.gammaFlip, 0) : '—'}
-                    color="text-amber"
+                    color="text-foreground"
                   />
                   <LevelStat
                     label="Call Wall"
@@ -493,7 +493,7 @@ export function PositioningView() {
                     label="Max Pain"
                     term="maxPain"
                     value={maxPain != null ? fmtPrice(maxPain, 0) : '—'}
-                    color="text-primary"
+                    color="text-foreground"
                   />
                   <LevelStat
                     label="Total GEX"
@@ -613,7 +613,7 @@ export function PositioningView() {
                 </span>
                 <span>
                   <span className="text-muted-foreground">Tradeable after costs </span>
-                  <span className={tradeableParity.length ? 'text-amber' : 'text-up'}>
+                  <span className={tradeableParity.length ? 'text-warn' : 'text-up'}>
                     {tradeableParity.length}
                   </span>
                 </span>
@@ -667,7 +667,7 @@ export function PositioningView() {
                           </td>
                           <td className="px-2 py-1">
                             {row.tradeable ? (
-                              <span className="text-amber">EDGE?</span>
+                              <span className="text-warn">EDGE?</span>
                             ) : (
                               <span className="text-muted-foreground">noise</span>
                             )}

@@ -1,6 +1,6 @@
 /**
  * Unified desk mode / section chip grammar.
- * Active: soft bg-primary/20 text-primary (never solid primary fill for section chips).
+ * Active: neutral chip (bg-secondary + foreground) — not brand-colored body text.
  * With asSectionButtons, buttons keep registry ids for jumpDeskSection .click().
  */
 import { cn } from '../../lib/utils';
@@ -17,7 +17,7 @@ export function deskModeChipClass(active: boolean, className?: string): string {
   return cn(
     'shrink-0 rounded px-2 py-0.5 font-mono text-type-xs transition-colors',
     active
-      ? 'bg-primary/20 text-primary'
+      ? 'bg-secondary text-foreground ring-1 ring-border'
       : 'text-muted-foreground hover:bg-muted hover:text-foreground',
     className,
   );

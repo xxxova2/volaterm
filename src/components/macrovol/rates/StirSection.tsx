@@ -189,7 +189,7 @@ export function StirSection({
                 stir.path.path_change_bps != null
                   ? `${stir.path.path_change_bps >= 0 ? '+' : ''}${stir.path.path_change_bps}bp`
                   : '—',
-              cls: (stir.path.path_change_bps ?? 0) < 0 ? 'text-up' : 'text-amber-400',
+              cls: (stir.path.path_change_bps ?? 0) < 0 ? 'text-up' : 'text-warn',
             },
             {
               label: '≈25bp',
@@ -351,7 +351,7 @@ export function StirSection({
                         vs != null && vs < 0
                           ? 'text-up'
                           : vs != null && vs > 0
-                            ? 'text-amber-400'
+                            ? 'text-warn'
                             : ''
                       }`}
                     >

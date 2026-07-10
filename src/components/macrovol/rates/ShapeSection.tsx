@@ -51,7 +51,7 @@ export function ShapeSection({
                 ? 'bg-up/15 text-up'
                 : shape.regime === 'inverted'
                   ? 'bg-down/15 text-down'
-                  : 'bg-amber-500/15 text-amber-400'
+                  : 'bg-warn/15 text-warn'
             }`}
           >
             {shape.regime.toUpperCase()}

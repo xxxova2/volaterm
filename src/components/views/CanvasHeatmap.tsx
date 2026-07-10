@@ -231,7 +231,7 @@ export function CanvasHeatmap({
             <button
               onClick={() => onSortModeChange(sortMode === 'delta' ? 'strike' : 'delta')}
               className={cn('ml-2 px-1.5 py-0.5 text-type-2xs font-mono rounded',
-                sortMode === 'delta' ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground hover:text-foreground'
+                sortMode === 'delta' ? 'bg-secondary text-foreground ring-1 ring-border' : 'bg-muted text-muted-foreground hover:text-foreground'
               )}
             >
               {sortMode === 'delta' ? 'Sort: Δ' : 'Sort: K'}

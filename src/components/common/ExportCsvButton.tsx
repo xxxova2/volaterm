@@ -24,7 +24,7 @@ export function ExportCsvButton({
       disabled={!rows.length}
       className={cn(
         'rounded border border-border px-1.5 py-0.5 font-mono text-type-2xs text-muted-foreground',
-        'hover:border-primary hover:text-primary disabled:opacity-40',
+        'hover:border-border hover:text-foreground disabled:opacity-40',
         className,
       )}
       title="Export table as CSV"

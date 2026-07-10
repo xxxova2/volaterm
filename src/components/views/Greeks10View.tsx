@@ -115,7 +115,7 @@ export function Greeks10View() {
     <div className="flex h-full flex-col overflow-hidden">
       {/* Header / section toggle */}
       <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2">
-        <span className="text-type-xs font-mono font-bold tracking-wider text-primary">GREEKS 1.0</span>
+        <span className="text-type-xs font-mono font-bold tracking-wider text-foreground">GREEKS 1.0</span>
         <span className="text-type-xs font-mono text-muted-foreground">
           MacroVol · BS · yfinance
           {data?.r != null && (
@@ -179,7 +179,7 @@ export function Greeks10View() {
                 <button
                   type="button"
                   onClick={() => setTicker(storeSymbol)}
-                  className="rounded border border-brand/40 px-2 py-1 text-type-xs text-brand"
+                  className="rounded border border-border px-2 py-1 text-type-xs text-muted-foreground"
                 >
                   Use terminal: {storeSymbol}
                 </button>
@@ -307,7 +307,7 @@ export function Greeks10View() {
                       </div>
                       <div className="rounded-lg border border-border bg-card p-3">
                         <div className="text-type-xs text-muted-foreground">GEX FLIP</div>
-                        <div className="text-lg font-bold text-brand">
+                        <div className="text-lg font-bold text-foreground">
                           {flipStrike != null ? `$${flipStrike.toFixed(0)}` : '—'}
                         </div>
                       </div>
@@ -588,7 +588,7 @@ function GexCalendar({ data }: { data: GreeksData }) {
               const isSpot = Math.abs(K - data.spot) < data.spot * 0.003;
               return (
                 <tr key={K}>
-                  <td className={`p-1 text-right ${isSpot ? 'font-bold text-brand' : 'text-muted-foreground'}`}>
+                  <td className={`p-1 text-right ${isSpot ? 'font-bold text-foreground' : 'text-muted-foreground'}`}>
                     {isSpot ? '▶' : ''}{K}
                   </td>
                   {expiries.map((T) => {

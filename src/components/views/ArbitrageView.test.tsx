@@ -66,6 +66,6 @@ describe('ArbitrageView', () => {
     const btn = screen.getByRole('button', { name: /Butterfly/ });
     expect(btn).toBeTruthy();
     fireEvent.click(btn);
-    expect(btn.className).toContain('bg-primary');
+    expect(btn.className).toContain('bg-secondary');
   });
 });

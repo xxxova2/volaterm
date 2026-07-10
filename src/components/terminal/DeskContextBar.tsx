@@ -42,7 +42,7 @@ export function DeskContextBar() {
           <span className="text-muted-foreground/50" aria-hidden>
             ›
           </span>
-          <span className="text-primary/90">{sectionLabel}</span>
+          <span className="text-foreground/90">{sectionLabel}</span>
         </>
       )}
       {apis && apis.length > 0 && (

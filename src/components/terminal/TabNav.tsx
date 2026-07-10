@@ -27,7 +27,7 @@ export function TabNav() {
               className={cn(
                 'flex items-center gap-1 rounded-t px-2 py-0.5 font-mono text-type-sm transition-colors sm:px-2.5',
                 isActive
-                  ? 'border-b-2 border-primary bg-card text-primary'
+                  ? 'border-b-2 border-foreground/70 bg-card text-foreground'
                   : 'text-muted-foreground hover:bg-muted hover:text-foreground',
               )}
             >

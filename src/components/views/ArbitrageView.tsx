@@ -231,7 +231,7 @@ export function ArbitrageView() {
             key={m.id}
             onClick={() => { setMode(m.id); setSelectedCell(null); }}
             className={cn('px-2 py-0.5 text-type-xs font-mono rounded bg-card/80 backdrop-blur-sm border border-border',
-              mode === m.id ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:text-foreground'
+              mode === m.id ? 'bg-secondary text-foreground ring-1 ring-border' : 'text-muted-foreground hover:text-foreground'
             )}
           >
             <Explain term={m.id === 'combined' ? 'arbitrage' : m.id === 'calendar' ? 'calendarArb' : 'butterflyArb'}>{m.label}</Explain>
@@ -248,10 +248,10 @@ export function ArbitrageView() {
 
       {/* Inspector */}
       {selectedCell && (
-        <div data-arb-inspector="" className="absolute bottom-1 left-1/2 -translate-x-1/2 flex items-center gap-x-4 gap-y-1 rounded border border-amber/40 bg-card/95 backdrop-blur-sm px-3 py-2 text-type-sm font-mono shadow-sm z-20">
+        <div data-arb-inspector="" className="absolute bottom-1 left-1/2 -translate-x-1/2 flex items-center gap-x-4 gap-y-1 rounded border border-border bg-card/95 backdrop-blur-sm px-3 py-2 text-type-sm font-mono shadow-sm z-20">
           <span className="flex items-center gap-1.5">
             <span className="text-muted-foreground">K</span>
-            <span className="text-amber font-semibold tabular-nums">{fmtPrice(selectedCell.strike, 0)}</span>
+            <span className="text-foreground font-semibold tabular-nums">{fmtPrice(selectedCell.strike, 0)}</span>
             <span className="text-muted-foreground">·</span>
             <span className="text-foreground tabular-nums">{selectedCell.dte}d</span>
           </span>

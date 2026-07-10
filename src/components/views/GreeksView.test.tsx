@@ -107,11 +107,11 @@ describe('GreeksView heatmap selector', () => {
 
     // Default is ATM ±20%; switch to ±10%.
     fireEvent.click(screen.getByText('ATM \u00b110%'));
-    expect(screen.getByText('ATM \u00b110%').className).toContain('bg-amber');
+    expect(screen.getByText('ATM \u00b110%').className).toContain('bg-secondary');
 
     // Expand to All.
     fireEvent.click(screen.getByText('All'));
-    expect(screen.getByText('All').className).toContain('bg-amber');
+    expect(screen.getByText('All').className).toContain('bg-secondary');
   });
 
   it('renders OTM/Calls/Puts side selectors', () => {

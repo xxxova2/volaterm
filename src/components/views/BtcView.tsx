@@ -91,13 +91,13 @@ function ThinBookPane({
       onClick={() => onSelect(ccy)}
       className={cn(
         'flex min-h-0 min-w-0 flex-1 flex-col gap-1 rounded border p-1.5 text-left transition-colors',
-        active ? 'border-primary bg-primary/5' : 'border-border bg-card/50 hover:border-primary/40',
+        active ? 'border-border bg-secondary' : 'border-border bg-card/50 hover:border-border',
       )}
     >
       <div className="flex items-center gap-1.5 px-0.5">
-        <span className="font-mono text-type-xs font-bold text-primary">{ccy}</span>
+        <span className="font-mono text-type-xs font-bold text-foreground">{ccy}</span>
         <FreshnessChip kind={kind} />
-        {active && <span className="text-type-2xs text-primary">ACTIVE</span>}
+        {active && <span className="text-type-2xs text-muted-foreground">ACTIVE</span>}
         <span className="ml-auto font-mono text-type-2xs tabular-nums text-muted-foreground">
           {snap ? `ATM ${fmtPct(frontAtm)} · n=${snap.expiries.length}` : 'no book'}
         </span>
@@ -173,19 +173,19 @@ function DualCol({
       className={cn(
         'flex min-w-0 flex-1 flex-col gap-0.5 rounded border px-2 py-1.5 text-left font-mono transition-colors',
         active
-          ? 'border-primary bg-primary/10'
-          : 'border-border bg-card/60 hover:border-primary/50',
+          ? 'border-border bg-secondary'
+          : 'border-border bg-card/60 hover:border-border',
       )}
     >
       <div className="flex items-center gap-1.5">
-        <span className="text-type-sm font-bold text-primary">{d.ccy}</span>
+        <span className="text-type-sm font-bold text-foreground">{d.ccy}</span>
         <FreshnessChip kind={kind} />
-        {active && <span className="text-type-2xs text-primary">ACTIVE</span>}
+        {active && <span className="text-type-2xs text-muted-foreground">ACTIVE</span>}
       </div>
       <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-type-xs">
         <span>
           <span className="text-muted-foreground">Spot </span>
-          <span className="font-semibold tabular-nums text-amber">
+          <span className="font-semibold tabular-nums text-foreground">
             {d.spot != null ? fmtPrice(d.spot, d.spot > 1000 ? 1 : 2) : '—'}
           </span>
         </span>
@@ -366,7 +366,7 @@ export function BtcView() {
                 className={cn(
                   'rounded border px-1.5 py-0.5 font-mono text-type-2xs',
                   symbol === p
-                    ? 'border-primary text-primary'
+                    ? 'border-foreground/50 text-foreground'
                     : 'border-border text-muted-foreground hover:text-foreground',
                 )}
               >
@@ -379,7 +379,7 @@ export function BtcView() {
               className={cn(
                 'rounded border px-1.5 py-0.5 font-mono text-type-2xs',
                 cryptoDualCharts
-                  ? 'border-primary text-primary'
+                  ? 'border-foreground/50 text-foreground'
                   : 'border-border text-muted-foreground hover:text-foreground',
               )}
               title="Dual BTC+ETH charts (default off — heavy)"
@@ -463,7 +463,7 @@ export function BtcView() {
           <button
             type="button"
             onClick={() => setActiveTab('desk')}
-            className="ml-2 px-2 py-0.5 text-type-xs font-mono rounded border border-amber/40 text-amber hover:bg-amber/10"
+            className="ml-2 px-2 py-0.5 text-type-xs font-mono rounded border border-border text-muted-foreground hover:bg-muted hover:text-foreground"
           >
             MM DESK →
           </button>
@@ -654,7 +654,7 @@ export function BtcView() {
                     : `Deribit unavailable — synth smile on live spot. Retry LIVE or check /api/deribit/market/${proxy === 'ETH' ? 'ETH' : 'BTC'}.`}
                   {' '}Quant focus: funding vs basis (cash-and-carry premium), 25Δ RR, γ walls, roll heatmap.
                   {' '}Σ greeks = listed inventory, not a position. Open{' '}
-                  <button type="button" className="text-primary underline" onClick={() => setActiveTab('desk')}>MM Desk</button>
+                  <button type="button" className="text-foreground underline" onClick={() => setActiveTab('desk')}>MM Desk</button>
                   {' '}for hedge / combo / sim.
                 </p>
               </div>

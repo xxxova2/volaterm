@@ -27,7 +27,7 @@ export const CHART = {
     warn: 'var(--warn)',
     info: 'var(--info)',
     rate: 'var(--rate)',
-    amber: 'var(--brand)',
+    amber: 'var(--warn)',
     /** Alias of info in CSS (`--cyan: var(--info)`); prefer not for multi-series ordinals */
     cyan: 'var(--info)',
     muted: 'var(--muted-foreground)',
@@ -36,7 +36,7 @@ export const CHART = {
     /** Dual-path compare / prior series (blue) */
     compare: 'var(--info)',
     /** Selected / highlight stroke (smile focus) */
-    selected: 'var(--brand)',
+    selected: 'var(--info)',
     /** SVI fit overlay */
     svi: 'var(--rate)',
     /**
@@ -139,33 +139,32 @@ export function chartTooltipProps() {
 // ── Canvas 2D / R3F / Plotly resolved colors (hex OK only here) ─────────────
 
 /**
-/**
  * Static hex fallbacks for canvas, Three.js, and Plotly.
  * Hex literals are intentional and confined to this module (KD-UI-04).
- * Approximate graphite–amber theme oklch tokens from `src/index.css`.
+ * Approximate cool graphite + steel theme from `src/index.css`.
  */
 export const CHART_RESOLVED = {
-  brand: '#f0b400',
+  brand: '#6b8fb8',
   up: '#3fb950',
-  down: '#f0883e',
-  info: '#4d8ff0',
+  down: '#e07050',
+  info: '#6b9fd4',
   warn: '#c9a227',
   rate: '#a78bfa',
   /** Primary grid (gridHelper major / surface lattice) */
-  grid: '#2a2a33',
+  grid: '#2a2d36',
   /** Secondary / minor grid lines */
-  gridMinor: '#1f1f26',
+  gridMinor: '#1c1f26',
   /** Axis / muted labels */
-  label: '#9ca3af',
-  mutedForeground: '#9ca3af',
-  foreground: '#ebe6dc',
-  background: '#1c1a16',
-  card: '#130f09',
-  muted: '#1c1711',
-  border: '#2b261f',
+  label: '#8b919c',
+  mutedForeground: '#8b919c',
+  foreground: '#e8eaed',
+  background: '#12141a',
+  card: '#0e1014',
+  muted: '#1a1d24',
+  border: '#2a2e38',
   emptyCell: 'rgba(0,0,0,0.04)',
-  /** Near-black graphite for dense zero cells (not pure #000) */
-  ink: '#0a0806',
+  /** Near-black cool graphite for dense zero cells (not pure #000) */
+  ink: '#0a0b0e',
 } as const;
 
 /**

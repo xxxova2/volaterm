@@ -57,7 +57,7 @@ export function SidePanel() {
                 className={cn(
                   'rounded px-1.5 py-0.5 text-type-xs',
                   displayMode === m.key
-                    ? 'bg-primary/20 text-primary'
+                    ? 'bg-secondary text-foreground ring-1 ring-border'
                     : 'text-muted-foreground hover:text-foreground',
                 )}
               >
@@ -81,7 +81,7 @@ export function SidePanel() {
                 className={cn(
                   'shrink-0 rounded px-1.5 py-0.5 text-type-xs tabular-nums transition-colors',
                   selectedExpiry === slice.expiry
-                    ? 'bg-primary/15 text-primary'
+                    ? 'bg-secondary text-foreground ring-1 ring-border'
                     : 'text-muted-foreground hover:bg-muted hover:text-foreground',
                 )}
               >
@@ -145,7 +145,7 @@ export function SidePanel() {
                   className={cn(
                     'rounded px-1.5 py-0.5 text-type-xs',
                     chainMode === mode
-                      ? 'bg-primary/20 text-primary'
+                      ? 'bg-secondary text-foreground ring-1 ring-border'
                       : 'text-muted-foreground hover:text-foreground',
                   )}
                 >
@@ -158,7 +158,7 @@ export function SidePanel() {
                 title="Resolved from the last successful fetch"
               >
                 chain:
-                <span className={cn('ml-0.5 tabular-nums', chainAvailable ? 'text-up' : 'text-amber')}>
+                <span className={cn('ml-0.5 tabular-nums', chainAvailable ? 'text-up' : 'text-warn')}>
                   {chainAvailable ? chainUsed : 'none'}
                 </span>
                 <span className="ml-1.5">spot:{spotSource}</span>
@@ -174,7 +174,7 @@ export function SidePanel() {
           className={cn(
             'ml-auto shrink-0 rounded px-1.5 py-0.5 text-type-xs',
             explainHovers
-              ? 'bg-primary/20 text-primary'
+              ? 'bg-secondary text-foreground ring-1 ring-border'
               : 'text-muted-foreground hover:text-foreground',
           )}
           title="Underlined labels show plain-English explanations on hover"

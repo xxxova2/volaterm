@@ -164,7 +164,7 @@ export function DeskView() {
             {snapshot.symbol} @ {fmtPrice(snapshot.spot, snapshot.spot > 1000 ? 1 : 2)}
           </span>
           <span
-            className="rounded border border-border px-1.5 py-0.5 font-mono text-type-2xs text-amber"
+            className="rounded border border-border px-1.5 py-0.5 font-mono text-type-2xs text-muted-foreground"
             title={badge.detail}
           >
             {badge.label}
@@ -175,8 +175,8 @@ export function DeskView() {
           </span>
         </DeskChrome>
         {/* Inventory blotter — primary risk tape */}
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 rounded border border-primary/20 bg-primary/5 px-2 py-1 font-mono text-type-xs">
-          <span className="font-bold uppercase tracking-wider text-primary">Blotter Σ</span>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 rounded border border-border bg-muted/40 px-2 py-1 font-mono text-type-xs">
+          <span className="font-bold uppercase tracking-wider text-foreground">Blotter Σ</span>
           <span>
             <span className="text-muted-foreground">Δ </span>
             <span className={cn('font-bold tabular-nums', port.delta >= 0 ? 'text-up' : 'text-down')}>{port.delta.toFixed(1)}</span>
@@ -187,7 +187,7 @@ export function DeskView() {
           </span>
           <span>
             <span className="text-muted-foreground">ν </span>
-            <span className="font-bold tabular-nums text-amber">{port.vega.toFixed(1)}</span>
+            <span className="font-bold tabular-nums text-foreground">{port.vega.toFixed(1)}</span>
           </span>
           <span>
             <span className="text-muted-foreground">Θ </span>
@@ -225,7 +225,7 @@ export function DeskView() {
                   className={cn(
                     'px-1.5 py-0.5 text-type-xs font-mono rounded border transition-colors',
                     tool === t.id
-                      ? 'border-primary text-primary bg-primary/10'
+                      ? 'border-border text-foreground bg-secondary'
                       : 'border-border text-muted-foreground hover:text-foreground',
                   )}
                 >

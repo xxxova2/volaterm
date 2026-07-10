@@ -122,7 +122,7 @@ export function JapanCarryPanel() {
         </div>
         <div className="rounded border border-border px-2 py-1.5">
           <div className="text-type-2xs text-muted-foreground">US−JP 10Y</div>
-          <div className={`text-sm font-bold tabular-nums ${spread10 != null && spread10 > 2 ? 'text-amber-400' : 'text-foreground'}`}>
+          <div className={`text-sm font-bold tabular-nums ${spread10 != null && spread10 > 2 ? 'text-warn' : 'text-foreground'}`}>
             {spread10 != null ? `${spread10 >= 0 ? '+' : ''}${spread10.toFixed(2)} pp` : '—'}
           </div>
         </div>

@@ -188,25 +188,25 @@ export function SmileView() {
         <div className="flex items-center gap-2 px-2 py-1 border-b border-border">
           <button
             onClick={() => setXMode('moneyness')}
-            className={cn('px-2 py-0.5 text-type-xs font-mono rounded', xMode === 'moneyness' ? 'bg-primary/20 text-primary' : 'text-muted-foreground')}
+            className={cn('px-2 py-0.5 text-type-xs font-mono rounded', xMode === 'moneyness' ? 'bg-secondary text-foreground ring-1 ring-border' : 'text-muted-foreground')}
           >
             Moneyness
           </button>
           <button
             onClick={() => setXMode('strike')}
-            className={cn('px-2 py-0.5 text-type-xs font-mono rounded', xMode === 'strike' ? 'bg-primary/20 text-primary' : 'text-muted-foreground')}
+            className={cn('px-2 py-0.5 text-type-xs font-mono rounded', xMode === 'strike' ? 'bg-secondary text-foreground ring-1 ring-border' : 'text-muted-foreground')}
           >
             Strike
           </button>
           <button
             onClick={() => setXMode('delta')}
-            className={cn('px-2 py-0.5 text-type-xs font-mono rounded', xMode === 'delta' ? 'bg-primary/20 text-primary' : 'text-muted-foreground')}
+            className={cn('px-2 py-0.5 text-type-xs font-mono rounded', xMode === 'delta' ? 'bg-secondary text-foreground ring-1 ring-border' : 'text-muted-foreground')}
           >
             Delta
           </button>
           <button
             onClick={() => setShowBidAsk(s => !s)}
-            className={cn('px-2 py-0.5 text-type-xs font-mono rounded', showBidAsk ? 'bg-primary/20 text-primary' : 'text-muted-foreground')}
+            className={cn('px-2 py-0.5 text-type-xs font-mono rounded', showBidAsk ? 'bg-secondary text-foreground ring-1 ring-border' : 'text-muted-foreground')}
           >
             Bid-Ask
           </button>
@@ -327,7 +327,7 @@ export function SmileView() {
               key={slice.expiry}
               onClick={() => setSelectedExpiryIdx(i)}
               className={cn('px-1.5 py-0.5 text-type-xs font-mono rounded transition-colors',
-                i === selectedExpiryIdx ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground hover:text-foreground'
+                i === selectedExpiryIdx ? 'bg-secondary text-foreground ring-1 ring-border' : 'bg-muted text-muted-foreground hover:text-foreground'
               )}
               style={{ borderLeft: `2px solid ${colors[i % colors.length]}` }}
             >
