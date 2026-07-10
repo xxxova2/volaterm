@@ -296,9 +296,21 @@ export function PositioningView() {
             className="h-full"
           >
             {!dealer || dealer.points.length === 0 ? (
-              <EmptyState kind="no-data" title="No OI / greek data" body={UI_COPY.empty.chain} />
+              <EmptyState
+                kind="no-data"
+                title="No dealer exposure"
+                body="Chain has no open interest, volume, or γ to weight. Wait for a live chain or try another symbol."
+              />
             ) : (
-              <div className="flex h-full flex-col">
+              <div className="flex h-full min-h-0 flex-col">
+                {dealer.weightFallback && (
+                  <div
+                    className="shrink-0 border-b border-warn/30 bg-warn/10 px-3 py-1 font-mono text-type-2xs text-warn"
+                    role="status"
+                  >
+                    {dealer.unitNote}
+                  </div>
+                )}
                 <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-1.5">
                   <div className="flex gap-0.5">
                     {METRICS.map((m) => (
@@ -318,21 +330,39 @@ export function PositioningView() {
                     ))}
                   </div>
                   <div className="flex gap-0.5 ml-2">
-                    {(['oi', 'unit'] as ExposureWeight[]).map((w) => (
-                      <button
-                        key={w}
-                        type="button"
-                        onClick={() => setWeight(w)}
-                        className={cn(
-                          'rounded px-2 py-0.5 font-mono text-type-xs border',
-                          weight === w
-                            ? 'border-border bg-secondary text-foreground'
-                            : 'border-border text-muted-foreground',
-                        )}
-                      >
-                        {w === 'oi' ? 'OI-weight' : 'Unit'}
-                      </button>
-                    ))}
+                    {([
+                      ['oi', 'OI'],
+                      ['volume', 'Vol'],
+                      ['unit', 'Unit'],
+                    ] as const).map(([w, lab]) => {
+                      // When feed has no OI, 'oi' request auto-falls to volume — highlight effective mode
+                      const effective = dealer.weight;
+                      const active =
+                        weight === w || (w === effective && dealer.weightFallback && weight === 'oi');
+                      return (
+                        <button
+                          key={w}
+                          type="button"
+                          onClick={() => setWeight(w)}
+                          className={cn(
+                            'rounded px-2 py-0.5 font-mono text-type-xs border',
+                            active
+                              ? 'border-border bg-secondary text-foreground'
+                              : 'border-border text-muted-foreground',
+                          )}
+                          title={
+                            w === 'oi'
+                              ? 'Open interest (auto→volume if OI missing)'
+                              : w === 'volume'
+                                ? 'Session volume weight'
+                                : '1 per listed contract'
+                          }
+                        >
+                          {lab}
+                          {w === 'volume' && dealer.weightFallback && weight === 'oi' ? '·auto' : ''}
+                        </button>
+                      );
+                    })}
                   </div>
                   <div className="ml-2 flex gap-0.5" title="Strike axis zoom around spot">
                     {([
@@ -363,9 +393,9 @@ export function PositioningView() {
                     <StatMini label="Flip" value={dealer.gammaFlip != null ? fmtPrice(dealer.gammaFlip, 0) : '—'} color={CHART.series.amber} />
                   </div>
                 </div>
-                <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+                <div className="flex min-h-[280px] flex-1 flex-col lg:flex-row">
                   {/* Absolute fill so Recharts ResponsiveContainer gets a real height */}
-                  <div className="relative min-h-[240px] min-w-0 flex-1 lg:min-h-0">
+                  <div className="relative min-h-[240px] min-w-0 flex-1 basis-0 lg:min-h-0">
                     <div className="absolute inset-0">
                       <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={chartData} margin={{ top: 14, right: 12, bottom: 8, left: 4 }}>

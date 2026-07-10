@@ -573,6 +573,30 @@ describe('dealerExposure stack', () => {
     expect(Math.abs(oi.totalGEX)).toBeGreaterThan(Math.abs(unit.totalGEX));
   });
 
+  it('auto-falls back to volume when openInterest is zero across the chain', () => {
+    const noOi: VolSnapshot = {
+      ...snap,
+      expiries: snap.expiries.map((e) => ({
+        ...e,
+        calls: e.calls.map((q) => ({ ...q, openInterest: 0, volume: 200 })),
+        puts: e.puts.map((q) => ({ ...q, openInterest: 0, volume: 100 })),
+      })),
+    };
+    const d = dealerExposure(noOi, { weight: 'oi' });
+    expect(d.weight).toBe('volume');
+    expect(d.weightFallback).toBe(true);
+    expect(d.points.length).toBeGreaterThan(0);
+    expect(d.totalGEX).not.toBe(0);
+    expect(d.unitNote).toMatch(/volume/i);
+  });
+
+  it('volume weight uses session volume', () => {
+    const d = dealerExposure(snap, { weight: 'volume' });
+    expect(d.weight).toBe('volume');
+    expect(d.weightFallback).toBe(false);
+    expect(d.points[0]!.callGEX).toBeGreaterThan(0);
+  });
+
   it('scanParityEdges returns rows near ATM', () => {
     const rows = scanParityEdges(snap);
     expect(rows.length).toBeGreaterThan(0);

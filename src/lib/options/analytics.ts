@@ -252,8 +252,13 @@ export function ivRank(frames: { snapshot: VolSnapshot }[], currentIdx: number):
   return { rank: Math.max(0, Math.min(1, rank)), percentile };
 }
 
-/** Weight for dealer exposure aggregates. */
-export type ExposureWeight = 'oi' | 'unit';
+/**
+ * Weight for dealer exposure aggregates.
+ * - oi: open interest (canonical SpotGamma-style)
+ * - volume: session volume (fallback when free feeds zero OI)
+ * - unit: 1 per listed contract with OI, volume, or non-zero gamma
+ */
+export type ExposureWeight = 'oi' | 'volume' | 'unit';
 
 export type DealerMetric = 'gex' | 'dex' | 'vex' | 'charm';
 
@@ -285,13 +290,84 @@ export interface DealerExposure {
   gammaFlip: number | null;
   callWall: number | null;
   putWall: number | null;
+  /** Weight actually applied (may auto-fallback from oi → volume/unit). */
   weight: ExposureWeight;
+  /** True when caller asked for oi but feed had no OI. */
+  weightFallback: boolean;
   unitNote: string;
 }
 
-function weightOf(q: { openInterest: number }, mode: ExposureWeight): number {
-  if (mode === 'unit') return q.openInterest > 0 ? 1 : 0;
-  return Math.max(0, q.openInterest);
+type WeightableQuote = {
+  openInterest: number;
+  volume: number;
+  gamma?: number | null;
+};
+
+function weightOf(q: WeightableQuote, mode: ExposureWeight): number {
+  if (mode === 'unit') {
+    if ((q.openInterest ?? 0) > 0 || (q.volume ?? 0) > 0) return 1;
+    // Last resort when Yahoo zeroes both OI and volume on some rows
+    return q.gamma != null && Math.abs(q.gamma) > 0 ? 1 : 0;
+  }
+  if (mode === 'volume') return Math.max(0, q.volume ?? 0);
+  return Math.max(0, q.openInterest ?? 0);
+}
+
+/** Sum OI / volume across a snapshot — used to auto-pick a usable weight. */
+function chainWeightTotals(snap: VolSnapshot): { oi: number; volume: number } {
+  let oi = 0;
+  let volume = 0;
+  for (const slice of snap.expiries) {
+    for (const q of [...slice.calls, ...slice.puts]) {
+      oi += Math.max(0, q.openInterest ?? 0);
+      volume += Math.max(0, q.volume ?? 0);
+    }
+  }
+  return { oi, volume };
+}
+
+/**
+ * Resolve weight mode. Free Yahoo often returns openInterest=0 for entire chains;
+ * fall back to volume, then unit greeks so the dealer stack is never blank.
+ */
+export function resolveExposureWeight(
+  snap: VolSnapshot,
+  requested: ExposureWeight = 'oi',
+): { weight: ExposureWeight; fallback: boolean; note: string } {
+  if (requested === 'volume') {
+    return {
+      weight: 'volume',
+      fallback: false,
+      note: 'Volume-weighted · proxy when OI unavailable · not inventory',
+    };
+  }
+  if (requested === 'unit') {
+    return {
+      weight: 'unit',
+      fallback: false,
+      note: 'Unit weight (1 per listed OI/vol/γ) · compare structure not size',
+    };
+  }
+  const { oi, volume } = chainWeightTotals(snap);
+  if (oi > 0) {
+    return {
+      weight: 'oi',
+      fallback: false,
+      note: 'OI-weighted · GEX = γ·S²·0.01·OI·mult (1% $gamma) · DEX/VEX use ×S',
+    };
+  }
+  if (volume > 0) {
+    return {
+      weight: 'volume',
+      fallback: true,
+      note: 'OI missing from feed — volume-weighted proxy (not true inventory GEX)',
+    };
+  }
+  return {
+    weight: 'unit',
+    fallback: true,
+    note: 'OI & volume missing — unit weight on contracts with γ (structure only)',
+  };
 }
 
 function flipFromSeries(points: { strike: number; net: number }[]): number | null {
@@ -335,7 +411,9 @@ export function dealerExposure(
   snap: VolSnapshot,
   opts?: { maxDte?: number; weight?: ExposureWeight },
 ): DealerExposure {
-  const weight = opts?.weight ?? 'oi';
+  const requested = opts?.weight ?? 'oi';
+  const resolved = resolveExposureWeight(snap, requested);
+  const weight = resolved.weight;
   const maxDte = opts?.maxDte;
   const mult = snap.contractSize ?? 100;
   const S = snap.spot;
@@ -426,9 +504,8 @@ export function dealerExposure(
     callWall,
     putWall,
     weight,
-    unitNote: weight === 'oi'
-      ? 'OI-weighted · GEX = γ·S²·0.01·OI·mult (1% $gamma) · DEX/VEX use ×S'
-      : 'Unit weight (1 per listed OI>0) · compare structure not size',
+    weightFallback: resolved.fallback,
+    unitNote: resolved.note,
   };
 }
 
