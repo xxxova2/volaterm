@@ -3,7 +3,7 @@
  * so jumpDeskSection can .click() them.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { render, fireEvent, act } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import React from 'react';
 import { useTerminalStore } from '../../store/terminalStore';
 import {
@@ -128,12 +128,21 @@ describe('desk section ids after DeskChrome extraction', () => {
     render(<RatesView />);
     // Section DOM ids (scroll targets)
     expect(document.getElementById('sec-macro')).toBeTruthy();
-    // Mode bar chips exist for all registered sections (scroll, not button ids)
+    // DeskModeBar renders one tab chip per registry entry (not just registry tautology)
+    const tabs = screen.getAllByRole('tab');
+    expect(tabs.length).toBe(RATES_SECTIONS.length);
     for (const s of RATES_SECTIONS) {
       expect(sectionsForTab('rates').some((x) => x.id === s.id)).toBe(true);
+      expect(tabs.some((t) => t.textContent?.includes(s.label) || t.textContent?.includes(s.short ?? ''))).toBe(
+        true,
+      );
     }
-    // Desk chrome label present
+    // Desk chrome label present; non-sticky Rates strip is not frosted
     expect(document.querySelector('[data-desk-chrome-label]')?.textContent).toMatch(/RATES/i);
+    const chrome = document.querySelector('[data-desk-chrome]');
+    expect(chrome?.getAttribute('data-desk-chrome-frosted')).toBeNull();
+    expect(chrome?.className).toContain('bg-card/40');
+    expect(chrome?.className).not.toContain('supports-[backdrop-filter]:bg-background/80');
   });
 
   it('jumpDeskSection .click() switches vol mode', () => {

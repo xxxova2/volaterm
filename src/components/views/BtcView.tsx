@@ -403,7 +403,7 @@ export function BtcView() {
       {/* Header strip — active book metrics (shared label + freshness badge grammar) */}
       <div className="flex flex-wrap items-center gap-4 px-3 py-2 border border-border bg-card rounded">
         <div className="flex items-center gap-2">
-          <DeskChromeLabel className="mr-0 text-sm">{deskLabel}</DeskChromeLabel>
+          <DeskChromeLabel className="mr-0 text-type-sm">{deskLabel}</DeskChromeLabel>
           <span className="text-type-xs font-mono text-muted-foreground px-1.5 py-0.5 border border-border rounded">
             {source === 'live'
               ? (chainUsed === 'deribit'

@@ -18,7 +18,7 @@ import { Explain } from '../common/Explain';
 import { EmptyState } from '../common/EmptyState';
 import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
 import { FreshnessFromDomain } from '../common/Freshness';
-import { DeskChrome, DeskChromeLabel } from '../terminal/DeskChrome';
+import { DeskChrome } from '../terminal/DeskChrome';
 import { fmtPct, fmtPrice, fmtSigned, fmtCompact } from '../../lib/format';
 import { cn } from '../../lib/utils';
 import { UI_COPY } from '../../config/uiCopy';
@@ -147,8 +147,10 @@ export function DeskView() {
       {/* Blotter-first strip (Phase F) — light DeskChrome for label + freshness only */}
       <div className="flex flex-col gap-1 rounded border border-border bg-card px-2 py-1.5">
         <DeskChrome
+          label="MM DESK"
+          labelClassName="mr-0 px-1"
           sticky={false}
-          className="border-0 bg-transparent p-0 backdrop-blur-none"
+          className="border-0 bg-transparent p-0"
           trailing={
             <FreshnessFromDomain
               asOfMs={chainAsOfMs}
@@ -158,7 +160,6 @@ export function DeskView() {
             />
           }
         >
-          <DeskChromeLabel className="mr-0 px-1 text-xs">MM DESK</DeskChromeLabel>
           <span className="font-mono text-type-xs text-muted-foreground">
             {snapshot.symbol} @ {fmtPrice(snapshot.spot, snapshot.spot > 1000 ? 1 : 2)}
           </span>

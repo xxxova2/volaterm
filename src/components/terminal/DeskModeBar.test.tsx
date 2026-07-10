@@ -91,11 +91,50 @@ describe('DeskChrome', () => {
     expect(document.querySelector('[data-desk-chrome]')).toBeTruthy();
   });
 
+  it('sticky default applies frosted stack', () => {
+    render(<DeskChrome label="VOL">x</DeskChrome>);
+    const el = document.querySelector('[data-desk-chrome]')!;
+    expect(el.getAttribute('data-desk-chrome-frosted')).toBe('1');
+    expect(el.className).toContain('bg-background/95');
+    expect(el.className).toContain('supports-[backdrop-filter]:bg-background/80');
+  });
+
+  it('non-sticky consumers can set bg without supports-bg surviving', () => {
+    render(
+      <DeskChrome label="RATES" sticky={false} className="bg-card/40">
+        x
+      </DeskChrome>,
+    );
+    const el = document.querySelector('[data-desk-chrome]')!;
+    expect(el.getAttribute('data-desk-chrome-frosted')).toBeNull();
+    expect(el.className).toContain('bg-card/40');
+    expect(el.className).not.toContain('supports-[backdrop-filter]:bg-background/80');
+    expect(el.className).not.toContain('bg-background/95');
+  });
+
+  it('transparent embed does not keep frosted bg', () => {
+    render(
+      <DeskChrome label="MM DESK" sticky={false} className="border-0 bg-transparent p-0">
+        x
+      </DeskChrome>,
+    );
+    const el = document.querySelector('[data-desk-chrome]')!;
+    expect(el.className).toContain('bg-transparent');
+    expect(el.className).not.toContain('supports-[backdrop-filter]:bg-background/80');
+  });
+
   it('DeskChromeLabel matches shared grammar', () => {
     render(<DeskChromeLabel>CRYPTO</DeskChromeLabel>);
     const el = screen.getByText('CRYPTO');
     expect(el.getAttribute('data-desk-chrome-label')).toBe('');
     expect(el.className).toContain('text-primary');
     expect(el.className).toContain('tracking-wider');
+  });
+
+  it('DeskChromeLabel size override uses text-type-* so twMerge drops default', () => {
+    render(<DeskChromeLabel className="text-type-sm">BTC DESK</DeskChromeLabel>);
+    const el = screen.getByText('BTC DESK');
+    expect(el.className).toContain('text-type-sm');
+    expect(el.className).not.toContain('text-type-xs');
   });
 });

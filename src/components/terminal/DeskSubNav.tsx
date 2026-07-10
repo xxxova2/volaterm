@@ -109,9 +109,12 @@ export function DeskSubNav({
 
   if (bare) {
     return (
-      <div className={cn('flex min-w-0 flex-1 items-center gap-1', className)} aria-label={`${label || 'Desk'} sections`}>
+      <nav
+        className={cn('flex min-w-0 flex-1 items-center gap-1', className)}
+        aria-label={`${label || 'Desk'} sections`}
+      >
         {chips}
-      </div>
+      </nav>
     );
   }
 
