@@ -1,4 +1,6 @@
+import { describe, expect, it } from 'vitest';
 import {
+  CANVAS,
   CHART,
   CHART_GREEK,
   CHART_HEX,
@@ -15,10 +17,6 @@ import {
   chartTooltipStyle,
   colorWithAlpha,
   cssVar,
-  describe,
-  expect,
-  it } from 'vitest';import {  CANVAS,
-  it } from 'vitest';import {  CHART,
   parseRgbChannels,
   resolveCanvasColors,
 } from './chartTheme';
@@ -141,6 +139,27 @@ describe('chartTheme', () => {
     expect(c.up).toBeTruthy();
     expect(c.down).toBeTruthy();
   });
+
+  it('PLOTLY_LAYOUT_BASE uses terminal card chrome (not pure black / matrix green)', () => {
+    expect(PLOTLY_LAYOUT_BASE.paper_bgcolor).toBe(CHART_RESOLVED.card);
+    expect(PLOTLY_LAYOUT_BASE.plot_bgcolor).toBe(CHART_RESOLVED.card);
+    expect(PLOTLY_LAYOUT_BASE.font.color).toBe(CHART_RESOLVED.mutedForeground);
+    expect(String(PLOTLY_LAYOUT_BASE.paper_bgcolor)).not.toMatch(/#0a0a0a|#000000/i);
+  });
+
+  it('PLOTLY_CS_GEX / IV anchor up-down and brand (no matrix green)', () => {
+    const gexColors = PLOTLY_CS_GEX.map(([, c]) => c);
+    expect(gexColors).toContain(CHART_RESOLVED.up);
+    expect(gexColors).toContain(CHART_RESOLVED.down);
+    const ivColors = PLOTLY_CS_IV.map(([, c]) => c);
+    expect(ivColors).toContain(CHART_RESOLVED.brand);
+    expect(ivColors.join(' ')).not.toMatch(/#00ff41/i);
+  });
+
+  it('CHART_HEX exposes concrete fills for Plotly candles/bars', () => {
+    expect(CHART_HEX.up).toBe(CHART_RESOLVED.up);
+    expect(CHART_HEX.down).toBe(CHART_RESOLVED.down);
+    expect(CHART_HEX.brand).toBe(CHART_RESOLVED.brand);
+    expect(CHART_HEX.card).toBe(CHART_RESOLVED.card);
+  });
 });
-
-
