@@ -4,6 +4,7 @@ import {
   classifyFreshnessFromIso,
   FRESHNESS_THRESHOLDS,
   makeProvenance,
+  worstFreshnessKind,
 } from './freshness';
 
 describe('classifyDomainFreshness', () => {
@@ -59,5 +60,19 @@ describe('makeProvenance', () => {
     expect(p.source).toBe('yfinance');
     expect(p.kind).toBe('live');
     expect(p.asOfMs).toBeTruthy();
+  });
+});
+
+describe('worstFreshnessKind', () => {
+  it('returns min rank (down < expired < stale < delayed < unknown < live)', () => {
+    expect(worstFreshnessKind('live', 'delayed')).toBe('delayed');
+    expect(worstFreshnessKind('live', 'stale', 'delayed')).toBe('stale');
+    expect(worstFreshnessKind('unknown', 'live')).toBe('unknown');
+    expect(worstFreshnessKind('expired', 'down', 'live')).toBe('down');
+    expect(worstFreshnessKind('live')).toBe('live');
+  });
+
+  it('returns unknown for empty input', () => {
+    expect(worstFreshnessKind()).toBe('unknown');
   });
 });

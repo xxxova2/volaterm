@@ -2,9 +2,42 @@ import { useCallback, useState, useEffect } from 'react';
 import { useTerminalStore } from '../../store/terminalStore';
 import { fmtPrice, fmtClock } from '../../lib/format';
 import { SymbolDialog } from './SymbolDialog';
+import { FreshnessChip } from '../common/Freshness';
+import {
+  classifyDomainFreshness,
+  worstFreshnessKind,
+  type FreshnessKind,
+} from '../../lib/data/freshness';
+
+/** Same fail-closed pattern as StatusBar: missing feed → down; recompute age from asOf. */
+function kindFromProvenance(
+  kind: FreshnessKind | undefined,
+  asOfMs: number | null | undefined,
+  domain: 'spot' | 'chain',
+  opts?: { down?: boolean },
+): FreshnessKind {
+  return classifyDomainFreshness(asOfMs, domain, {
+    demo: false,
+    down: opts?.down,
+    previousKind: kind,
+  });
+}
 
 export function TerminalHeader() {
-  const { symbol, snapshot, setSymbol, loading, fmpQuote, liveRFR, chainUsed, chainAvailable } = useTerminalStore();
+  const {
+    symbol,
+    snapshot,
+    setSymbol,
+    loading,
+    fmpQuote,
+    liveRFR,
+    chainUsed,
+    chainAvailable,
+    spotSource,
+    lastSpotUpdate,
+    lastChainUpdate,
+    provenance,
+  } = useTerminalStore();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [clock, setClock] = useState(Date.now());
 
@@ -24,6 +57,31 @@ export function TerminalHeader() {
     setSymbol(sym);
     setDialogOpen(false);
   }, [setSymbol]);
+
+  // Product mode is static MODE LIVE; data trust uses same missing→down as StatusBar.
+  const spotMissing = spotSource === 'none';
+  const chainMissing = !chainAvailable || chainUsed === 'none';
+  const spotKind = kindFromProvenance(
+    provenance.spot?.kind,
+    provenance.spot?.asOfMs ?? (lastSpotUpdate > 0 ? lastSpotUpdate : null),
+    'spot',
+    { down: spotMissing },
+  );
+  const chainKind = kindFromProvenance(
+    provenance.chain?.kind,
+    provenance.chain?.asOfMs ?? (lastChainUpdate > 0 ? lastChainUpdate : null),
+    'chain',
+    { down: chainMissing },
+  );
+  const summaryKind = worstFreshnessKind(spotKind, chainKind);
+  const spotAsOf = provenance.spot?.asOfMs ?? (lastSpotUpdate > 0 ? lastSpotUpdate : null);
+  const chainAsOf = provenance.chain?.asOfMs ?? (lastChainUpdate > 0 ? lastChainUpdate : null);
+  const asOfHint = [
+    spotAsOf != null ? `spot ${new Date(spotAsOf).toLocaleTimeString()}` : null,
+    chainAsOf != null ? `chain ${new Date(chainAsOf).toLocaleTimeString()}` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
 
   return (
     <>
@@ -67,11 +125,19 @@ export function TerminalHeader() {
 
         <div className="flex shrink-0 items-center gap-2">
           <span className="hidden tabular-nums text-muted-foreground sm:inline">{fmtClock(clock)}</span>
+          {/* KD-UI-13: product mode (muted) — not a green freshness pill */}
           <span
-            className="rounded bg-up/20 px-2 py-0.5 text-xs font-medium text-up"
-            title="LIVE-only terminal — market feeds only, no DEMO/synthetic surfaces"
+            className="rounded border border-border bg-muted/50 px-1.5 py-0.5 text-type-2xs font-medium uppercase tracking-wider text-muted-foreground"
+            title="LIVE-only terminal — market feeds only; no demo mode."
+            aria-label="LIVE-only terminal — market feeds only; no demo mode."
           >
-            LIVE
+            MODE LIVE
+          </span>
+          <span
+            title={`Spot: ${spotKind} · Chain: ${chainKind}${asOfHint ? ` · as-of ${asOfHint}` : ''}`}
+            aria-label={`Data freshness: ${summaryKind}`}
+          >
+            <FreshnessChip kind={summaryKind} />
           </span>
           <button
             onClick={() => useTerminalStore.getState().refresh()}

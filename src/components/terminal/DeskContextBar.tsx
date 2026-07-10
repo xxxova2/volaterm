@@ -12,18 +12,14 @@ export function DeskContextBar() {
   const apis = useTerminalStore((s) => s.deskSectionApis);
   const density = useTerminalStore((s) => s.uiDensity);
   const chainUsed = useTerminalStore((s) => s.chainUsed);
-  const source = useTerminalStore((s) => s.source);
   const symbol = useTerminalStore((s) => s.symbol);
   const provenance = useTerminalStore((s) => s.provenance);
   const cryptoDualCharts = useTerminalStore((s) => s.cryptoDualCharts);
 
   const desk = tabLabel(activeTab);
+  // LIVE-only: always real chainUsed / provenance — never emit chain:demo
   const chainHint =
-    activeTab === 'rates' || activeTab === 'crypto'
-      ? null
-      : source === 'live'
-        ? chainUsed
-        : 'demo';
+    activeTab === 'rates' || activeTab === 'crypto' ? null : chainUsed;
 
   const cryptoHint =
     activeTab === 'crypto'

@@ -3,9 +3,10 @@ import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { TerminalHeader } from './TerminalHeader';
 import { useTerminalStore } from '../../store/terminalStore';
+import { EMPTY_PROVENANCE } from '../../lib/data/freshness';
 
 describe('TerminalHeader', () => {
-  it('renders symbol and LIVE badge (demo disabled)', () => {
+  it('renders MODE LIVE product chip (muted) and data freshness (demo disabled)', () => {
     useTerminalStore.setState({
       symbol: 'SPY',
       source: 'live',
@@ -15,11 +16,53 @@ describe('TerminalHeader', () => {
       snapshot: null,
       chainAvailable: false,
       chainUsed: 'none',
+      spotSource: 'none',
+      lastSpotUpdate: 0,
+      lastChainUpdate: 0,
+      provenance: { ...EMPTY_PROVENANCE },
     });
     render(<TerminalHeader />);
     expect(screen.getByText('SPY')).toBeTruthy();
-    expect(screen.getByText('LIVE')).toBeTruthy();
+    expect(screen.getByText('MODE LIVE')).toBeTruthy();
+    expect(
+      screen.getByLabelText('LIVE-only terminal — market feeds only; no demo mode.'),
+    ).toBeTruthy();
+    // Missing feeds → down (fail-closed); chip label is API DOWN
+    expect(screen.getByLabelText('Data freshness: down')).toBeTruthy();
+    expect(screen.getByText('API DOWN')).toBeTruthy();
+    // No permanent solid green LIVE product pill, no DEMO
     expect(screen.queryByText('DEMO')).toBeNull();
+  });
+
+  it('data summary is worst of live spot + missing chain (never greener than StatusBar)', () => {
+    const now = Date.now();
+    useTerminalStore.setState({
+      symbol: 'SPY',
+      source: 'live',
+      loading: false,
+      fmpQuote: null,
+      liveRFR: null,
+      snapshot: null,
+      chainAvailable: false,
+      chainUsed: 'none',
+      spotSource: 'fmp',
+      lastSpotUpdate: now,
+      lastChainUpdate: 0,
+      provenance: {
+        ...EMPTY_PROVENANCE,
+        spot: {
+          domain: 'spot',
+          source: 'fmp',
+          asOfMs: now,
+          fetchedAtMs: now,
+          kind: 'live',
+        },
+      },
+    });
+    render(<TerminalHeader />);
+    expect(screen.getByText('MODE LIVE')).toBeTruthy();
+    // chain missing → down; worst(live, down) = down
+    expect(screen.getByLabelText('Data freshness: down')).toBeTruthy();
   });
 
   it('shows FMP company name when available', () => {
@@ -36,6 +79,12 @@ describe('TerminalHeader', () => {
       },
       liveRFR: null,
       snapshot: null,
+      chainAvailable: false,
+      chainUsed: 'none',
+      spotSource: 'none',
+      lastSpotUpdate: 0,
+      lastChainUpdate: 0,
+      provenance: { ...EMPTY_PROVENANCE },
     });
     render(<TerminalHeader />);
     expect(screen.getByText('State Street SPDR S&P 500 ETF')).toBeTruthy();
@@ -49,6 +98,12 @@ describe('TerminalHeader', () => {
       fmpQuote: null,
       liveRFR: 0.0398,
       snapshot: null,
+      chainAvailable: false,
+      chainUsed: 'none',
+      spotSource: 'none',
+      lastSpotUpdate: 0,
+      lastChainUpdate: 0,
+      provenance: { ...EMPTY_PROVENANCE },
     });
     render(<TerminalHeader />);
     expect(screen.getByText('3.98%')).toBeTruthy();

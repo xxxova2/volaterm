@@ -25,7 +25,7 @@ export function classifyFreshness(
 
 const STYLE: Record<FreshnessKind, { label: string; className: string; dot: string }> = {
   live: { label: 'LIVE', className: 'text-up border-up/30 bg-up/10', dot: 'bg-up' },
-  delayed: { label: 'DELAYED', className: 'text-cyan-400 border-cyan-500/30 bg-cyan-500/10', dot: 'bg-cyan-400' },
+  delayed: { label: 'DELAYED', className: 'text-info border-info/30 bg-info/10', dot: 'bg-info' },
   stale: { label: 'STALE', className: 'text-amber border-amber/40 bg-amber/10', dot: 'bg-amber' },
   expired: { label: 'EXPIRED', className: 'text-down border-down/30 bg-down/10', dot: 'bg-down' },
   demo: { label: 'DEMO', className: 'text-amber border-amber/40 bg-amber/10', dot: 'bg-amber' },

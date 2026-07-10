@@ -15,11 +15,11 @@ const COPY: Record<EmptyKind, { title: string; body: string }> = {
   },
   'api-down': {
     title: 'API unavailable',
-    body: 'Service unreachable. Start MacroVol (:8765) or switch demo for chain tools.',
+    body: 'Service unreachable. Start MacroVol (:8765) or check network / keys.',
   },
   demo: {
     title: 'Demo surface',
-    body: 'Synthetic SVI — not market prices. Toggle LIVE for real feeds.',
+    body: 'Synthetic fallback — not market prices. Refresh LIVE feeds.',
   },
   error: {
     title: 'Load failed',

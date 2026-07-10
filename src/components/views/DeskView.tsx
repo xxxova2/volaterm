@@ -17,6 +17,7 @@ import { Panel } from '../terminal/Panel';
 import { Explain } from '../common/Explain';
 import { EmptyState } from '../common/EmptyState';
 import { FreshnessChip } from '../common/Freshness';
+import { classifyDomainFreshness } from '../../lib/data/freshness';
 import { fmtPct, fmtPrice, fmtSigned, fmtCompact } from '../../lib/format';
 import { cn } from '../../lib/utils';
 import {
@@ -106,10 +107,21 @@ export function DeskView() {
   const snapshot = useTerminalStore(s => s.snapshot);
   const source = useTerminalStore(s => s.source);
   const chainUsed = useTerminalStore(s => s.chainUsed);
+  const chainAvailable = useTerminalStore(s => s.chainAvailable);
+  const lastChainUpdate = useTerminalStore(s => s.lastChainUpdate);
+  const provenance = useTerminalStore(s => s.provenance);
   const symbol = useTerminalStore(s => s.symbol);
   const setActiveTab = useTerminalStore(s => s.setActiveTab);
   // Blotter-first default: Combo PnL (mark risk) over abstract simulator
   const [tool, setTool] = useState<ToolId>('combopnl');
+
+  // Fail-closed: domain classification — never optimistic live without asOf age
+  const chainMissing = !chainAvailable || chainUsed === 'none';
+  const chainKind = classifyDomainFreshness(
+    provenance.chain?.asOfMs ?? (lastChainUpdate > 0 ? lastChainUpdate : null),
+    'chain',
+    { demo: false, down: chainMissing, previousKind: provenance.chain?.kind },
+  );
 
   const inv = useMemo(() => (snapshot ? inventoryByExpiry(snapshot) : []), [snapshot]);
   const port = useMemo(
@@ -147,7 +159,7 @@ export function DeskView() {
           >
             {badge.label}
           </span>
-          <FreshnessChip kind={chainUsed === 'none' || !chainUsed ? 'delayed' : 'live'} />
+          <FreshnessChip kind={chainKind} />
           <span className="hidden font-mono text-type-2xs text-muted-foreground md:inline">
             Blotter first · tools secondary · BS-Merton
             {chainUsed === 'deribit' ? ' · Deribit mark IV' : ''}

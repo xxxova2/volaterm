@@ -211,6 +211,8 @@ export function BtcView() {
   const chainAvailable = useTerminalStore(s => s.chainAvailable);
   const chainUsed = useTerminalStore(s => s.chainUsed);
   const source = useTerminalStore(s => s.source);
+  const lastChainUpdate = useTerminalStore(s => s.lastChainUpdate);
+  const provenance = useTerminalStore(s => s.provenance);
   const fmpHistory = useTerminalStore(s => s.fmpHistory);
   const fundingAnn = useTerminalStore(s => s.fundingAnn);
   const cryptoDualCharts = useTerminalStore(s => s.cryptoDualCharts);
@@ -235,6 +237,15 @@ export function BtcView() {
   const gex = useMemo(() => (snapshot ? gammaExposure(snapshot) : null), [snapshot]);
   const move = useMemo(() => (snapshot ? impliedMove(snapshot) : null), [snapshot]);
   const port = useMemo(() => (snapshot ? portfolioGreeks(snapshot) : null), [snapshot]);
+  // Active strip only — dual tape already uses classifyDomainFreshness (do not touch useCryptoDualBooks)
+  const chainMissing = !chainAvailable || chainUsed === 'none';
+  const stripKind = classifyDomainFreshness(
+    provenance.chain?.asOfMs
+      ?? (lastChainUpdate > 0 ? lastChainUpdate : null)
+      ?? (snapshot?.timestamp && snapshot.timestamp > 0 ? snapshot.timestamp : null),
+    'crypto',
+    { demo: false, down: chainMissing, previousKind: provenance.chain?.kind },
+  );
   const liveFundingAnn = fundingAnn ?? snapshot?.fundingAnn ?? null;
   const basis = useMemo(
     () => (snapshot ? buildBasisCurve(snapshot, { fundingAnn: liveFundingAnn }) : null),
@@ -400,7 +411,7 @@ export function BtcView() {
                   : 'LIVE SPOT · SYNTH SMILE')
               : 'DEMO'}
           </span>
-          <FreshnessChip kind={chainUsed === 'deribit' ? 'live' : chainAvailable ? 'live' : 'delayed'} />
+          <FreshnessChip kind={stripKind} />
           <span className="text-type-2xs font-mono text-muted-foreground hidden lg:inline">
             {cryptoDualCharts
               ? '2× charts on · click pane or tape to switch active book'
