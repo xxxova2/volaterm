@@ -4,26 +4,50 @@ import {
   CHART_GREEK,
   CHART_SCENARIO,
   CHART_SERIES_ORDINAL,
+  CHART_SPREAD,
   chartCorrColors,
   chartGridProps,
   chartTooltipStyle,
 } from './chartTheme';
 
 describe('chartTheme', () => {
-  it('exposes series role tokens as CSS vars (no raw hex)', () => {
+  it('exposes series role tokens without raw hex', () => {
     for (const v of Object.values(CHART.series)) {
-      expect(v.startsWith('var(--')).toBe(true);
       expect(v).not.toMatch(/#[0-9a-fA-F]{3,8}/);
+      // CSS vars or color-mix of vars (tertiary ordinal slot)
+      expect(v.startsWith('var(--') || v.startsWith('color-mix(')).toBe(true);
     }
     expect(CHART.series.up).toBe('var(--up)');
     expect(CHART.series.down).toBe('var(--down)');
   });
 
-  it('CHART_SERIES_ORDINAL has 7 theme-aware entries', () => {
+  it('CHART_SERIES_ORDINAL has 7 unique theme-aware entries', () => {
     expect(CHART_SERIES_ORDINAL).toHaveLength(7);
-    for (const c of CHART_SERIES_ORDINAL) {
-      expect(c.startsWith('var(--')).toBe(true);
-    }
+    expect(new Set(CHART_SERIES_ORDINAL).size).toBe(CHART_SERIES_ORDINAL.length);
+    // cyan aliases info — ordinal uses info once, never a duplicate cyan slot
+    expect(CHART.series.cyan).toBe(CHART.series.info);
+    expect(CHART_SERIES_ORDINAL.filter((c) => c === CHART.series.info)).toHaveLength(1);
+    expect(CHART_SERIES_ORDINAL[0]).toBe(CHART.series.info);
+    expect(CHART_SERIES_ORDINAL[6]).toBe(CHART.series.tertiary);
+  });
+
+  it('CHART_SPREAD maps every spread key to unique colors', () => {
+    const keys = Object.keys(CHART_SPREAD) as (keyof typeof CHART_SPREAD)[];
+    expect(keys).toEqual([
+      '2s10s',
+      '5s30s',
+      '2s5s',
+      '5s10s',
+      '10s30s',
+      '3m10y',
+      'fly_2s5s10s',
+    ]);
+    const colors = keys.map((k) => CHART_SPREAD[k]);
+    expect(new Set(colors).size).toBe(colors.length);
+    // fly must not collide with 10s30s (both were purple under partial migration)
+    expect(CHART_SPREAD.fly_2s5s10s).not.toBe(CHART_SPREAD['10s30s']);
+    // 5s10s must not collide with 2s10s (cyan was aliased to info)
+    expect(CHART_SPREAD['5s10s']).not.toBe(CHART_SPREAD['2s10s']);
   });
 
   it('CHART_GREEK maps delta/gamma/theta/vega', () => {
@@ -45,10 +69,20 @@ describe('chartTheme', () => {
     expect(chartCorrColors(0.95).bg).toBe('#1d4ed8');
     expect(chartCorrColors(0.95).fg).toBe('#fff');
     expect(chartCorrColors(0.7).bg).toBe('#3b82f6');
+    expect(chartCorrColors(0.7).fg).toBe('#fff');
     expect(chartCorrColors(0.3).bg).toBe('#86efac');
+    expect(chartCorrColors(0.3).fg).toBe('#1e3a5f');
     expect(chartCorrColors(0.05).bg).toBe('#ecfdf5');
     expect(chartCorrColors(-0.2).bg).toBe('#fde68a');
     expect(chartCorrColors(-0.2).fg).toBe('#1e3a5f');
+  });
+
+  it('chartCorrColors keeps readable contrast on strong negative ρ', () => {
+    // Pale amber bin → dark ink (never white-on-yellow)
+    const strongNeg = chartCorrColors(-0.9);
+    expect(strongNeg.bg).toBe('#fde68a');
+    expect(strongNeg.fg).toBe('#1e3a5f');
+    expect(strongNeg.fg).not.toBe('#fff');
   });
 
   it('shared tooltip / grid helpers use CHART tokens', () => {

@@ -8,7 +8,7 @@ import {
 } from 'recharts';
 import { CollapsibleSection } from '../../terminal/CollapsibleSection';
 import { DataBadge } from '../DataBadge';
-import { CHART, CHART_SERIES_ORDINAL, chartGridProps, chartTooltipStyle } from '../../../lib/chartTheme';
+import { CHART, CHART_SPREAD, chartGridProps, chartTooltipStyle } from '../../../lib/chartTheme';
 import type { CurveShapeData, ImplyRead, RatesCurveHistory } from '../../../lib/macrovol/api';
 import { ImplyChip } from '../../common/ImplyDrawer';
 import { Spark } from './Spark';
@@ -27,19 +27,19 @@ export type StirPathPoint = {
 export type SpreadHist = { date: string; bps: number }[];
 
 const SPREAD_META: {
-  key: string;
+  key: keyof typeof CHART_SPREAD;
   label: string;
   color: string;
   histKey: keyof SpreadHistoryPack;
   sparkKey?: string;
 }[] = [
-  { key: '2s10s', label: '2s10s', color: CHART_SERIES_ORDINAL[0], histKey: 's2s10', sparkKey: 'spark_2s10s' },
-  { key: '5s30s', label: '5s30s', color: CHART_SERIES_ORDINAL[1], histKey: 's5s30', sparkKey: 'spark_5s30s' },
-  { key: '2s5s', label: '2s5s', color: CHART.series.warn, histKey: 's2s5', sparkKey: 'spark_2s5s' },
-  { key: '5s10s', label: '5s10s', color: CHART.series.cyan, histKey: 's5s10', sparkKey: 'spark_5s10s' },
-  { key: '10s30s', label: '10s30s', color: CHART.series.rate, histKey: 's10s30', sparkKey: 'spark_10s30s' },
-  { key: '3m10y', label: '3m10y', color: CHART.series.down, histKey: 's3m10y', sparkKey: 'spark_3m10y' },
-  { key: 'fly_2s5s10s', label: '2s5s10s fly', color: CHART.series.brand, histKey: 'fly', sparkKey: 'spark_fly' },
+  { key: '2s10s', label: '2s10s', color: CHART_SPREAD['2s10s'], histKey: 's2s10', sparkKey: 'spark_2s10s' },
+  { key: '5s30s', label: '5s30s', color: CHART_SPREAD['5s30s'], histKey: 's5s30', sparkKey: 'spark_5s30s' },
+  { key: '2s5s', label: '2s5s', color: CHART_SPREAD['2s5s'], histKey: 's2s5', sparkKey: 'spark_2s5s' },
+  { key: '5s10s', label: '5s10s', color: CHART_SPREAD['5s10s'], histKey: 's5s10', sparkKey: 'spark_5s10s' },
+  { key: '10s30s', label: '10s30s', color: CHART_SPREAD['10s30s'], histKey: 's10s30', sparkKey: 'spark_10s30s' },
+  { key: '3m10y', label: '3m10y', color: CHART_SPREAD['3m10y'], histKey: 's3m10y', sparkKey: 'spark_3m10y' },
+  { key: 'fly_2s5s10s', label: '2s5s10s fly', color: CHART_SPREAD.fly_2s5s10s, histKey: 'fly', sparkKey: 'spark_fly' },
 ];
 
 export type SpreadHistoryPack = {

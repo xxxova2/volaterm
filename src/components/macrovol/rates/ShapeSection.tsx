@@ -4,7 +4,7 @@ import {
 import type { CurveShapeData, ImplyRead } from '../../../lib/macrovol/api';
 import { DataBadge } from '../DataBadge';
 import { CollapsibleSection } from '../../terminal/CollapsibleSection';
-import { CHART, CHART_SERIES_ORDINAL, chartGridProps, chartTooltipStyle } from '../../../lib/chartTheme';
+import { CHART, CHART_SPREAD, chartGridProps, chartTooltipStyle } from '../../../lib/chartTheme';
 import { ImplyChip } from '../../common/ImplyDrawer';
 import { Spark } from './Spark';
 
@@ -23,14 +23,15 @@ export function ShapeSection({
   onOpenImply: (i: ImplyRead) => void;
 }) {
   // Compact regime strip — full spread curves live on CurvesBoard (sec-curves).
+  // Colors from shared CHART_SPREAD so Shape + Curves always match.
   const shapeCards = [
-    { key: '2s10s', label: '2s10s', spark: shape.history?.spark_2s10s, color: CHART_SERIES_ORDINAL[0] },
-    { key: '5s30s', label: '5s30s', spark: shape.history?.spark_5s30s, color: CHART_SERIES_ORDINAL[1] },
-    { key: 'fly_2s5s10s', label: 'fly', spark: shape.history?.spark_fly, color: CHART.series.rate },
-    { key: '2s5s', label: '2s5s', spark: shape.history?.spark_2s5s, color: CHART.series.warn },
-    { key: '5s10s', label: '5s10s', spark: shape.history?.spark_5s10s, color: CHART.series.cyan },
-    { key: '10s30s', label: '10s30s', spark: shape.history?.spark_10s30s, color: CHART.series.rate },
-    { key: '3m10y', label: '3m10y', spark: shape.history?.spark_3m10y, color: CHART.series.down },
+    { key: '2s10s', label: '2s10s', spark: shape.history?.spark_2s10s, color: CHART_SPREAD['2s10s'] },
+    { key: '5s30s', label: '5s30s', spark: shape.history?.spark_5s30s, color: CHART_SPREAD['5s30s'] },
+    { key: 'fly_2s5s10s', label: 'fly', spark: shape.history?.spark_fly, color: CHART_SPREAD.fly_2s5s10s },
+    { key: '2s5s', label: '2s5s', spark: shape.history?.spark_2s5s, color: CHART_SPREAD['2s5s'] },
+    { key: '5s10s', label: '5s10s', spark: shape.history?.spark_5s10s, color: CHART_SPREAD['5s10s'] },
+    { key: '10s30s', label: '10s30s', spark: shape.history?.spark_10s30s, color: CHART_SPREAD['10s30s'] },
+    { key: '3m10y', label: '3m10y', spark: shape.history?.spark_3m10y, color: CHART_SPREAD['3m10y'] },
   ];
 
   return (
@@ -83,10 +84,10 @@ export function ShapeSection({
       {/* Larger multi-spread history strip */}
       <div className="mt-2 grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-4">
         {[
-          { title: '2s10s', data: shapeHistoryCharts.s2s10, color: CHART_SERIES_ORDINAL[0] },
-          { title: '5s30s', data: shapeHistoryCharts.s5s30, color: CHART_SERIES_ORDINAL[1] },
-          { title: '3m10y', data: shapeHistoryCharts.s3m10y, color: CHART.series.down },
-          { title: 'fly 2s5s10s', data: shapeHistoryCharts.fly, color: CHART.series.rate },
+          { title: '2s10s', data: shapeHistoryCharts.s2s10, color: CHART_SPREAD['2s10s'] },
+          { title: '5s30s', data: shapeHistoryCharts.s5s30, color: CHART_SPREAD['5s30s'] },
+          { title: '3m10y', data: shapeHistoryCharts.s3m10y, color: CHART_SPREAD['3m10y'] },
+          { title: 'fly 2s5s10s', data: shapeHistoryCharts.fly, color: CHART_SPREAD.fly_2s5s10s },
         ].map((ch) => (
           <div key={ch.title} className="rounded border border-border/60 p-1">
             <div className="mb-0.5 text-type-2xs text-muted-foreground">{ch.title} (bps)</div>

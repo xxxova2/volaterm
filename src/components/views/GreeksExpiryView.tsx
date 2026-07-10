@@ -4,7 +4,7 @@ import { useTerminalStore } from '../../store/terminalStore';
 import { Panel } from '../terminal/Panel';
 import { netByExpiry, impliedMove } from '../../lib/options/analytics';
 import { fmtPrice, fmtPct } from '../../lib/format';
-import { CHART_GREEK } from '../../lib/chartTheme';
+import { CHART, CHART_GREEK, chartAxisTick, chartGridProps } from '../../lib/chartTheme';
 
 export function GreeksExpiryView() {
   const snapshot = useTerminalStore(s => s.snapshot);
@@ -34,9 +34,9 @@ export function GreeksExpiryView() {
         <div className="h-full p-2">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={chartData} margin={{ top: 8, right: 12, bottom: 18, left: 10 }}>
-              <CartesianGrid strokeDasharray="2 4" stroke="var(--grid)" />
-              <XAxis dataKey="label" tick={{ fontSize: 10, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }} stroke="var(--border)" />
-              <YAxis tick={{ fontSize: 10, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }} stroke="var(--border)" width={60} />
+              <CartesianGrid {...chartGridProps} />
+              <XAxis dataKey="label" tick={chartAxisTick} stroke={CHART.axisLine} />
+              <YAxis tick={chartAxisTick} stroke={CHART.axisLine} width={60} />
               <Tooltip
                 content={({ active, payload, label }) => {
                   if (!active || !payload?.length) return null;
@@ -62,8 +62,8 @@ export function GreeksExpiryView() {
       </Panel>
 
       <div className="grid grid-cols-4 gap-2">
-        <Stat label="Expected Move" value={move ? fmtPrice(move.move) : '—'} color="var(--amber)" />
-        <Stat label="Move %" value={move ? fmtPct(move.movePct) : '—'} color="var(--amber)" />
+        <Stat label="Expected Move" value={move ? fmtPrice(move.move) : '—'} color={CHART.series.amber} />
+        <Stat label="Move %" value={move ? fmtPct(move.movePct) : '—'} color={CHART.series.amber} />
         <Stat label="Prob of Touch" value={move ? fmtPct(move.probTouch) : '—'} color={CHART_GREEK.delta} />
         <Stat label="ATM Straddle" value={move ? fmtPrice(move.straddle) : '—'} color={CHART_GREEK.gamma} />
       </div>
@@ -75,7 +75,7 @@ function Stat({ label, value, color }: { label: string; value: string; color?: s
   return (
     <div className="rounded border border-border bg-card px-3 py-2">
       <div className="text-type-xs font-mono uppercase tracking-wider text-muted-foreground">{label}</div>
-      <div className="mt-0.5 text-lg font-semibold font-mono tabular-nums" style={{ color: color ?? 'var(--foreground)' }}>{value}</div>
+      <div className="mt-0.5 text-lg font-semibold font-mono tabular-nums" style={{ color: color ?? CHART.tooltipFg }}>{value}</div>
     </div>
   );
 }

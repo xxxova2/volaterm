@@ -23,7 +23,7 @@ import {
   type ExposureWeight,
 } from '../../lib/options/analytics';
 import { cn } from '../../lib/utils';
-import { CHART, chartTooltipStyle, chartGridProps } from '../../lib/chartTheme';
+import { CHART, chartAxisTick, chartTooltipStyle, chartGridProps } from '../../lib/chartTheme';
 import {
   useBoardFocus,
   useRegisterBoard,
@@ -355,10 +355,10 @@ export function PositioningView() {
                     ))}
                   </div>
                   <div className="ml-auto flex flex-wrap gap-3 font-mono text-type-xs">
-                    <StatMini label={`Σ ${metric.toUpperCase()}`} value={fmtCompact(totalVal)} color={totalVal >= 0 ? 'var(--up)' : 'var(--down)'} />
-                    <StatMini label="DEX $" value={fmtCompact(dealer.totalDEX)} color={dealer.totalDEX >= 0 ? 'var(--up)' : 'var(--down)'} />
+                    <StatMini label={`Σ ${metric.toUpperCase()}`} value={fmtCompact(totalVal)} color={totalVal >= 0 ? CHART.series.up : CHART.series.down} />
+                    <StatMini label="DEX $" value={fmtCompact(dealer.totalDEX)} color={dealer.totalDEX >= 0 ? CHART.series.up : CHART.series.down} />
                     <StatMini label="Charm/d" value={fmtCompact(dealer.totalCharm)} />
-                    <StatMini label="Flip" value={dealer.gammaFlip != null ? fmtPrice(dealer.gammaFlip, 0) : '—'} color="var(--amber)" />
+                    <StatMini label="Flip" value={dealer.gammaFlip != null ? fmtPrice(dealer.gammaFlip, 0) : '—'} color={CHART.series.amber} />
                   </div>
                 </div>
                 <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
@@ -370,32 +370,32 @@ export function PositioningView() {
                           <CartesianGrid {...chartGridProps} />
                           <XAxis
                             dataKey="label"
-                            tick={{ fontSize: 9, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }}
+                            tick={{ ...chartAxisTick, fontSize: 9 }}
                             tickLine={false}
                             interval={Math.max(0, Math.floor(chartData.length / 14))}
                           />
                           <YAxis
-                            tick={{ fontSize: 10, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }}
+                            tick={chartAxisTick}
                             tickLine={false}
                             width={44}
                             tickFormatter={(v: number) => `${v.toFixed(0)}M`}
                           />
                           <Tooltip contentStyle={chartTooltipStyle} />
-                          <ReferenceLine y={0} stroke="var(--muted-foreground)" />
+                          <ReferenceLine y={0} stroke={CHART.refLine} />
                           {spotLabel && (
                             <ReferenceLine
                               x={spotLabel}
-                              stroke="var(--amber)"
+                              stroke={CHART.series.amber}
                               strokeDasharray="4 4"
-                              label={{ value: 'Spot', position: 'top', fill: 'var(--amber)', fontSize: 9, fontFamily: 'JetBrains Mono' }}
+                              label={{ value: 'Spot', position: 'top', fill: CHART.series.amber, fontSize: 9, fontFamily: 'JetBrains Mono' }}
                             />
                           )}
                           {flipLabel && flipLabel !== spotLabel && (
                             <ReferenceLine
                               x={flipLabel}
-                              stroke="var(--down)"
+                              stroke={CHART.series.down}
                               strokeDasharray="3 3"
-                              label={{ value: 'Flip', position: 'top', fill: 'var(--down)', fontSize: 9, fontFamily: 'JetBrains Mono' }}
+                              label={{ value: 'Flip', position: 'top', fill: CHART.series.down, fontSize: 9, fontFamily: 'JetBrains Mono' }}
                             />
                           )}
                           {metric === 'gex' ? (
@@ -533,13 +533,13 @@ export function PositioningView() {
                   ) : (
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={oiByExpiry} margin={{ top: 8, right: 8, bottom: 4, left: 0 }}>
-                        <CartesianGrid stroke="var(--grid)" strokeDasharray="2 4" />
+                        <CartesianGrid {...chartGridProps} />
                         <XAxis
                           dataKey="label"
-                          tick={{ fontSize: 9, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }}
+                          tick={{ ...chartAxisTick, fontSize: 9 }}
                         />
                         <YAxis
-                          tick={{ fontSize: 9, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }}
+                          tick={{ ...chartAxisTick, fontSize: 9 }}
                           width={40}
                           tickFormatter={(v) => `${(v / 1000).toFixed(0)}K`}
                         />
@@ -565,22 +565,22 @@ export function PositioningView() {
                           }))}
                         margin={{ top: 8, right: 8, bottom: 4, left: 0 }}
                       >
-                        <CartesianGrid stroke="var(--grid)" strokeDasharray="2 4" />
+                        <CartesianGrid {...chartGridProps} />
                         <XAxis
                           dataKey="label"
-                          tick={{ fontSize: 8, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }}
+                          tick={{ ...chartAxisTick, fontSize: 8 }}
                           interval={Math.max(0, Math.floor(dealer.points.length / 20))}
                         />
                         <YAxis
-                          tick={{ fontSize: 9, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }}
+                          tick={{ ...chartAxisTick, fontSize: 9 }}
                           width={36}
                           tickFormatter={(v) => `${v.toFixed(0)}M`}
                         />
                         <Tooltip contentStyle={chartTooltipStyle} />
-                        <ReferenceLine y={0} stroke="var(--muted-foreground)" />
+                        <ReferenceLine y={0} stroke={CHART.refLine} />
                         <ReferenceLine
                           x={fmtPrice(snapshot.spot, 0)}
-                          stroke="var(--amber)"
+                          stroke={CHART.series.amber}
                           strokeDasharray="3 3"
                         />
                         <Bar dataKey="net" fill={CHART.series.cyan} name="Net GEX $M" opacity={0.9} />

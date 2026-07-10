@@ -33,7 +33,7 @@ export function CurveSection({
       <ResponsiveContainer width="100%" height={200}>
         <LineChart data={curve}>
           <CartesianGrid {...chartGridProps} />
-          <ReferenceLine y={0} stroke={CHART.grid} />
+          <ReferenceLine y={0} stroke={CHART.refLine} />
           <XAxis dataKey="label" tick={chartAxisTick} />
           <YAxis tick={chartAxisTick} tickFormatter={(v) => `${v}%`} domain={['auto', 'auto']} />
           <Tooltip

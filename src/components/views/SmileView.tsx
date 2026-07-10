@@ -8,7 +8,7 @@ import { DiagnosticsStrip } from './DiagnosticsStrip';
 import { fitSVI, svi } from '../../lib/options/svi';
 import type { OptionQuote } from '../../lib/options/types';
 import { Explain } from '../common/Explain';
-import { CHART, CHART_SERIES_ORDINAL, chartTooltipStyle } from '../../lib/chartTheme';
+import { CHART, CHART_SERIES_ORDINAL, chartAxisTick, chartGridProps, chartTooltipStyle } from '../../lib/chartTheme';
 
 type XMode = 'moneyness' | 'strike' | 'delta';
 
@@ -241,17 +241,17 @@ export function SmileView() {
         <div className="flex-1">
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart margin={{ top: 10, right: 20, bottom: 10, left: 20 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--grid)" />
+              <CartesianGrid {...chartGridProps} />
               <XAxis
                 dataKey="x"
-                tick={{ fontSize: 10, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }}
+                tick={chartAxisTick}
                 tickLine={false}
-                label={{ value: xLabel, position: 'bottom', fontSize: 10, fill: 'var(--muted-foreground)' }}
+                label={{ value: xLabel, position: 'bottom', fontSize: 10, fill: CHART.axisMuted }}
                 domain={['auto', 'auto']}
                 type="number"
               />
               <YAxis
-                tick={{ fontSize: 10, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }}
+                tick={chartAxisTick}
                 tickLine={false}
                 tickFormatter={(v: number) => `${v.toFixed(1)}%`}
                 domain={['auto', 'auto']}
