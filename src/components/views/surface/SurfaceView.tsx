@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { useTerminalStore } from '../../../store/terminalStore';
 import { ivRamp01 } from '../../../lib/options/color';
 import { VISUAL_CONFIG } from '../../../config/constants';
+import { CANVAS } from '../../../lib/chartTheme';
 import { buildStrikeWorldXs, type XTick } from '../surfaceStrikeMapping';
 import { SurfaceTools, type SliceMode } from './SurfaceTools';
 import { SurfaceInspect, type InspectPoint } from './SurfaceInspect';
@@ -270,7 +271,7 @@ function SurfaceAtmLine({ atmPx }: { atmPx: number }) {
   return (
     <mesh position={[atmPx, 0, 0]}>
       <boxGeometry args={[0.018, 0.006, DEPTH]} />
-      <meshBasicMaterial color="#f0b400" transparent opacity={0.9} />
+      <meshBasicMaterial color={CANVAS.brand} transparent opacity={0.9} />
     </mesh>
   );
 }
@@ -282,7 +283,7 @@ function SurfaceAxes({ info }: { info: GeometryInfo }) {
 
   return (
     <>
-      <gridHelper args={[4, 8, '#2a2a33', '#1f1f26']} position={[0, 0, 0]} />
+      <gridHelper args={[4, 8, CANVAS.grid, CANVAS.gridMinor]} position={[0, 0, 0]} />
 
       {info.xTicks.map((tick, i) => (
         <Html key={`x${i}-${tick.label}`} position={[tick.px, 0, DEPTH / 2 + 0.05]} center distanceFactor={6}>

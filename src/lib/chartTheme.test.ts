@@ -1,13 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import {
+  CANVAS,
   CHART,
   CHART_GREEK,
+  CHART_RESOLVED,
   CHART_SCENARIO,
   CHART_SERIES_ORDINAL,
   CHART_SPREAD,
+  canvasCellColor,
   chartCorrColors,
   chartGridProps,
   chartTooltipStyle,
+  colorWithAlpha,
+  cssVar,
+  parseRgbChannels,
+  resolveCanvasColors,
 } from './chartTheme';
 
 describe('chartTheme', () => {
@@ -88,5 +95,44 @@ describe('chartTheme', () => {
   it('shared tooltip / grid helpers use CHART tokens', () => {
     expect(chartTooltipStyle.background).toBe(CHART.tooltipBg);
     expect(chartGridProps.stroke).toBe(CHART.grid);
+  });
+
+  it('CHART_RESOLVED / CANVAS expose brand/grid/label hex for canvas & Three', () => {
+    expect(CHART_RESOLVED.brand).toMatch(/^#[0-9a-fA-F]{6}$/);
+    expect(CHART_RESOLVED.grid).toMatch(/^#[0-9a-fA-F]{6}$/);
+    expect(CHART_RESOLVED.gridMinor).toMatch(/^#[0-9a-fA-F]{6}$/);
+    expect(CHART_RESOLVED.label).toMatch(/^#[0-9a-fA-F]{6}$/);
+    expect(CANVAS.brand).toBe(CHART_RESOLVED.brand);
+    expect(CANVAS.grid).toBe(CHART_RESOLVED.grid);
+    expect(CANVAS.up).toBe(CHART_RESOLVED.up);
+    expect(CANVAS.down).toBe(CHART_RESOLVED.down);
+  });
+
+  it('cssVar falls back when property missing', () => {
+    expect(cssVar('--definitely-not-a-token-xyz', '#abc123')).toBe('#abc123');
+  });
+
+  it('parseRgbChannels and colorWithAlpha handle hex', () => {
+    expect(parseRgbChannels('#f0b400')).toEqual([240, 180, 0]);
+    expect(parseRgbChannels('#fff')).toEqual([255, 255, 255]);
+    expect(colorWithAlpha('#3fb950', 0.5)).toBe('rgba(63, 185, 80, 0.5)');
+  });
+
+  it('canvasCellColor uses up/down for diverging and info for sequential', () => {
+    const pos = canvasCellColor(1, -1, 1, true);
+    const neg = canvasCellColor(-1, -1, 1, true);
+    const seq = canvasCellColor(1, 0, 1, false);
+    expect(pos).toMatch(/^rgba\(63, 185, 80,/);
+    expect(neg).toMatch(/^rgba\(240, 136, 62,/);
+    expect(seq).toMatch(/^rgba\(77, 143, 240,/);
+  });
+
+  it('resolveCanvasColors returns brand/grid/label roles', () => {
+    const c = resolveCanvasColors();
+    expect(c.brand).toBeTruthy();
+    expect(c.grid).toBeTruthy();
+    expect(c.label).toBeTruthy();
+    expect(c.up).toBeTruthy();
+    expect(c.down).toBeTruthy();
   });
 });

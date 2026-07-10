@@ -2,6 +2,11 @@ import { useEffect, useMemo, useRef, useState, useCallback, lazy, Suspense } fro
 import { useTerminalStore } from '../../store/terminalStore';
 import { fmtPrice, fmtSigned } from '../../lib/format';
 import { cn } from '../../lib/utils';
+import {
+  canvasCellColor,
+  colorWithAlpha,
+  resolveCanvasColors,
+} from '../../lib/chartTheme';
 import { portfolioGreeks, impliedMove } from '../../lib/options/analytics';
 import { GreeksProfileView } from './GreeksProfileView';
 import { GreeksSensitivityView } from './GreeksSensitivityView';
@@ -57,17 +62,6 @@ function moneynessThreshold(range: MoneynessRange): number {
     default:
       return Infinity;
   }
-}
-
-function cellColor(v: number, min: number, max: number, diverging: boolean): string {
-  if (diverging) {
-    const m = Math.max(Math.abs(min), Math.abs(max)) || 1;
-    const t = v / m;
-    if (t >= 0) return `rgba(63, 185, 80, ${0.12 + Math.min(1, t) * 0.78})`;
-    return `rgba(240, 136, 62, ${0.12 + Math.min(1, -t) * 0.78})`;
-  }
-  const t = max > min ? (v - min) / (max - min) : 0.5;
-  return `rgba(77, 143, 240, ${0.08 + t * 0.85})`;
 }
 
 /**
@@ -325,6 +319,7 @@ export function GreeksView() {
     ctx.scale(dpr, dpr);
     ctx.clearRect(0, 0, w, h);
 
+    const colors = resolveCanvasColors();
     const nRows = rows.length;
     const nCols = cols.length;
     const labelW = 48;
@@ -344,14 +339,14 @@ export function GreeksView() {
         const y = y0 + r * cellH;
 
         if (v != null && isFinite(v)) {
-          ctx.fillStyle = cellColor(v, min, max, diverging);
+          ctx.fillStyle = canvasCellColor(v, min, max, diverging, colors);
         } else {
-          ctx.fillStyle = 'rgba(0,0,0,0.04)';
+          ctx.fillStyle = colors.empty;
         }
         ctx.fillRect(x, y, cellW - 1, cellH - 1);
 
         if (selectedCell && cell && cell.strike === selectedCell.strike && cell.dte === selectedCell.dte) {
-          ctx.strokeStyle = '#f59e0b';
+          ctx.strokeStyle = colors.brand;
           ctx.lineWidth = 2;
           ctx.strokeRect(x - 0.5, y - 0.5, cellW, cellH);
         }
@@ -359,7 +354,7 @@ export function GreeksView() {
     }
 
     // Y-axis labels (strikes).
-    ctx.fillStyle = 'rgba(156, 163, 175, 0.9)';
+    ctx.fillStyle = colorWithAlpha(colors.label, 0.9);
     ctx.font = '9px "JetBrains Mono", monospace';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
@@ -371,7 +366,7 @@ export function GreeksView() {
     // X-axis labels (DTE).
     ctx.textAlign = 'right';
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = 'rgba(156, 163, 175, 0.7)';
+    ctx.fillStyle = colorWithAlpha(colors.label, 0.7);
     ctx.font = '8px "JetBrains Mono", monospace';
     for (let r = 0; r < nRows; r++) {
       const y = y0 + r * cellH + cellH / 2;
@@ -386,7 +381,7 @@ export function GreeksView() {
       const y = y0 + r * cellH + cellH / 2;
       const agg = aggregates.byExpiry[r];
       if (agg?.mean != null) {
-        ctx.fillStyle = 'rgba(156, 163, 175, 0.55)';
+        ctx.fillStyle = colorWithAlpha(colors.label, 0.55);
         // Already showing DTE at this x — skip extra if cramped.
         if (cellH >= 14) {
           ctx.fillText(fmtAggShort(agg.mean, selectedGreek), x0 - 3, y + 8);
@@ -397,7 +392,7 @@ export function GreeksView() {
     // Title + fill quality.
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
-    ctx.fillStyle = 'rgba(156, 163, 175, 0.65)';
+    ctx.fillStyle = colorWithAlpha(colors.label, 0.65);
     ctx.font = '8px "JetBrains Mono", monospace';
     const greekLabel = GREEK_META.find(g => g.key === selectedGreek)?.label ?? selectedGreek;
     ctx.fillText(
