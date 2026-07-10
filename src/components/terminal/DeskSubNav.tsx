@@ -2,21 +2,26 @@ import { useCallback, useEffect, useState } from 'react';
 import { cn } from '../../lib/utils';
 import { useTerminalStore } from '../../store/terminalStore';
 import type { DeskNavItem } from '../../config/deskNav';
+import { DeskModeBar } from './DeskModeBar';
 
 export type { DeskNavItem };
 
 /**
  * Sticky horizontal jump links for tall desks (Macros & Rates, etc.).
  * Updates desk context bar + marks active section for [ ] keyboard nav.
+ * Uses DeskModeBar for unified soft active chip grammar.
  */
 export function DeskSubNav({
   items,
   className,
   label = 'Jump',
+  /** When true, no outer sticky chrome — embed inside DeskChrome. */
+  bare = false,
 }: {
   items: DeskNavItem[];
   className?: string;
   label?: string;
+  bare?: boolean;
 }) {
   const setDeskContext = useTerminalStore((s) => s.setDeskContext);
   const [active, setActive] = useState(items[0]?.id ?? '');
@@ -79,6 +84,37 @@ export function DeskSubNav({
     return () => obs.disconnect();
   }, [items, applyActive]);
 
+  const chips = (
+    <>
+      {label ? (
+        <span className="mr-1 hidden shrink-0 font-mono text-type-2xs uppercase tracking-wider text-muted-foreground/70 sm:inline">
+          {label}
+        </span>
+      ) : null}
+      <DeskModeBar
+        items={items.map((it) => ({
+          id: it.id,
+          label: it.label,
+          short: it.short,
+        }))}
+        activeId={active}
+        onSelect={scrollTo}
+        className="flex-1 overflow-x-auto scrollbar-none"
+      />
+      <span className="hidden shrink-0 font-mono text-type-2xs text-muted-foreground/50 lg:inline" title="Keyboard">
+        [ ]
+      </span>
+    </>
+  );
+
+  if (bare) {
+    return (
+      <div className={cn('flex min-w-0 flex-1 items-center gap-1', className)} aria-label={`${label || 'Desk'} sections`}>
+        {chips}
+      </div>
+    );
+  }
+
   return (
     <nav
       className={cn(
@@ -88,30 +124,7 @@ export function DeskSubNav({
       )}
       aria-label={`${label} sections`}
     >
-      <span className="mr-1 hidden shrink-0 font-mono text-type-2xs uppercase tracking-wider text-muted-foreground/70 sm:inline">
-        {label}
-      </span>
-      <div className="flex min-w-0 flex-1 gap-0.5 overflow-x-auto scrollbar-none">
-        {items.map((it) => (
-          <button
-            key={it.id}
-            type="button"
-            onClick={() => scrollTo(it.id)}
-            className={cn(
-              'shrink-0 rounded px-2 py-0.5 font-mono text-type-xs transition-colors',
-              active === it.id
-                ? 'bg-primary/20 text-primary'
-                : 'text-muted-foreground hover:bg-muted hover:text-foreground',
-            )}
-          >
-            <span className="sm:hidden">{it.short ?? it.label}</span>
-            <span className="hidden sm:inline">{it.label}</span>
-          </button>
-        ))}
-      </div>
-      <span className="hidden shrink-0 font-mono text-type-2xs text-muted-foreground/50 lg:inline" title="Keyboard">
-        [ ]
-      </span>
+      {chips}
     </nav>
   );
 }

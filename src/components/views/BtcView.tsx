@@ -14,6 +14,7 @@ import { Explain } from '../common/Explain';
 import { EmptyState } from '../common/EmptyState';
 import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
 import { FreshnessChip, FreshnessFromDomain } from '../common/Freshness';
+import { DeskChromeLabel } from '../terminal/DeskChrome';
 import { fmtCompact, fmtPct, fmtPrice, fmtSignedPct } from '../../lib/format';
 import { UI_COPY } from '../../config/uiCopy';
 import {
@@ -351,7 +352,7 @@ export function BtcView() {
       <SectionErrorBoundary name="Dual tape">
         <div className="flex flex-col gap-1 rounded border border-border bg-card px-2 py-1.5 sm:flex-row sm:items-stretch">
           <div className="flex shrink-0 flex-col justify-center px-1">
-            <span className="font-mono text-type-xs font-bold tracking-wider text-primary">CRYPTO</span>
+            <DeskChromeLabel className="mr-0">CRYPTO</DeskChromeLabel>
             <span className="font-mono text-type-2xs text-muted-foreground">BTC · ETH dual tape</span>
           </div>
           <DualCol d={dual.btc} active={symbol === 'BTC'} onSelect={selectCcy} />
@@ -399,10 +400,10 @@ export function BtcView() {
         </SectionErrorBoundary>
       )}
 
-      {/* Header strip — active book metrics */}
+      {/* Header strip — active book metrics (shared label + freshness badge grammar) */}
       <div className="flex flex-wrap items-center gap-4 px-3 py-2 border border-border bg-card rounded">
         <div className="flex items-center gap-2">
-          <span className="text-primary font-mono font-bold text-sm tracking-wider">{deskLabel}</span>
+          <DeskChromeLabel className="mr-0 text-sm">{deskLabel}</DeskChromeLabel>
           <span className="text-type-xs font-mono text-muted-foreground px-1.5 py-0.5 border border-border rounded">
             {source === 'live'
               ? (chainUsed === 'deribit'

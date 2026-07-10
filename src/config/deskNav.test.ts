@@ -40,4 +40,19 @@ describe('jumpDeskSection', () => {
     expect(next).toBeTruthy();
     expect(['sec-macro', 'sec-snapshot', 'sec-stir']).toContain(next!);
   });
+
+  it('clicks vol-sub mode buttons when jumping', async () => {
+    document.body.innerHTML = `
+      <button id="vol-sub-surface" data-desk-section="1" data-desk-section-active="1"></button>
+      <button id="vol-sub-smile" data-desk-section="1"></button>
+      <button id="vol-sub-term" data-desk-section="1"></button>
+    `;
+    const smile = document.getElementById('vol-sub-smile')!;
+    const clicked: string[] = [];
+    smile.addEventListener('click', () => clicked.push('smile'));
+    const { jumpDeskSection } = await import('./deskNav');
+    const next = jumpDeskSection('vol', 1);
+    expect(next).toBe('vol-sub-smile');
+    expect(clicked).toEqual(['smile']);
+  });
 });

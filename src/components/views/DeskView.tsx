@@ -18,6 +18,7 @@ import { Explain } from '../common/Explain';
 import { EmptyState } from '../common/EmptyState';
 import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
 import { FreshnessFromDomain } from '../common/Freshness';
+import { DeskChrome, DeskChromeLabel } from '../terminal/DeskChrome';
 import { fmtPct, fmtPrice, fmtSigned, fmtCompact } from '../../lib/format';
 import { cn } from '../../lib/utils';
 import { UI_COPY } from '../../config/uiCopy';
@@ -143,10 +144,21 @@ export function DeskView() {
 
   return (
     <div className="h-full flex flex-col gap-1 overflow-hidden">
-      {/* Blotter-first strip (Phase F) */}
+      {/* Blotter-first strip (Phase F) — light DeskChrome for label + freshness only */}
       <div className="flex flex-col gap-1 rounded border border-border bg-card px-2 py-1.5">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="px-1 font-mono text-xs font-bold tracking-wider text-primary">MM DESK</span>
+        <DeskChrome
+          sticky={false}
+          className="border-0 bg-transparent p-0 backdrop-blur-none"
+          trailing={
+            <FreshnessFromDomain
+              asOfMs={chainAsOfMs}
+              domain="chain"
+              down={chainMissing}
+              previousKind={provenance.chain?.kind}
+            />
+          }
+        >
+          <DeskChromeLabel className="mr-0 px-1 text-xs">MM DESK</DeskChromeLabel>
           <span className="font-mono text-type-xs text-muted-foreground">
             {snapshot.symbol} @ {fmtPrice(snapshot.spot, snapshot.spot > 1000 ? 1 : 2)}
           </span>
@@ -156,17 +168,11 @@ export function DeskView() {
           >
             {badge.label}
           </span>
-          <FreshnessFromDomain
-            asOfMs={chainAsOfMs}
-            domain="chain"
-            down={chainMissing}
-            previousKind={provenance.chain?.kind}
-          />
           <span className="hidden font-mono text-type-2xs text-muted-foreground md:inline">
             Blotter first · tools secondary · BS-Merton
             {chainUsed === 'deribit' ? ' · Deribit mark IV' : ''}
           </span>
-        </div>
+        </DeskChrome>
         {/* Inventory blotter — primary risk tape */}
         <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 rounded border border-primary/20 bg-primary/5 px-2 py-1 font-mono text-type-xs">
           <span className="font-bold uppercase tracking-wider text-primary">Blotter Σ</span>

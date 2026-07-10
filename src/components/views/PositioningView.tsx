@@ -32,6 +32,8 @@ import {
 } from '../../hooks/useBoardFocus';
 import { PERF_BUDGET } from '../../config/perfBudget';
 import { UI_COPY } from '../../config/uiCopy';
+import { DeskChrome } from '../terminal/DeskChrome';
+import { DeskModeBar } from '../terminal/DeskModeBar';
 
 type Sub = 'chain' | 'dealer' | 'levels' | 'edge';
 
@@ -171,40 +173,35 @@ export function PositioningView() {
   const flip = dealer?.gammaFlip;
   const aboveFlip = flip != null && snapshot ? snapshot.spot >= flip : null;
 
+  const activeDomId = SUBS.find((s) => s.id === sub)?.domId ?? 'pos-sub-dealer';
+
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <div className="sticky top-0 z-20 flex shrink-0 flex-wrap items-center gap-1 border-b border-border bg-background/95 px-2 py-1 backdrop-blur-sm">
-        <span className="mr-1 font-mono text-type-xs font-bold tracking-wider text-primary">
-          POSITIONING
-        </span>
-        {SUBS.map((s) => (
-          <button
-            key={s.id}
-            id={s.domId}
-            type="button"
-            data-desk-section="1"
-            data-desk-section-active={sub === s.id ? '1' : undefined}
-            onClick={() => setSub(s.id)}
-            title={s.blurb}
-            className={cn(
-              'rounded px-2 py-0.5 font-mono text-type-xs transition-colors',
-              sub === s.id
-                ? 'bg-primary text-primary-foreground'
-                : 'text-muted-foreground hover:bg-muted hover:text-foreground',
-            )}
-          >
-            {s.label}
-          </button>
-        ))}
-        <span className="ml-auto">
+      <DeskChrome
+        label="POSITIONING"
+        trailing={
           <FreshnessFromDomain
             asOfMs={chainAsOfMs}
             domain="chain"
             down={chainMissing}
             previousKind={provenance.chain?.kind}
           />
-        </span>
-      </div>
+        }
+      >
+        <DeskModeBar
+          items={SUBS.map((s) => ({
+            id: s.domId,
+            label: s.label,
+            title: s.blurb,
+          }))}
+          activeId={activeDomId}
+          onSelect={(domId) => {
+            const m = SUBS.find((s) => s.domId === domId);
+            if (m) setSub(m.id);
+          }}
+          asSectionButtons
+        />
+      </DeskChrome>
 
       {/* Fixed GEX flip callout — Phase F */}
       {snapshot && flip != null && (

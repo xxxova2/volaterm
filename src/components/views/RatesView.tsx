@@ -7,6 +7,7 @@ import { MacroPanel } from '../macrovol/MacroPanel';
 import { RatesPanel } from '../macrovol/RatesPanel';
 import { ApiSources } from '../macrovol/ApiSources';
 import { DataBadge } from '../macrovol/DataBadge';
+import { DeskChrome } from '../terminal/DeskChrome';
 import { DeskSubNav } from '../terminal/DeskSubNav';
 import { CollapsibleSection } from '../terminal/CollapsibleSection';
 import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
@@ -41,14 +42,16 @@ export function RatesView() {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      {/* Single thin strip: title + jump + sources (was 2 chrome rows) */}
-      <div className="flex h-6 shrink-0 items-center gap-1.5 border-b border-border bg-card/40 px-1.5">
-        <span className="shrink-0 font-mono text-type-xs font-bold tracking-wider text-primary">RATES</span>
-        <div className="min-w-0 flex-1">
-          <DeskSubNav items={RATES_SECTIONS} label="" className="border-0 bg-transparent px-0" />
-        </div>
-        <ApiSources apis={['FRED', 'NYFed', 'yfinance', 'MacroVol']} />
-      </div>
+      {/* Single thin strip: title + jump + sources */}
+      <DeskChrome
+        label="RATES"
+        sticky={false}
+        dense
+        className="h-6 border-border bg-card/40 px-1.5 py-0"
+        trailing={<ApiSources apis={['FRED', 'NYFed', 'yfinance', 'MacroVol']} />}
+      >
+        <DeskSubNav items={RATES_SECTIONS} label="" bare />
+      </DeskChrome>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         <section id="sec-macro" className="scroll-mt-8 border-b border-border/60" aria-label="Macro indicators">

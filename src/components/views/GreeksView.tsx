@@ -15,6 +15,8 @@ import { DeskLoading } from '../common/Skeleton';
 import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
 import { EmptyState } from '../common/EmptyState';
 import { UI_COPY } from '../../config/uiCopy';
+import { DeskChrome } from '../terminal/DeskChrome';
+import { DeskModeBar } from '../terminal/DeskModeBar';
 import type { OptionQuote } from '../../lib/options/types';
 
 const Greeks10View = lazy(() =>
@@ -461,7 +463,16 @@ export function GreeksView() {
   if (edition === 'greeks10') {
     return (
       <div className="flex h-full flex-col">
-        <div className="flex items-center gap-1 border-b border-border px-1 py-0.5">
+        <DeskChrome
+          dense
+          sticky={false}
+          trailing={
+            <span className="font-mono text-type-2xs text-muted-foreground">
+              MacroVol desk · ATM · 3D surfaces · GEX/Charm · IV surface
+            </span>
+          }
+        >
+          {/* Edition toggle: solid primary CTA allowed */}
           <button
             type="button"
             onClick={() => setEdition('greeks10')}
@@ -472,14 +483,11 @@ export function GreeksView() {
           <button
             type="button"
             onClick={() => setEdition('terminal')}
-            className="rounded px-2 py-0.5 font-mono text-type-xs text-muted-foreground hover:text-foreground"
+            className="rounded px-2 py-0.5 font-mono text-type-xs text-muted-foreground hover:bg-muted hover:text-foreground"
           >
             Terminal Greeks
           </button>
-          <span className="ml-2 font-mono text-type-2xs text-muted-foreground">
-            MacroVol desk · ATM · 3D surfaces · GEX/Charm · IV surface
-          </span>
-        </div>
+        </DeskChrome>
         <div className="min-h-0 flex-1">
           <SectionErrorBoundary name="Greeks 1.0">
             <Suspense fallback={<DeskLoading message={UI_COPY.load.greeks} />}>
@@ -514,11 +522,17 @@ export function GreeksView() {
 
   const greekRow1 = GREEK_META.slice(0, 7);
   const greekRow2 = GREEK_META.slice(7);
+  const activeDomId = SUB_VIEWS.find((s) => s.id === subView)?.domId ?? 'greeks-sub-heatmap';
 
   return (
     <div className="flex flex-col h-full">
       {/* Edition + sub-view tabs — sticky for tall greek boards */}
-      <div className="sticky top-0 z-20 flex shrink-0 items-center gap-0.5 border-b border-border bg-background/95 px-1 py-0.5 backdrop-blur-sm">
+      <DeskChrome
+        dense
+        trailing={
+          <DiagnosticsStrip sviReadout={sviReadout} arbResult={arbResult} data-testid="greeks-diagnostics" />
+        }
+      >
         <button
           type="button"
           onClick={() => setEdition('greeks10')}
@@ -528,24 +542,19 @@ export function GreeksView() {
           Greeks 1.0
         </button>
         <span className="mx-0.5 text-border">|</span>
-        {SUB_VIEWS.map(sv => (
-          <button
-            key={sv.id}
-            id={sv.domId}
-            type="button"
-            data-desk-section="1"
-            data-desk-section-active={subView === sv.id ? '1' : undefined}
-            onClick={() => setSubView(sv.id)}
-            className={cn('px-2 py-0.5 text-type-xs font-mono rounded transition-colors',
-              subView === sv.id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
-            )}
-          >
-            {sv.label}
-          </button>
-        ))}
-        <div className="flex-1" />
-        <DiagnosticsStrip sviReadout={sviReadout} arbResult={arbResult} data-testid="greeks-diagnostics" />
-      </div>
+        <DeskModeBar
+          items={SUB_VIEWS.map((sv) => ({
+            id: sv.domId,
+            label: sv.label,
+          }))}
+          activeId={activeDomId}
+          onSelect={(domId) => {
+            const m = SUB_VIEWS.find((s) => s.domId === domId);
+            if (m) setSubView(m.id);
+          }}
+          asSectionButtons
+        />
+      </DeskChrome>
 
       {subView !== 'heatmap' ? (
         <div className="flex-1 p-1 overflow-hidden">
