@@ -10,6 +10,7 @@ import {
   gammaExposure,
   ivRank,
   dealerExposure,
+  resolveExposureWeight,
   scanParityEdges,
   realizedVolCloseToClose,
   inventoryByExpiry,
@@ -582,6 +583,9 @@ describe('dealerExposure stack', () => {
         puts: e.puts.map((q) => ({ ...q, openInterest: 0, volume: 100 })),
       })),
     };
+    const resolved = resolveExposureWeight(noOi, 'oi');
+    expect(resolved.weight).toBe('volume');
+    expect(resolved.fallback).toBe(true);
     const d = dealerExposure(noOi, { weight: 'oi' });
     expect(d.weight).toBe('volume');
     expect(d.weightFallback).toBe(true);

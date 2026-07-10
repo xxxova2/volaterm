@@ -31,7 +31,6 @@ import {
   type FocusableBoardApi,
 } from '../../hooks/useBoardFocus';
 import { PERF_BUDGET } from '../../config/perfBudget';
-import { UI_COPY } from '../../config/uiCopy';
 import { DeskChrome } from '../terminal/DeskChrome';
 import { DeskModeBar } from '../terminal/DeskModeBar';
 
