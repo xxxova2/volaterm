@@ -2,7 +2,7 @@ import { useTerminalStore } from '../../store/terminalStore';
 import { fmtTime, fmtPrice, fmtPct } from '../../lib/format';
 import { FreshnessChip } from '../common/Freshness';
 import {
-  classifyDomainFreshness,
+  kindFromProvenance,
   type FreshnessKind,
 } from '../../lib/data/freshness';
 
@@ -10,20 +10,6 @@ function ageLabel(ms: number): string {
   if (ms < 1000) return 'now';
   if (ms < 60_000) return `${Math.round(ms / 1000)}s`;
   return `${Math.round(ms / 60_000)}m`;
-}
-
-function kindFromProvenance(
-  kind: FreshnessKind | undefined,
-  asOfMs: number | null | undefined,
-  domain: 'spot' | 'chain',
-  opts?: { demo?: boolean; down?: boolean },
-): FreshnessKind {
-  // Recompute from asOf so chips age without waiting for next store write
-  return classifyDomainFreshness(asOfMs, domain, {
-    demo: opts?.demo,
-    down: opts?.down,
-    previousKind: kind,
-  });
 }
 
 export function StatusBar() {

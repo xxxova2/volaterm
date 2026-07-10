@@ -12,7 +12,7 @@ import { useTerminalStore } from '../../store/terminalStore';
 import { Panel } from '../terminal/Panel';
 import { Explain } from '../common/Explain';
 import { EmptyState } from '../common/EmptyState';
-import { FreshnessChip } from '../common/Freshness';
+import { FreshnessChip, FreshnessFromDomain } from '../common/Freshness';
 import { fmtCompact, fmtPct, fmtPrice, fmtSignedPct } from '../../lib/format';
 import {
   gammaExposure, impliedMove, portfolioGreeks,
@@ -237,15 +237,10 @@ export function BtcView() {
   const gex = useMemo(() => (snapshot ? gammaExposure(snapshot) : null), [snapshot]);
   const move = useMemo(() => (snapshot ? impliedMove(snapshot) : null), [snapshot]);
   const port = useMemo(() => (snapshot ? portfolioGreeks(snapshot) : null), [snapshot]);
-  // Active strip only — dual tape already uses classifyDomainFreshness (do not touch useCryptoDualBooks)
+  // Active strip only — parity with StatusBar asOf (no snapshot.timestamp); FreshnessFromDomain re-ticks
   const chainMissing = !chainAvailable || chainUsed === 'none';
-  const stripKind = classifyDomainFreshness(
-    provenance.chain?.asOfMs
-      ?? (lastChainUpdate > 0 ? lastChainUpdate : null)
-      ?? (snapshot?.timestamp && snapshot.timestamp > 0 ? snapshot.timestamp : null),
-    'crypto',
-    { demo: false, down: chainMissing, previousKind: provenance.chain?.kind },
-  );
+  const stripAsOfMs =
+    provenance.chain?.asOfMs ?? (lastChainUpdate > 0 ? lastChainUpdate : null);
   const liveFundingAnn = fundingAnn ?? snapshot?.fundingAnn ?? null;
   const basis = useMemo(
     () => (snapshot ? buildBasisCurve(snapshot, { fundingAnn: liveFundingAnn }) : null),
@@ -411,7 +406,12 @@ export function BtcView() {
                   : 'LIVE SPOT · SYNTH SMILE')
               : 'DEMO'}
           </span>
-          <FreshnessChip kind={stripKind} />
+          <FreshnessFromDomain
+            asOfMs={stripAsOfMs}
+            domain="crypto"
+            down={chainMissing}
+            previousKind={provenance.chain?.kind}
+          />
           <span className="text-type-2xs font-mono text-muted-foreground hidden lg:inline">
             {cryptoDualCharts
               ? '2× charts on · click pane or tape to switch active book'

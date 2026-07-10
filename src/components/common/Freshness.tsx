@@ -47,9 +47,14 @@ export function formatRelative(isoString: string): string {
 export function FreshnessChip({
   kind,
   className,
+  title,
+  'aria-label': ariaLabel,
 }: {
   kind: FreshnessKind;
   className?: string;
+  /** Override default kind label title (e.g. spot/chain breakdown). */
+  title?: string;
+  'aria-label'?: string;
 }) {
   const s = STYLE[kind];
   return (
@@ -59,7 +64,8 @@ export function FreshnessChip({
         s.className,
         className,
       )}
-      title={s.label}
+      title={title ?? s.label}
+      aria-label={ariaLabel}
     >
       <span className={cn('h-1.5 w-1.5 rounded-full', s.dot)} />
       {s.label}
@@ -92,7 +98,7 @@ export function FreshnessFromAsOf({
   return <FreshnessChip kind={kind} className={className} />;
 }
 
-/** Domain-ms freshness chip (spot / chain / crypto / stream). */
+/** Domain-ms freshness chip (spot / chain / crypto / stream). Re-ticks every 5s so age advances without store writes. */
 export function FreshnessFromDomain({
   asOfMs,
   domain,
@@ -100,6 +106,7 @@ export function FreshnessFromDomain({
   down,
   previousKind,
   className,
+  title,
 }: {
   asOfMs?: number | null;
   domain: FreshnessDomain;
@@ -107,6 +114,7 @@ export function FreshnessFromDomain({
   down?: boolean;
   previousKind?: FreshnessKind;
   className?: string;
+  title?: string;
 }) {
   const [, setTick] = useState(0);
   useEffect(() => {
@@ -114,5 +122,5 @@ export function FreshnessFromDomain({
     return () => clearInterval(t);
   }, []);
   const kind = classifyDomainFreshness(asOfMs, domain, { demo, down, previousKind });
-  return <FreshnessChip kind={kind} className={className} />;
+  return <FreshnessChip kind={kind} className={className} title={title} />;
 }

@@ -4,24 +4,9 @@ import { fmtPrice, fmtClock } from '../../lib/format';
 import { SymbolDialog } from './SymbolDialog';
 import { FreshnessChip } from '../common/Freshness';
 import {
-  classifyDomainFreshness,
+  kindFromProvenance,
   worstFreshnessKind,
-  type FreshnessKind,
 } from '../../lib/data/freshness';
-
-/** Same fail-closed pattern as StatusBar: missing feed → down; recompute age from asOf. */
-function kindFromProvenance(
-  kind: FreshnessKind | undefined,
-  asOfMs: number | null | undefined,
-  domain: 'spot' | 'chain',
-  opts?: { down?: boolean },
-): FreshnessKind {
-  return classifyDomainFreshness(asOfMs, domain, {
-    demo: false,
-    down: opts?.down,
-    previousKind: kind,
-  });
-}
 
 export function TerminalHeader() {
   const {
@@ -65,13 +50,13 @@ export function TerminalHeader() {
     provenance.spot?.kind,
     provenance.spot?.asOfMs ?? (lastSpotUpdate > 0 ? lastSpotUpdate : null),
     'spot',
-    { down: spotMissing },
+    { demo: false, down: spotMissing },
   );
   const chainKind = kindFromProvenance(
     provenance.chain?.kind,
     provenance.chain?.asOfMs ?? (lastChainUpdate > 0 ? lastChainUpdate : null),
     'chain',
-    { down: chainMissing },
+    { demo: false, down: chainMissing },
   );
   const summaryKind = worstFreshnessKind(spotKind, chainKind);
   const spotAsOf = provenance.spot?.asOfMs ?? (lastSpotUpdate > 0 ? lastSpotUpdate : null);
@@ -82,6 +67,7 @@ export function TerminalHeader() {
   ]
     .filter(Boolean)
     .join(' · ');
+  const dataTitle = `Spot: ${spotKind} · Chain: ${chainKind}${asOfHint ? ` · as-of ${asOfHint}` : ''}`;
 
   return (
     <>
@@ -133,12 +119,11 @@ export function TerminalHeader() {
           >
             MODE LIVE
           </span>
-          <span
-            title={`Spot: ${spotKind} · Chain: ${chainKind}${asOfHint ? ` · as-of ${asOfHint}` : ''}`}
+          <FreshnessChip
+            kind={summaryKind}
+            title={dataTitle}
             aria-label={`Data freshness: ${summaryKind}`}
-          >
-            <FreshnessChip kind={summaryKind} />
-          </span>
+          />
           <button
             onClick={() => useTerminalStore.getState().refresh()}
             className="text-muted-foreground hover:text-foreground transition-colors"

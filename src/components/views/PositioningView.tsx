@@ -11,9 +11,8 @@ import { OptionChain } from './OptionChain';
 import { DiagnosticsStrip } from './DiagnosticsStrip';
 import { Explain } from '../common/Explain';
 import { EmptyState } from '../common/EmptyState';
-import { FreshnessChip } from '../common/Freshness';
+import { FreshnessFromDomain } from '../common/Freshness';
 import { VirtualRows } from '../common/VirtualRows';
-import { classifyDomainFreshness } from '../../lib/data/freshness';
 import { fmtCompact, fmtPrice, fmtPct, fmtSigned } from '../../lib/format';
 import {
   dealerExposure,
@@ -73,13 +72,9 @@ export function PositioningView() {
   const lastChainUpdate = useTerminalStore((s) => s.lastChainUpdate);
   const provenance = useTerminalStore((s) => s.provenance);
 
-  // Fail-closed: never optimistic live from snapshot presence alone
+  // Fail-closed: never optimistic live from snapshot presence alone; FreshnessFromDomain re-ticks age
   const chainMissing = !chainAvailable || chainUsed === 'none';
-  const chainKind = classifyDomainFreshness(
-    provenance.chain?.asOfMs ?? (lastChainUpdate > 0 ? lastChainUpdate : null),
-    'chain',
-    { demo: false, down: chainMissing, previousKind: provenance.chain?.kind },
-  );
+  const chainAsOfMs = provenance.chain?.asOfMs ?? (lastChainUpdate > 0 ? lastChainUpdate : null);
 
   useEffect(() => {
     const meta = SUBS.find((s) => s.id === sub);
@@ -200,7 +195,12 @@ export function PositioningView() {
           </button>
         ))}
         <span className="ml-auto">
-          <FreshnessChip kind={chainKind} />
+          <FreshnessFromDomain
+            asOfMs={chainAsOfMs}
+            domain="chain"
+            down={chainMissing}
+            previousKind={provenance.chain?.kind}
+          />
         </span>
       </div>
 

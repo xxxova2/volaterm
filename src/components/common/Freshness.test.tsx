@@ -44,4 +44,10 @@ describe('FreshnessChip', () => {
     expect(chip?.className).not.toMatch(/cyan-400/);
     expect(chip?.className).not.toMatch(/text-amber/);
   });
+
+  it('accepts title override for hover tooltip', () => {
+    render(<FreshnessChip kind="down" title="Spot: down · Chain: down" />);
+    expect(screen.getByTitle('Spot: down · Chain: down')).toBeInTheDocument();
+    expect(screen.getByText('API DOWN')).toBeInTheDocument();
+  });
 });

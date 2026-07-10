@@ -23,13 +23,20 @@ describe('TerminalHeader', () => {
     });
     render(<TerminalHeader />);
     expect(screen.getByText('SPY')).toBeTruthy();
-    expect(screen.getByText('MODE LIVE')).toBeTruthy();
+    const modeChip = screen.getByText('MODE LIVE');
+    expect(modeChip).toBeTruthy();
     expect(
       screen.getByLabelText('LIVE-only terminal — market feeds only; no demo mode.'),
     ).toBeTruthy();
+    // Product mode is muted — not an up/green freshness pill
+    expect(modeChip.className).toMatch(/text-muted-foreground/);
+    expect(modeChip.className).toMatch(/bg-muted/);
+    expect(modeChip.className).not.toMatch(/text-up|bg-up/);
     // Missing feeds → down (fail-closed); chip label is API DOWN
     expect(screen.getByLabelText('Data freshness: down')).toBeTruthy();
     expect(screen.getByText('API DOWN')).toBeTruthy();
+    // Rich title on the data chip itself (not swallowed by nested default title)
+    expect(screen.getByTitle(/Spot: down · Chain: down/)).toBeTruthy();
     // No permanent solid green LIVE product pill, no DEMO
     expect(screen.queryByText('DEMO')).toBeNull();
   });

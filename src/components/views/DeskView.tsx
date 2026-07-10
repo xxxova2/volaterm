@@ -16,8 +16,7 @@ import { useTerminalStore } from '../../store/terminalStore';
 import { Panel } from '../terminal/Panel';
 import { Explain } from '../common/Explain';
 import { EmptyState } from '../common/EmptyState';
-import { FreshnessChip } from '../common/Freshness';
-import { classifyDomainFreshness } from '../../lib/data/freshness';
+import { FreshnessFromDomain } from '../common/Freshness';
 import { fmtPct, fmtPrice, fmtSigned, fmtCompact } from '../../lib/format';
 import { cn } from '../../lib/utils';
 import {
@@ -115,13 +114,9 @@ export function DeskView() {
   // Blotter-first default: Combo PnL (mark risk) over abstract simulator
   const [tool, setTool] = useState<ToolId>('combopnl');
 
-  // Fail-closed: domain classification — never optimistic live without asOf age
+  // Fail-closed: domain classification — never optimistic live without asOf age; re-ticks every 5s
   const chainMissing = !chainAvailable || chainUsed === 'none';
-  const chainKind = classifyDomainFreshness(
-    provenance.chain?.asOfMs ?? (lastChainUpdate > 0 ? lastChainUpdate : null),
-    'chain',
-    { demo: false, down: chainMissing, previousKind: provenance.chain?.kind },
-  );
+  const chainAsOfMs = provenance.chain?.asOfMs ?? (lastChainUpdate > 0 ? lastChainUpdate : null);
 
   const inv = useMemo(() => (snapshot ? inventoryByExpiry(snapshot) : []), [snapshot]);
   const port = useMemo(
@@ -159,7 +154,12 @@ export function DeskView() {
           >
             {badge.label}
           </span>
-          <FreshnessChip kind={chainKind} />
+          <FreshnessFromDomain
+            asOfMs={chainAsOfMs}
+            domain="chain"
+            down={chainMissing}
+            previousKind={provenance.chain?.kind}
+          />
           <span className="hidden font-mono text-type-2xs text-muted-foreground md:inline">
             Blotter first · tools secondary · BS-Merton
             {chainUsed === 'deribit' ? ' · Deribit mark IV' : ''}
