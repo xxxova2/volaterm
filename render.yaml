@@ -1,5 +1,10 @@
-# One-click full terminal on Render (same stack as localhost: UI + APIs + rates).
+# Free full-stack deploy on Render (Docker: SPA + Node API + MacroVol).
 # Dashboard: https://dashboard.render.com → New → Blueprint → this repo
+# After first deploy: set secret env vars in the service → Environment.
+#
+# Free plan notes:
+#  - Spins down after ~15 min idle (cold start can take 1–2 min)
+#  - Shared free-API board still works when awake (server-side cache + warmer)
 services:
   - type: web
     name: volaterm
@@ -13,8 +18,16 @@ services:
         value: http://127.0.0.1:8765
       - key: ALLOW_STIR_FALLBACK
         value: "0"
-      # Add these in the Render dashboard after create (Secrets):
+      - key: RAPIDAPI_TV_HOST
+        value: tradingview-data1.p.rapidapi.com
+      # Secrets — set in Render dashboard (never commit real values):
+      - key: FRED_API_KEY
+        sync: false
       - key: FMP_API_KEY
         sync: false
-      - key: FRED_API_KEY
+      - key: FINNHUB_API_KEY
+        sync: false
+      - key: ALPHA_VANTAGE_API_KEY
+        sync: false
+      - key: RAPIDAPI_KEY
         sync: false
