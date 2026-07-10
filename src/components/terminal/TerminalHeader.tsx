@@ -8,7 +8,12 @@ import {
   worstFreshnessKind,
 } from '../../lib/data/freshness';
 
-export function TerminalHeader() {
+interface TerminalHeaderProps {
+  /** Open keyboard shortcuts overlay (same as ?). */
+  onOpenShortcuts?: () => void;
+}
+
+export function TerminalHeader({ onOpenShortcuts }: TerminalHeaderProps) {
   const {
     symbol,
     snapshot,
@@ -132,7 +137,7 @@ export function TerminalHeader() {
             ↻
           </button>
           <button
-            onClick={() => {}}
+            onClick={() => onOpenShortcuts?.()}
             className="text-muted-foreground hover:text-foreground transition-colors"
             title="Shortcuts (?)"
           >

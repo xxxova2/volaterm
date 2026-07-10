@@ -227,7 +227,7 @@ export function GreeksSurface3D() {
       <EmptyState
         kind="no-data"
         title="No chain for 3D surface"
-        body="Load a surface (LIVE or demo) to render greek mesh."
+        body="Load a LIVE surface to render greek mesh."
         className="h-full"
       />
     );

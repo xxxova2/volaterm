@@ -1,6 +1,6 @@
 import React from 'react';
-import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { TerminalHeader } from './TerminalHeader';
 import { useTerminalStore } from '../../store/terminalStore';
 import { EMPTY_PROVENANCE } from '../../lib/data/freshness';
@@ -70,6 +70,27 @@ describe('TerminalHeader', () => {
     expect(screen.getByText('MODE LIVE')).toBeTruthy();
     // chain missing → down; worst(live, down) = down
     expect(screen.getByLabelText('Data freshness: down')).toBeTruthy();
+  });
+
+  it('calls onOpenShortcuts when keyboard button is clicked', () => {
+    useTerminalStore.setState({
+      symbol: 'SPY',
+      source: 'live',
+      loading: false,
+      fmpQuote: null,
+      liveRFR: null,
+      snapshot: null,
+      chainAvailable: false,
+      chainUsed: 'none',
+      spotSource: 'none',
+      lastSpotUpdate: 0,
+      lastChainUpdate: 0,
+      provenance: { ...EMPTY_PROVENANCE },
+    });
+    const onOpenShortcuts = vi.fn();
+    render(<TerminalHeader onOpenShortcuts={onOpenShortcuts} />);
+    fireEvent.click(screen.getByTitle('Shortcuts (?)'));
+    expect(onOpenShortcuts).toHaveBeenCalledTimes(1);
   });
 
   it('shows FMP company name when available', () => {

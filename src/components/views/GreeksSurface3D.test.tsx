@@ -212,6 +212,8 @@ describe('GreeksSurface3D component', () => {
     useTerminalStore.setState({ snapshot: null });
     render(<GreeksSurface3D />);
     expect(screen.getByText('No chain for 3D surface')).toBeInTheDocument();
+    expect(screen.getByText('Load a LIVE surface to render greek mesh.')).toBeInTheDocument();
+    expect(screen.queryByText(/LIVE or demo/i)).toBeNull();
   });
 });
 

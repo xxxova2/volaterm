@@ -20,7 +20,7 @@ const SHORTCUTS = [
   { key: 'y', action: 'Copy focused cell' },
   { key: 'c', action: 'Focus option chain' },
   { key: 'Esc', action: 'Close / clear focus' },
-  { key: 'L', action: 'Toggle Live/Demo' },
+  { key: 'L', action: 'Refresh LIVE feeds' },
   { key: '?', action: 'Toggle shortcuts' },
   { key: 'Tab', action: 'Cycle tabs' },
 ];
