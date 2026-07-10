@@ -582,15 +582,17 @@ Implement a single Escape coordinator in `TerminalLayout` (or keyboard hook) tha
 
 ##### Key bindings when board focused
 
+As-built (`TerminalLayout` + `moveBoardFocus`) — **row-only**; no column step:
+
 | Key | Action |
 |-----|--------|
 | `j` / `ArrowDown` | row +1 (`preventDefault`) |
 | `k` / `ArrowUp` | row −1 |
-| `h` / `ArrowLeft` | prev column (**playback scrub disabled** while board focused) |
-| `l` / `ArrowRight` | next column (**note:** letter `L` re-asserts LIVE feeds globally; only ArrowRight for cols if `l` conflicts — prefer arrows for cols, `j`/`k` for rows) |
-| `y` or Ctrl/Cmd+C | copy focused cell text |
+| `y` | copy focused cell text |
 | `Escape` | clear board focus (if top of stack) |
 | `c` | focus option chain when on Positioning |
+
+**Not column nav:** letter **`L` / `l` always re-asserts LIVE feeds globally** (`setSource('live')`) — never next-column. `h` / column-step is unimplemented. While `boardFocus.boardId` is set, `ArrowLeft` / `ArrowRight` early-return (no playback scrub, no column move).
 
 ##### Hook extension
 
