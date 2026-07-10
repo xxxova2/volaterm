@@ -25,7 +25,7 @@ This document **formalizes the as-built architecture** as the system of record, 
 
 | Concern | Implementation |
 |---------|----------------|
-| **Shell** | `TerminalLayout` → Header / TabNav / DeskContextBar / main desk / SidePanel strip / PlaybackBar / StatusBar |
+| **Shell** | `TerminalLayout` → Header / TabNav / DeskContextBar / main desk / SidePanel strip / PlaybackBar (when `historicalFrames.length ≥ 2`) / StatusBar |
 | **Desks (7)** | `TabId` / `TABS` in `tabs.ts`; `ActiveTab` in `lib/options/types.ts` (must stay in sync) |
 | **Section nav** | `deskNav.ts` registries + `DeskSubNav` + `[` `]` via `jumpDeskSection` |
 | **State** | Single Zustand store `terminalStore.ts` (no slices middleware); density via IIFE `localStorage` init |
@@ -157,10 +157,12 @@ Migration: stale `macro` tab → `rates` in `TerminalLayout`.
 ├─────────────────────────────────────────────────────────────┤
 │ SidePanel  Display · Exp · spot/r/q · chain sources         │
 ├─────────────────────────────────────────────────────────────┤
-│ PlaybackBar                                                 │
+│ PlaybackBar  (mounted only when historicalFrames.length ≥ 2)│
 │ StatusBar  LIVE/STALE · session · SSE · provenance · dens.  │
 └─────────────────────────────────────────────────────────────┘
 ```
+
+**PlaybackBar:** implemented in `terminal/PlaybackBar.tsx`; **mounted** in `TerminalLayout` between SidePanel and StatusBar when `historicalFrames.length ≥ 2` (zero chrome cost when absent). Space / ← → still scrub via store regardless.
 
 **Density:** `uiDensity: 'dense' | 'readable'` on store + `localStorage ui.density` (IIF init in store); root classes `density-dense` / `density-readable`. Toggle: **`D`**.
 
@@ -585,7 +587,7 @@ Implement a single Escape coordinator in `TerminalLayout` (or keyboard hook) tha
 | `j` / `ArrowDown` | row +1 (`preventDefault`) |
 | `k` / `ArrowUp` | row −1 |
 | `h` / `ArrowLeft` | prev column (**playback scrub disabled** while board focused) |
-| `l` / `ArrowRight` | next column (**note:** letter `L` remains Live toggle; only ArrowRight for cols if `l` conflicts — prefer arrows for cols, `j`/`k` for rows) |
+| `l` / `ArrowRight` | next column (**note:** letter `L` re-asserts LIVE feeds globally; only ArrowRight for cols if `l` conflicts — prefer arrows for cols, `j`/`k` for rows) |
 | `y` or Ctrl/Cmd+C | copy focused cell text |
 | `Escape` | clear board focus (if top of stack) |
 | `c` | focus option chain when on Positioning |
@@ -1124,8 +1126,8 @@ flowchart LR
 | `[` `]` | Section jump | `jumpDeskSection` |
 | `D` | Density | `toggleUiDensity` |
 | `R` | Refresh | `refresh` |
-| `S` | Symbol prompt | `handleSymbolSwitch` |
-| `L` | Live/Demo | `setSource` |
+| `S` | Symbol dialog | `SymbolDialog` / `handleSymbolSwitch` |
+| `L` | Refresh LIVE feeds | `setSource('live')` (LIVE-only; not demo toggle) |
 | `Space` | Playback | `togglePlay` |
 | `←` `→` | Scrub frames (when board unfocused) | `setFrameIndex` |
 | `B` / `M` / `V` | Crypto / MM / Vol | aliases |
@@ -1138,6 +1140,9 @@ flowchart LR
 | Gap | Status (post PR-01…10) |
 |-----|----------|
 | README 8 tabs + SPY Dist | **Fixed** — 7 desks, no SPY Dist primary |
+| README Live/Demo + synthetic demo feature | **Fixed** — `L` = Refresh LIVE feeds; no demo mode CTA (Phase H / PR-UI-09) |
+| Orphan MacrovolView / MacroView / MarketView | **Deleted** — not in shell switch (KD-UI-17) |
+| PlaybackBar unmounted vs shell diagram | **Fixed** — remount when frames ≥ 2 (PR-UI-02) |
 | Dual crypto tape-only | **Fixed** — tape + optional 2× thin charts |
 | RatesPanel mega-file | **Fixed** — orchestrator ~138 LOC; sections under `macrovol/rates/*` |
 | SERFF/calendar non-virtual | **Fixed** — VirtualRows + focus |
