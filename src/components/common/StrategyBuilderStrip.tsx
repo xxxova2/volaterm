@@ -9,21 +9,16 @@ import {
   evaluateCombo,
   templateLegs,
   type PortfolioLeg,
+  type TemplateName,
 } from '../../lib/options/portfolio';
 import { fmtPrice, fmtSigned } from '../../lib/format';
 import { cn } from '../../lib/utils';
+import { Explain } from './Explain';
 
-type TemplateName =
-  | 'long_straddle'
-  | 'short_straddle'
-  | 'long_call'
-  | 'short_put'
-  | 'risk_reversal'
-  | 'call_spread';
-
-const TEMPLATES: { id: TemplateName; label: string }[] = [
+const TEMPLATES: { id: TemplateName; label: string; term?: string }[] = [
   { id: 'long_straddle', label: 'Long straddle' },
-  { id: 'short_straddle', label: 'Short straddle' },
+  { id: 'short_straddle', label: 'Short straddle', term: 'shortStraddle' },
+  { id: 'collar', label: 'Collar ~25Δ', term: 'collar' },
   { id: 'call_spread', label: 'Call spread' },
   { id: 'risk_reversal', label: 'Risk reversal' },
   { id: 'long_call', label: 'Long call' },
@@ -76,6 +71,11 @@ export function StrategyBuilderStrip({ className }: { className?: string }) {
             <option key={t.id} value={t.id}>{t.label}</option>
           ))}
         </select>
+        {TEMPLATES.find((t) => t.id === tpl)?.term && (
+          <Explain term={TEMPLATES.find((t) => t.id === tpl)!.term!}>
+            <span className="text-type-2xs text-cyan">what is this?</span>
+          </Explain>
+        )}
         <select
           className="rounded border border-border bg-background px-1 py-0.5 text-type-2xs"
           value={expiryIdx}

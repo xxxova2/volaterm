@@ -33,7 +33,7 @@ export const GLOSSARY: Record<string, GlossaryEntry> = {
   },
   vanna: {
     title: 'Vanna',
-    body: 'How delta changes when volatility changes (or vega changes when the stock moves). A second-order "cross" Greek; matters for hedging both spot and vol.',
+    body: 'How delta changes when volatility changes (∂Δ/∂σ). Dealers rehedge when IV moves: e.g. a vol drop on a short-call book can force futures buying. Often conflicts with charm mid-session — path is contingent, not one-way.',
   },
   volga: {
     title: 'Volga / Vomma',
@@ -41,7 +41,7 @@ export const GLOSSARY: Record<string, GlossaryEntry> = {
   },
   charm: {
     title: 'Charm',
-    body: 'How delta changes as time passes (delta decay). Shown per calendar day — same unit family as theta. Terminal 3D surface and Greeks 1.0 both use this convention.',
+    body: 'How delta changes as time passes (Δ decay per calendar day). MM read: reprice the book a few minutes later, then hedge the new delta. Short calls decaying toward 0Δ → dealers unwind long futures (sell); morning is often active/vanna, midday weights charm more.',
   },
   speed: {
     title: 'Speed',
@@ -135,7 +135,7 @@ export const GLOSSARY: Record<string, GlossaryEntry> = {
   // ---- Gamma exposure / dealer stack ----------------------------------------
   gex: {
     title: 'Gamma Exposure (GEX)',
-    body: 'Dealers’ net gamma by strike (γ · S · OI · mult). Positive = dealers long gamma (dampen moves); negative = short gamma (amplify). Assumes customers long listed OI.',
+    body: 'Dealers’ net gamma by strike ($ γ for a 1% move). GEX+ = long γ (buy dips / sell rips → dampen). GEX− = short γ (“toxic” / unstable: sell dips / buy rips → amplify; think lack of liquidity, not a direction). Assumes customers long listed OI.',
   },
   dex: {
     title: 'Delta Exposure (DEX)',
@@ -143,15 +143,23 @@ export const GLOSSARY: Record<string, GlossaryEntry> = {
   },
   vex: {
     title: 'Vanna Exposure (VEX)',
-    body: 'Vanna · S · OI · mult by strike. How dealer delta changes when IV moves — important into vol spikes and skew rehedges.',
+    body: 'Vanna · S · OI · mult by strike. Maps how dealer delta shifts when IV moves — the “vol drop = rally” (or sell) tape many 0DTE days. Pair with charm: they often conflict.',
   },
   charmExposure: {
     title: 'Charm Exposure',
-    body: 'Overnight delta bleed of listed OI: (charm/day) · S · OI · mult. Dealers rehedge as time passes even if spot is flat — pin risk into expiry weekends.',
+    body: 'Overnight $ delta bleed of listed OI: (charm/day) · S · OI · mult. Even if spot is flat, dealers rehedge time decay — classic pin / grind into expiry. Positive listed charm under dealer-short OI often means futures selling pressure.',
   },
   dealerStack: {
     title: 'Dealer Stack',
-    body: 'GEX + DEX + VEX + Charm together. One strike map of how market-maker hedging may respond to spot, vol, and time — not a free trade signal.',
+    body: 'GEX + DEX + VEX + Charm: one strike map of how MM hedges may respond to spot, vol, and time. Use levels as test / range boundaries — not free signals. OI-based inference ≠ verified dealer books.',
+  },
+  hedgeFlow: {
+    title: 'Hedge Flow Brief',
+    body: 'Plain-English read of net GEX, charm, and vanna: dampen vs amplify γ regime, time-decay rehedge bias, and whether charm/vanna conflict. Educational path framing from inventory math — not a buy/sell call.',
+  },
+  riskBudget: {
+    title: 'Risk Budget (stop vs option)',
+    body: 'ATM call ≈ 0.4·S·σ√T. A perp stopped at that premium distance has ~69% chance of touch before T (reflection). For ~50% touch use ~0.67·S·σ√T ≈ 1.7× premium. Same risk budget as the long option; different path distribution.',
   },
   parityEdge: {
     title: 'Put–Call Parity Edge',
@@ -159,15 +167,15 @@ export const GLOSSARY: Record<string, GlossaryEntry> = {
   },
   gammaFlip: {
     title: 'Gamma Flip',
-    body: 'The strike where dealers switch from net long gamma to net short gamma. Above it dealers may amplify moves (choppy/volatile); below it they stabilize price.',
+    body: 'Strike where cumulative net GEX crosses zero. With net long γ above the flip, hedges tend to dampen; below (short γ) they can amplify. Mixed when net GEX sign and spot-vs-flip disagree — treat as transition risk.',
   },
   callWall: {
     title: 'Call Wall',
-    body: 'Strike with the largest positive (call) gamma — a level where dealer hedging tends to cap rallies.',
+    body: 'Strike with the largest call GEX — a common “test level” / range ceiling where dealer hedging can cap rallies if inventory holds.',
   },
   putWall: {
     title: 'Put Wall',
-    body: 'Strike with the largest negative (put) gamma — a level where dealer hedging tends to support / pin price.',
+    body: 'Strike with the most negative put GEX — a common “test level” / range floor where dealer hedging can support or pin price.',
   },
   maxPain: {
     title: 'Max Pain',
@@ -175,7 +183,7 @@ export const GLOSSARY: Record<string, GlossaryEntry> = {
   },
   keyLevels: {
     title: 'Key Levels',
-    body: 'Price levels desks watch: dealer walls, max pain, gamma-flip (stabilizing vs amplifying flow), and expected-move bands — one glance before trading the underlier.',
+    body: 'Inventory-defined levels desks watch as range boundaries: walls, max pain, gamma-flip, expected-move bands. Price often “tests” them; breaks can cascade when hedges flip.',
   },
 
   // ---- Expected move --------------------------------------------------------
@@ -189,7 +197,7 @@ export const GLOSSARY: Record<string, GlossaryEntry> = {
   },
   probTouch: {
     title: 'Prob Touch',
-    body: 'Approx. probability of touching the +expected-move level before expiry under zero-drift BM (reflection: 2·N(−d)). One-sided; not a two-barrier finish probability.',
+    body: 'Approx. probability of touching the +expected-move level before expiry under zero-drift BM (reflection: 2·N(−d)). One-sided; not a two-barrier finish probability. Related: stop at ATM premium (~0.4σ) touches ~69% of the time.',
   },
 
   // ---- Surface / model health ----------------------------------------------
@@ -299,6 +307,14 @@ export const GLOSSARY: Record<string, GlossaryEntry> = {
   },
   vrp: {
     title: 'Variance Risk Premium',
-    body: 'Gap between implied vol and your subjective realized-vol view. Positive VRP means you think options are rich → short vol edge.',
+    body: 'Gap between implied vol and your subjective realized-vol view. Positive VRP means you think options are rich → short vol edge. Short weekly straddles harvest VRP when IV > RV after hedges — more γ risk and often more edge in shorter DTE.',
+  },
+  collar: {
+    title: 'Collar (25Δ-style)',
+    body: 'Long OTM put + short OTM call vs long stock/crypto: cuts delta and drawdown, sells upside. Rolling short-dated collars converts premium P&L into a risk budget you can reinvest — risk reduction that can fund risk expansion.',
+  },
+  shortStraddle: {
+    title: 'Short Straddle (hedged)',
+    body: 'Sell ATM call+put, delta-hedge on a schedule. If IV ≈ RV, γ P&L and θ offset. Edge comes from variance risk premium and strike/time selection (e.g. weekly roll). More γ on short DTE = higher P&L vol and often higher Sharpe when premium is rich.',
   },
 };

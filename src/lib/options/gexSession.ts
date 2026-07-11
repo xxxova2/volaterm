@@ -66,19 +66,19 @@ export function classifyGammaRegime(
       short: 'GEX+',
       tone: 'up',
       note: above === true
-        ? 'Net long dealer γ above flip — hedges buy dips / sell rips (mean-revert bias).'
+        ? 'Net long dealer γ above flip — hedges buy dips / sell rips (mean-revert into walls).'
         : 'Net long dealer γ — spot moves tend to be absorbed if OI holds.',
     };
   }
   if (!long && (above === false || above === null)) {
     return {
       id: 'short_gamma',
-      label: 'Short-γ unstable',
+      label: 'Toxic short-γ',
       short: 'GEX−',
       tone: 'down',
       note: above === false
-        ? 'Net short dealer γ below flip — hedges amplify moves (trend / vol-of-vol).'
-        : 'Net short dealer γ — moves can accelerate into walls.',
+        ? 'Toxic short-γ below flip — MM hedges amplify; expect wider range / traps, not a free direction.'
+        : 'Net short dealer γ — lack of liquidity in the underlier; moves can accelerate into walls.',
     };
   }
   // Mixed: long GEX but below flip, or short GEX but above flip
@@ -87,7 +87,7 @@ export function classifyGammaRegime(
     label: 'Mixed γ zone',
     short: long ? 'GEX+·xf' : 'GEX−·xf',
     tone: 'warn',
-    note: 'Net GEX sign and spot vs flip disagree — treat walls carefully; regime transition risk.',
+    note: 'Net GEX sign and spot vs flip disagree — transition risk; weight walls and charm/vanna interactions.',
   };
 }
 

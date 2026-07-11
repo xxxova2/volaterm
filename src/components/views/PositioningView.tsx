@@ -23,6 +23,7 @@ import {
   type DealerMetric,
   type ExposureWeight,
 } from '../../lib/options/analytics';
+import { interpretHedgeFlow, riskBudgetGeometry } from '../../lib/options/hedgeFlow';
 import { cn } from '../../lib/utils';
 import { CHART, chartAxisTick, chartTooltipStyle, chartGridProps } from '../../lib/chartTheme';
 import {
@@ -94,6 +95,26 @@ export function PositioningView() {
   );
   const maxPain = useMemo(() => (snapshot ? maxPainStrike(snapshot) : null), [snapshot]);
   const move = useMemo(() => (snapshot ? impliedMove(snapshot) : null), [snapshot]);
+  const flowBrief = useMemo(() => {
+    if (!snapshot || !dealer) return null;
+    return interpretHedgeFlow({
+      totalGEX: dealer.totalGEX,
+      totalVEX: dealer.totalVEX,
+      totalCharm: dealer.totalCharm,
+      spot: snapshot.spot,
+      gammaFlip: dealer.gammaFlip,
+    });
+  }, [snapshot, dealer]);
+  const riskBudget = useMemo(() => {
+    if (!snapshot?.expiries[0]) return null;
+    const front = snapshot.expiries[0];
+    return riskBudgetGeometry({
+      spot: snapshot.spot,
+      atmIV: front.atmIV,
+      dte: front.dte,
+      straddle: move?.straddle,
+    });
+  }, [snapshot, move]);
   const parity = useMemo(
     () => (snapshot ? scanParityEdges(snapshot) : []),
     [snapshot],
@@ -473,6 +494,37 @@ export function PositioningView() {
         {sub === 'levels' && (
           <SectionErrorBoundary name="Levels">
           <div className="h-full overflow-y-auto p-2">
+            {flowBrief && (
+              <Panel
+                title={<Explain term="hedgeFlow">Hedge Flow Brief</Explain>}
+                className="mb-2"
+              >
+                <div className="space-y-1.5 p-3 font-mono text-type-2xs leading-snug">
+                  <p
+                    className={cn(
+                      'text-type-xs font-semibold',
+                      flowBrief.tone === 'up'
+                        ? 'text-up'
+                        : flowBrief.tone === 'down'
+                          ? 'text-down'
+                          : flowBrief.tone === 'warn'
+                            ? 'text-warn'
+                            : 'text-foreground',
+                    )}
+                  >
+                    {flowBrief.headline}
+                  </p>
+                  <p className="text-muted-foreground">{flowBrief.bias}</p>
+                  {flowBrief.interaction && (
+                    <p className="text-warn/90">{flowBrief.interaction}</p>
+                  )}
+                  <p className="text-muted-foreground/80">{flowBrief.sessionNote}</p>
+                  <p className="text-muted-foreground/70">
+                    OI-inferred inventory · not verified dealer books · not a trade signal
+                  </p>
+                </div>
+              </Panel>
+            )}
             <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
               <Panel title={<Explain term="keyLevels">Dealer Levels</Explain>}>
                 <div className="grid grid-cols-2 gap-3 p-3 font-mono">
@@ -519,6 +571,11 @@ export function PositioningView() {
                     value={dealer ? fmtCompact(dealer.totalCharm) : '—'}
                   />
                   <LevelStat
+                    label="Σ VEX"
+                    term="vex"
+                    value={dealer ? fmtCompact(dealer.totalVEX) : '—'}
+                  />
+                  <LevelStat
                     label="Exp Move $"
                     term="expectedMove"
                     value={move ? `±${fmtPrice(move.move)}` : '—'}
@@ -527,10 +584,50 @@ export function PositioningView() {
                     label="Exp Move %"
                     value={move ? fmtPct(move.movePct) : '—'}
                   />
+                  <LevelStat
+                    label="P(touch +EM)"
+                    term="probTouch"
+                    value={move ? fmtPct(move.probTouch) : '—'}
+                  />
                 </div>
                 <p className="border-t border-border px-3 py-2 text-type-2xs font-mono text-muted-foreground leading-snug">
-                  Walls = largest call / put GEX strikes. Flip = cumulative net GEX zero-cross.
+                  Walls = test levels / range boundaries from call & put GEX. Flip = cumulative net GEX zero-cross.
                   Max pain = strike minimising aggregate option payoff at front expiry.
+                </p>
+              </Panel>
+
+              <Panel title={<Explain term="riskBudget">Risk Budget · stop vs option</Explain>}>
+                <div className="grid grid-cols-2 gap-3 p-3 font-mono">
+                  <LevelStat
+                    label="ATM ≈ 0.4·S·σ√T"
+                    term="riskBudget"
+                    value={riskBudget ? fmtPrice(riskBudget.atmPremiumApprox) : '—'}
+                  />
+                  <LevelStat
+                    label="Live straddle"
+                    value={riskBudget && riskBudget.straddle > 0 ? fmtPrice(riskBudget.straddle) : '—'}
+                  />
+                  <LevelStat
+                    label="Stop @ premium"
+                    value={riskBudget ? `±${fmtPrice(riskBudget.stopAtPremium)}` : '—'}
+                  />
+                  <LevelStat
+                    label="P(touch) @ prem"
+                    term="probTouch"
+                    value={riskBudget ? fmtPct(riskBudget.probTouchPremium) : '—'}
+                  />
+                  <LevelStat
+                    label="Stop @ 50% touch"
+                    value={riskBudget ? `±${fmtPrice(riskBudget.stopAtHalfTouch)}` : '—'}
+                  />
+                  <LevelStat
+                    label="P(touch) half"
+                    value={riskBudget ? fmtPct(riskBudget.probTouchHalf) : '—'}
+                  />
+                </div>
+                <p className="border-t border-border px-3 py-2 text-type-2xs font-mono text-muted-foreground leading-snug">
+                  Same risk budget as a long ATM option: stop the underlier at ≈ premium (~69% touch under BM).
+                  For ~50% touch use ~1.7× premium (0.67·S·σ√T). Smile/skew ignored — ATM vol only.
                 </p>
               </Panel>
 

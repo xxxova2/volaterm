@@ -176,9 +176,36 @@ export function spotGrid(spot: number, pct = 0.15, n = 61): number[] {
   return out;
 }
 
+export type TemplateName =
+  | 'long_straddle'
+  | 'short_straddle'
+  | 'long_call'
+  | 'short_put'
+  | 'risk_reversal'
+  | 'call_spread'
+  | 'collar';
+
+/** Pick strike closest to target |delta| among quotes with finite delta. */
+function nearestDeltaStrike<T extends { strike: number; delta?: number | null }>(
+  quotes: T[],
+  targetAbsDelta: number,
+): T | undefined {
+  let best: T | undefined;
+  let bestDist = Infinity;
+  for (const q of quotes) {
+    if (q.delta == null || !Number.isFinite(q.delta)) continue;
+    const dist = Math.abs(Math.abs(q.delta) - targetAbsDelta);
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = q;
+    }
+  }
+  return best;
+}
+
 /** Build common multi-leg templates from a snapshot. */
 export function templateLegs(
-  name: 'long_straddle' | 'short_straddle' | 'long_call' | 'short_put' | 'risk_reversal' | 'call_spread',
+  name: TemplateName,
   snap: VolSnapshot,
   expiryIdx = 0,
 ): PortfolioLeg[] {
@@ -190,6 +217,15 @@ export function templateLegs(
   const atmPut = slice.puts.find(p => p.strike === atm.strike) ?? slice.puts[0]!;
   const otmCall = slice.calls.find(c => c.strike > snap.spot * 1.05) ?? atm;
   const otmPut = slice.puts.find(p => p.strike < snap.spot * 0.95) ?? atmPut;
+  // ~25Δ wings for collar / RR when chain greeks exist; else % OTM fallback
+  const d25Call = nearestDeltaStrike(
+    slice.calls.filter((c) => c.strike >= snap.spot),
+    0.25,
+  ) ?? otmCall;
+  const d25Put = nearestDeltaStrike(
+    slice.puts.filter((p) => p.strike <= snap.spot),
+    0.25,
+  ) ?? otmPut;
 
   const id = () => Math.random().toString(36).slice(2, 9);
   switch (name) {
@@ -220,6 +256,12 @@ export function templateLegs(
       return [
         { id: id(), kind: 'call', side: 'long', qty: 1, strike: atm.strike, expiry: slice.expiry, entryPrice: atm.mid || atm.last },
         { id: id(), kind: 'call', side: 'short', qty: 1, strike: otmCall.strike, expiry: slice.expiry, entryPrice: otmCall.mid || otmCall.last },
+      ];
+    case 'collar':
+      // Long ~25Δ put + short ~25Δ call (pair with long underlier offline)
+      return [
+        { id: id(), kind: 'put', side: 'long', qty: 1, strike: d25Put.strike, expiry: slice.expiry, entryPrice: d25Put.mid || d25Put.last },
+        { id: id(), kind: 'call', side: 'short', qty: 1, strike: d25Call.strike, expiry: slice.expiry, entryPrice: d25Call.mid || d25Call.last },
       ];
     default:
       return [];
