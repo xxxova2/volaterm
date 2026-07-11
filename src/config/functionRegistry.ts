@@ -1,0 +1,304 @@
+/**
+ * Function registry — projects TABS + deskNav into openable function codes.
+ * No second navigation graph.
+ */
+import { TABS } from '../components/terminal/tabs';
+import {
+  findSectionMeta,
+  sectionsForTab,
+  tabLabel,
+} from './deskNav';
+import { setDeskJump } from '../lib/market/deskJump';
+import { sanitizeSymbol } from '../lib/validation';
+import { useTerminalStore } from '../store/terminalStore';
+import type { ActiveTab } from '../lib/options/types';
+
+export type FunctionId = string;
+
+export type FunctionDescriptor = {
+  functionId: FunctionId;
+  /** Short codes (uppercase), first is primary */
+  codes: string[];
+  label: string;
+  tab: ActiveTab;
+  sectionId?: string;
+  heavy?: boolean;
+  /** Optional symbol switch (BTC/ETH) */
+  symbol?: string;
+  /** Shell-only actions (not a desk) */
+  shell?: 'help' | 'watchlist';
+  keywords?: string[];
+};
+
+/** Exact code → functionId (v1). */
+const CODE_MAP: Record<string, FunctionId> = {
+  HOME: 'home',
+  VOL: 'vol',
+  SURF: 'vol:vol-sub-surface',
+  SMILE: 'vol:vol-sub-smile',
+  TERM: 'vol:vol-sub-term',
+  FIT: 'vol:vol-sub-quality',
+  POS: 'positioning',
+  CHAIN: 'positioning:pos-sub-chain',
+  DEAL: 'positioning:pos-sub-dealer',
+  GEX: 'positioning:pos-sub-dealer',
+  LVL: 'positioning:pos-sub-levels',
+  EDGE: 'positioning:pos-sub-edge',
+  STRAT: 'positioning:pos-sub-strategy',
+  GRK: 'greeks',
+  HEAT: 'greeks:greeks-sub-heatmap',
+  PROF: 'greeks:greeks-sub-profile',
+  SENS: 'greeks:greeks-sub-sensitivity',
+  EXP: 'greeks:greeks-sub-byexpiry',
+  '3D': 'greeks:greeks-sub-surface3d',
+  MM: 'desk',
+  BTC: 'crypto',
+  ETH: 'crypto',
+  RATES: 'rates',
+  MACRO: 'rates:sec-macro',
+  MMKT: 'rates:sec-mm-strip',
+  SOFR: 'rates:sec-stir',
+  BASIS: 'rates:sec-basis',
+  PLUMB: 'rates:sec-plumbing',
+  UST: 'rates:sec-ust-data',
+  CURVE: 'rates:sec-curves',
+  AUCT: 'rates:sec-auctions',
+  NYFED: 'rates:sec-nyfed',
+  FX: 'rates:sec-fx',
+  JGB: 'rates:sec-japan',
+  HELP: '__shell:help',
+  WL: '__shell:watchlist',
+};
+
+function buildRegistry(): FunctionDescriptor[] {
+  const byId = new Map<FunctionId, FunctionDescriptor>();
+
+  const upsert = (d: FunctionDescriptor) => {
+    const prev = byId.get(d.functionId);
+    if (!prev) {
+      byId.set(d.functionId, d);
+      return;
+    }
+    const codes = [...new Set([...prev.codes, ...d.codes])];
+    byId.set(d.functionId, { ...prev, ...d, codes });
+  };
+
+  for (const t of TABS) {
+    upsert({
+      functionId: t.id,
+      codes: [],
+      label: t.label,
+      tab: t.id as ActiveTab,
+      keywords: [t.label, t.id],
+    });
+  }
+
+  for (const t of TABS) {
+    const tab = t.id as ActiveTab;
+    for (const s of sectionsForTab(tab)) {
+      const functionId = `${tab}:${s.id}`;
+      upsert({
+        functionId,
+        codes: [],
+        label: `${tabLabel(tab)} · ${s.label}`,
+        tab,
+        sectionId: s.id,
+        heavy: s.id === 'greeks-sub-surface3d',
+        keywords: [s.label, s.short ?? '', s.id, tab],
+      });
+    }
+  }
+
+  // Attach codes from CODE_MAP
+  for (const [code, fid] of Object.entries(CODE_MAP)) {
+    if (fid.startsWith('__shell:')) {
+      const shell = fid === '__shell:help' ? 'help' : 'watchlist';
+      upsert({
+        functionId: fid,
+        codes: [code],
+        label: shell === 'help' ? 'Keyboard shortcuts' : 'Watchlist strip',
+        tab: 'home',
+        shell,
+        keywords: [code, shell],
+      });
+      continue;
+    }
+    const existing = byId.get(fid);
+    if (existing) {
+      upsert({ ...existing, codes: [...existing.codes, code] });
+    } else {
+      // Desk-only ids always exist from TABS
+      upsert({
+        functionId: fid,
+        codes: [code],
+        label: fid,
+        tab: (fid.split(':')[0] as ActiveTab) ?? 'home',
+        sectionId: fid.includes(':') ? fid.split(':').slice(1).join(':') : undefined,
+      });
+    }
+  }
+
+  // BTC/ETH symbol overrides on crypto desk codes
+  const btc = byId.get('crypto');
+  if (btc) {
+    // Keep crypto desk under BTC code; ETH uses same tab with symbol
+    byId.set('crypto', {
+      ...btc,
+      codes: [...new Set([...btc.codes, 'BTC', 'ETH'].map((c) => c.toUpperCase()))],
+    });
+  }
+
+  // Special descriptors for BTC/ETH that set symbol
+  upsert({
+    functionId: 'crypto',
+    codes: ['BTC'],
+    label: 'Crypto · BTC',
+    tab: 'crypto',
+    symbol: 'BTC',
+    keywords: ['bitcoin', 'btc', 'crypto'],
+  });
+  upsert({
+    functionId: 'crypto:eth',
+    codes: ['ETH'],
+    label: 'Crypto · ETH',
+    tab: 'crypto',
+    symbol: 'ETH',
+    keywords: ['ethereum', 'eth', 'crypto'],
+  });
+
+  return Array.from(byId.values()).sort((a, b) => a.label.localeCompare(b.label));
+}
+
+let _cache: FunctionDescriptor[] | null = null;
+
+export function listFunctions(): FunctionDescriptor[] {
+  if (!_cache) _cache = buildRegistry();
+  return _cache;
+}
+
+export function resolveFunctionId(input: string): FunctionDescriptor | null {
+  const raw = input.trim();
+  if (!raw) return null;
+
+  const upper = raw.toUpperCase();
+  const mapped = CODE_MAP[upper];
+  if (mapped) {
+    if (upper === 'ETH') {
+      return listFunctions().find((f) => f.functionId === 'crypto:eth') ?? null;
+    }
+    if (upper === 'BTC') {
+      const d = listFunctions().find((f) => f.functionId === 'crypto' && f.symbol === 'BTC');
+      if (d) return d;
+    }
+    return listFunctions().find((f) => f.functionId === mapped) ?? null;
+  }
+
+  // Direct functionId
+  const byId = listFunctions().find(
+    (f) => f.functionId === raw || f.functionId === raw.toLowerCase(),
+  );
+  if (byId) return byId;
+
+  return null;
+}
+
+export function searchFunctions(query: string, limit = 20): FunctionDescriptor[] {
+  const q = query.trim().toLowerCase();
+  if (!q) {
+    // Popular top-level + codes first
+    return listFunctions()
+      .filter((f) => f.codes.length > 0 || !f.sectionId)
+      .slice(0, limit);
+  }
+
+  const scored: { d: FunctionDescriptor; score: number }[] = [];
+  for (const d of listFunctions()) {
+    let score = 0;
+    for (const c of d.codes) {
+      if (c.toLowerCase() === q) score = Math.max(score, 100);
+      else if (c.toLowerCase().startsWith(q)) score = Math.max(score, 80);
+      else if (c.toLowerCase().includes(q)) score = Math.max(score, 50);
+    }
+    if (d.functionId.toLowerCase() === q) score = Math.max(score, 95);
+    if (d.functionId.toLowerCase().includes(q)) score = Math.max(score, 40);
+    if (d.label.toLowerCase().includes(q)) score = Math.max(score, 35);
+    for (const k of d.keywords ?? []) {
+      if (k.toLowerCase().includes(q)) score = Math.max(score, 30);
+    }
+    if (score > 0) scored.push({ d, score });
+  }
+  scored.sort((a, b) => b.score - a.score || a.d.label.localeCompare(b.d.label));
+  return scored.slice(0, limit).map((s) => s.d);
+}
+
+export type OpenFunctionHooks = {
+  onHelp?: () => void;
+  onWatchlistFocus?: () => void;
+};
+
+/**
+ * Open a function by code or functionId. Writes desk.jump + setActiveTab.
+ * Tiles workspace branch is a no-op until workspace module lands.
+ */
+export function openFunction(
+  input: string,
+  hooks: OpenFunctionHooks = {},
+): { ok: boolean; kind: 'function' | 'symbol' | 'shell' | 'none'; detail?: string } {
+  const d = resolveFunctionId(input);
+  if (d?.shell === 'help') {
+    hooks.onHelp?.();
+    return { ok: true, kind: 'shell', detail: 'help' };
+  }
+  if (d?.shell === 'watchlist') {
+    hooks.onWatchlistFocus?.();
+    return { ok: true, kind: 'shell', detail: 'watchlist' };
+  }
+
+  if (d) {
+    // Tiles: no-op until BBG-06/07
+    if (d.sectionId) setDeskJump(d.sectionId);
+    useTerminalStore.getState().setActiveTab(d.tab);
+    if (d.symbol) {
+      useTerminalStore.getState().setSymbol(d.symbol);
+    }
+    if (d.sectionId) {
+      const meta = findSectionMeta(d.sectionId, d.tab);
+      // Context applied after mount by views; set provisional label
+      if (meta) {
+        useTerminalStore.getState().setDeskContext({
+          id: d.sectionId,
+          label: meta.label,
+          apis: meta.apis,
+        });
+      }
+    }
+    return { ok: true, kind: 'function', detail: d.functionId };
+  }
+
+  // Bare ticker
+  const sym = sanitizeSymbol(input);
+  if (sym) {
+    useTerminalStore.getState().setSymbol(sym);
+    return { ok: true, kind: 'symbol', detail: sym };
+  }
+
+  return { ok: false, kind: 'none' };
+}
+
+/** Launchpad favorites — primary codes for Home grid. */
+export const LAUNCHPAD_CODES: string[] = [
+  'HOME',
+  'VOL',
+  'SMILE',
+  'POS',
+  'GEX',
+  'LVL',
+  'GRK',
+  '3D',
+  'MM',
+  'BTC',
+  'RATES',
+  'SOFR',
+  'MACRO',
+  'FX',
+];

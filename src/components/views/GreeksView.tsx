@@ -23,6 +23,7 @@ import { UI_COPY } from '../../config/uiCopy';
 import { DeskChrome } from '../terminal/DeskChrome';
 import { DeskModeBar } from '../terminal/DeskModeBar';
 import type { OptionQuote } from '../../lib/options/types';
+import { consumeDeskJumpOnMount } from '../../lib/market/deskJump';
 
 const Greeks10View = lazy(() =>
   import('./Greeks10View').then((m) => ({ default: m.Greeks10View })),
@@ -155,6 +156,8 @@ export function GreeksView() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [dim, setDim] = useState({ w: 600, h: 400 });
   const setDeskContext = useTerminalStore((s) => s.setDeskContext);
+
+  useEffect(() => consumeDeskJumpOnMount(), []);
 
   useEffect(() => {
     const meta = SUB_VIEWS.find((s) => s.id === subView);

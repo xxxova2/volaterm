@@ -14,6 +14,7 @@ import { UI_COPY } from '../../config/uiCopy';
 import { DeskChrome } from '../terminal/DeskChrome';
 import { DeskModeBar } from '../terminal/DeskModeBar';
 import { GexLevelsStrip } from '../common/GexLevelsStrip';
+import { consumeDeskJumpOnMount } from '../../lib/market/deskJump';
 
 const SurfaceView = lazy(() =>
   import('./surface/SurfaceView').then((m) => ({ default: m.SurfaceView })),
@@ -39,6 +40,8 @@ export function VolStructureView() {
   const snapshot = useTerminalStore((s) => s.snapshot);
   const loading = useTerminalStore((s) => s.loading);
   const chainUsed = useTerminalStore((s) => s.chainUsed);
+
+  useEffect(() => consumeDeskJumpOnMount(), []);
 
   useEffect(() => {
     const meta = SUBS.find((s) => s.id === sub);

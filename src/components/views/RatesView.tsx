@@ -23,6 +23,7 @@ import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
 import { RATES_SECTIONS } from '../../config/deskNav';
 import { macrovolApi, type CorrelationData } from '../../lib/macrovol/api';
 import { GlobalYieldsBoard } from '../macrovol/rates/GlobalYieldsBoard';
+import { consumeDeskJumpOnMount } from '../../lib/market/deskJump';
 import { FxBoard } from '../macrovol/rates/FxBoard';
 import { JapanCarryPanel } from '../macrovol/rates/JapanCarryPanel';
 
@@ -37,20 +38,8 @@ export function RatesView() {
     return () => { cancelled = true; };
   }, []);
 
-  // Home / action chips can deep-link: sessionStorage desk.jump = section id
-  useEffect(() => {
-    try {
-      const jump = sessionStorage.getItem('desk.jump');
-      if (!jump) return;
-      sessionStorage.removeItem('desk.jump');
-      const t = window.setTimeout(() => {
-        document.getElementById(jump)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }, 80);
-      return () => clearTimeout(t);
-    } catch {
-      /* ignore */
-    }
-  }, []);
+  // Home / palette deep-link: sessionStorage desk.jump
+  useEffect(() => consumeDeskJumpOnMount(), []);
 
   return (
     <div className="flex h-full flex-col overflow-hidden">

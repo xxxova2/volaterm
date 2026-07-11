@@ -22,10 +22,13 @@ import { AlertsBar } from '../common/AlertsBar';
 import { StrategyBuilderStrip } from '../common/StrategyBuilderStrip';
 import { DeskLayoutControls } from '../common/DeskLayoutControls';
 import { SharedDeskStrip } from '../common/SharedDeskStrip';
+import { LaunchpadGrid } from '../terminal/LaunchpadGrid';
 import { UI_COPY } from '../../config/uiCopy';
 import { macrovolApi, type RatesSummary, type StirStripData, type MacroSummary } from '../../lib/macrovol/api';
 import type { ActiveTab } from '../../lib/options/types';
 import { classifyGammaRegime } from '../../lib/options/gexSession';
+import { isQuoteStripEnabled } from '../../lib/market/shellPrefs';
+import { openFunction } from '../../config/functionRegistry';
 
 export function DashboardView() {
   const snapshot = useTerminalStore(s => s.snapshot);
@@ -39,6 +42,7 @@ export function DashboardView() {
   const source = useTerminalStore(s => s.source);
   const chainUsed = useTerminalStore(s => s.chainUsed);
   const setActiveTab = useTerminalStore(s => s.setActiveTab);
+  const shellQuoteStrip = isQuoteStripEnabled();
 
   const [rates, setRates] = useState<RatesSummary | null>(null);
   const [stir, setStir] = useState<StirStripData | null>(null);
@@ -166,11 +170,8 @@ export function DashboardView() {
 
   const go = (tab: ActiveTab, sectionId?: string) => {
     if (sectionId) {
-      try {
-        sessionStorage.setItem('desk.jump', sectionId);
-      } catch {
-        /* ignore */
-      }
+      openFunction(`${tab}:${sectionId}`);
+      return;
     }
     setActiveTab(tab);
   };
@@ -303,9 +304,15 @@ export function DashboardView() {
         onRetryMacro={() => setMacroRetry((n) => n + 1)}
       />
 
-      <SectionErrorBoundary name="Watchlist">
-        <WatchlistStrip className="mb-2" />
+      <SectionErrorBoundary name="Launchpad">
+        <LaunchpadGrid className="mb-2" />
       </SectionErrorBoundary>
+
+      {!shellQuoteStrip && (
+        <SectionErrorBoundary name="Watchlist">
+          <WatchlistStrip className="mb-2" />
+        </SectionErrorBoundary>
+      )}
 
       <SectionErrorBoundary name="Shared free-API desk">
         <SharedDeskStrip symbol="SPY" className="mb-2" />

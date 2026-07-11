@@ -15,7 +15,14 @@ import {
 import { fmtCompact, fmtPct, fmtPrice } from '../../lib/format';
 import { cn } from '../../lib/utils';
 
-export function WatchlistStrip({ className }: { className?: string }) {
+export function WatchlistStrip({
+  className,
+  /** When false, display only — no recordWatchMetrics / auto-pin (Home when shell owns strip). */
+  recordMetrics = true,
+}: {
+  className?: string;
+  recordMetrics?: boolean;
+}) {
   const symbol = useTerminalStore((s) => s.symbol);
   const snapshot = useTerminalStore((s) => s.snapshot);
   const setSymbol = useTerminalStore((s) => s.setSymbol);
@@ -24,7 +31,7 @@ export function WatchlistStrip({ className }: { className?: string }) {
 
   // Record metrics for active symbol when chain is live
   useEffect(() => {
-    if (!snapshot || !symbol) return;
+    if (!recordMetrics || !snapshot || !symbol) return;
     const front = snapshot.expiries[0];
     const d = dealerExposure(snapshot);
     recordWatchMetrics({
@@ -40,7 +47,7 @@ export function WatchlistStrip({ className }: { className?: string }) {
       return addToWatchlist(symbol);
     });
     setRows(getWatchMetrics(loadWatchlist()));
-  }, [snapshot, symbol]);
+  }, [snapshot, symbol, recordMetrics]);
 
   useEffect(() => {
     setRows(getWatchMetrics(list));

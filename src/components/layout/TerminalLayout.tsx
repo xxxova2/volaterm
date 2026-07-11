@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, lazy, Suspense } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useTerminalStore } from '../../store/terminalStore';
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
 import {
@@ -14,27 +14,19 @@ import { TabNav } from '../terminal/TabNav';
 import { DeskContextBar } from '../terminal/DeskContextBar';
 import { StatusBar } from '../terminal/StatusBar';
 import { ShortcutsOverlay } from '../terminal/ShortcutsOverlay';
+import { CommandPalette } from '../terminal/CommandPalette';
 import { BootBriefing } from '../terminal/BootBriefing';
 import { PlaybackBar } from '../terminal/PlaybackBar';
 import { SymbolDialog } from '../terminal/SymbolDialog';
 import { SidePanel } from './SidePanel';
-import { DashboardView } from '../views/DashboardView';
-import { VolStructureView } from '../views/VolStructureView';
-import { PositioningView } from '../views/PositioningView';
-import { DeskView } from '../views/DeskView';
-import { BtcView } from '../views/BtcView';
-import { RatesView } from '../views/RatesView';
+import { WatchlistStrip } from '../common/WatchlistStrip';
 import { sanitizeSymbol } from '../../lib/validation';
 import { TABS } from '../terminal/tabs';
 import { findSectionMeta, jumpDeskSection } from '../../config/deskNav';
 import type { ActiveTab } from '../../lib/options/types';
 import { cn } from '../../lib/utils';
-import { DeskLoading } from '../common/Skeleton';
-
-// Heavy 3D / Plotly views are code-split so the initial bundle stays lean.
-const GreeksView = lazy(() =>
-  import('../views/GreeksView').then((m) => ({ default: m.GreeksView })),
-);
+import { isQuoteStripEnabled } from '../../lib/market/shellPrefs';
+import { renderDeskView } from './renderDeskView';
 
 export function TerminalLayout() {
   const {
@@ -42,7 +34,9 @@ export function TerminalLayout() {
     snapshot, chainAvailable, lastChainUpdate, historicalFrames,
   } = useTerminalStore();
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const [symbolDialogOpen, setSymbolDialogOpen] = useState(false);
+  const [quoteStripOn] = useState(() => isQuoteStripEnabled());
   /** First-open rates/macro briefing while heavy chain loads in the background. */
   const [bootOpen, setBootOpen] = useState(true);
   const heavyReady = Boolean(snapshot && chainAvailable && lastChainUpdate > 0) || (!loading && lastChainUpdate > 0);
@@ -99,6 +93,7 @@ export function TerminalLayout() {
   }, [activeTab, setActiveTab]);
 
   useKeyboardShortcuts({
+    'mod+k': () => setPaletteOpen(true),
     r: refresh,
     s: () => setSymbolDialogOpen(true),
     space: () => useTerminalStore.getState().togglePlay(),
@@ -135,7 +130,11 @@ export function TerminalLayout() {
       }
     },
     escape: () => {
-      // Priority: ShortcutsOverlay → ImplyDrawer (own listeners) → board focus
+      // Priority: palette → ShortcutsOverlay → board focus
+      if (paletteOpen) {
+        setPaletteOpen(false);
+        return;
+      }
       if (shortcutsOpen) {
         setShortcutsOpen(false);
         return;
@@ -160,47 +159,6 @@ export function TerminalLayout() {
     perfMark(`desk.${activeTab}`);
   }, [activeTab]);
 
-  const renderView = () => {
-    // Desks that paint without waiting on equity chain load.
-    const independentTab =
-      activeTab === 'rates'
-      || activeTab === 'greeks'
-      || activeTab === 'home'
-      || activeTab === 'crypto'
-      || activeTab === 'desk';
-
-    if (loading && !independentTab) {
-      return <DeskLoading message="Building chain surface…" />;
-    }
-
-    const view = (() => {
-      switch (activeTab) {
-        case 'home':
-          return <DashboardView />;
-        case 'vol':
-          return <VolStructureView />;
-        case 'positioning':
-          return <PositioningView />;
-        case 'greeks':
-          return <GreeksView />;
-        case 'desk':
-          return <DeskView />;
-        case 'crypto':
-          return <BtcView />;
-        case 'rates':
-          return <RatesView />;
-        default:
-          return <DashboardView />;
-      }
-    })();
-
-    return (
-      <div key={activeTab} className="h-full term-crossfade">
-        <Suspense fallback={<DeskLoading message="Loading view…" />}>{view}</Suspense>
-      </div>
-    );
-  };
-
   return (
     <div
       className={cn(
@@ -210,6 +168,11 @@ export function TerminalLayout() {
     >
       <TerminalHeader onOpenShortcuts={() => setShortcutsOpen((o) => !o)} />
       <TabNav />
+      {quoteStripOn && (
+        <div id="shell-quote-strip" className="shrink-0 border-b border-border px-1 py-0.5">
+          <WatchlistStrip className="border-0 bg-transparent" recordMetrics />
+        </div>
+      )}
       <DeskContextBar />
       <main
         className="min-h-0 flex-1 overflow-hidden p-0.5 sm:p-1"
@@ -217,12 +180,24 @@ export function TerminalLayout() {
         aria-label="Terminal content area"
         id={`panel-${activeTab}`}
       >
-        {renderView()}
+        {renderDeskView(activeTab, loading)}
       </main>
       {/* Bottom control strip — display / expiries / sources (was left rail) */}
       <SidePanel />
       {historicalFrames.length >= 2 && <PlaybackBar />}
       <StatusBar />
+      {paletteOpen && (
+        <CommandPalette
+          onClose={() => setPaletteOpen(false)}
+          onHelp={() => {
+            setPaletteOpen(false);
+            setShortcutsOpen(true);
+          }}
+          onWatchlistFocus={() => {
+            document.getElementById('shell-quote-strip')?.scrollIntoView({ block: 'nearest' });
+          }}
+        />
+      )}
       {shortcutsOpen && <ShortcutsOverlay onClose={() => setShortcutsOpen(false)} />}
       {symbolDialogOpen && (
         <SymbolDialog onSelect={handleSymbolSelect} onClose={() => setSymbolDialogOpen(false)} />

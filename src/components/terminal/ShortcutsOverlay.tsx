@@ -22,6 +22,7 @@ const SHORTCUTS = [
   { key: 'Esc', action: 'Close / clear focus' },
   { key: 'L', action: 'Refresh LIVE feeds' },
   { key: '?', action: 'Toggle shortcuts' },
+  { key: 'Ctrl/⌘ K', action: 'Command palette' },
   { key: 'Tab', action: 'Cycle tabs' },
 ];
 

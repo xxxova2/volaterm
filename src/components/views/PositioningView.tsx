@@ -36,6 +36,7 @@ import { DeskChrome } from '../terminal/DeskChrome';
 import { DeskModeBar } from '../terminal/DeskModeBar';
 import { GexLevelsStrip } from '../common/GexLevelsStrip';
 import { StrategyBuilderStrip } from '../common/StrategyBuilderStrip';
+import { consumeDeskJumpOnMount } from '../../lib/market/deskJump';
 
 type Sub = 'chain' | 'dealer' | 'levels' | 'edge' | 'strategy';
 
@@ -82,6 +83,8 @@ export function PositioningView() {
   // Fail-closed: never optimistic live from snapshot presence alone; FreshnessFromDomain re-ticks age
   const chainMissing = !chainAvailable || chainUsed === 'none';
   const chainAsOfMs = provenance.chain?.asOfMs ?? (lastChainUpdate > 0 ? lastChainUpdate : null);
+
+  useEffect(() => consumeDeskJumpOnMount(), []);
 
   useEffect(() => {
     const meta = SUBS.find((s) => s.id === sub);
