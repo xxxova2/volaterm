@@ -77,30 +77,34 @@ export function TerminalHeader({ onOpenShortcuts }: TerminalHeaderProps) {
   return (
     <>
       <header className="flex h-7 shrink-0 items-center justify-between border-b border-border bg-card px-1.5 text-type-xs font-mono sm:px-2">
-        <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-          <span className="shrink-0 text-foreground font-semibold text-xs tracking-[0.14em] sm:text-sm">VOLATERM</span>
+        <div className="flex min-w-0 items-center gap-1.5 sm:gap-2.5">
+          <span className="term-code shrink-0 text-type-xs tracking-[0.16em] sm:text-type-sm">
+            VOLATERM
+          </span>
+          <span className="hidden h-3 w-px bg-border sm:block" aria-hidden />
           <button
             onClick={() => setDialogOpen(true)}
-            className="flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 font-semibold transition-colors hover:bg-secondary"
+            className="flex items-center gap-1 border border-border bg-background px-1.5 py-0.5 font-semibold transition-colors hover:border-primary/50 hover:bg-secondary"
+            title="Change security"
           >
-            <span className="text-foreground tabular-nums">{symbol}</span>
+            <span className="text-primary tabular-nums">{symbol}</span>
             <span className="text-muted-foreground text-type-2xs">▼</span>
           </button>
           {fmpQuote?.name && (
             <span className="hidden max-w-36 truncate text-muted-foreground lg:inline">{fmpQuote.name}</span>
           )}
-          <span className="tabular-nums text-foreground">
+          <span className="tabular-nums text-foreground font-semibold">
             {spot != null ? fmtPrice(spot) : '—'}
           </span>
           {loading && <span className="text-muted-foreground" title="Refreshing">⟳</span>}
           {atmIV != null && (
             <span className="hidden text-muted-foreground sm:inline">
-              IV30: <span className="text-cyan">{fmtPrice(atmIV * 100, 1)}%</span>
+              IV <span className="text-cyan">{fmtPrice(atmIV * 100, 1)}%</span>
             </span>
           )}
           {liveRFR != null && (
             <span className="hidden text-muted-foreground md:inline">
-              RFR: <span className="text-rate">{fmtPrice(liveRFR * 100, 2)}%</span>
+              RFR <span className="text-rate">{fmtPrice(liveRFR * 100, 2)}%</span>
             </span>
           )}
           {termSlope != null && (
@@ -114,11 +118,20 @@ export function TerminalHeader({ onOpenShortcuts }: TerminalHeaderProps) {
           </span>
         </div>
 
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+          <button
+            type="button"
+            onClick={() => onOpenShortcuts?.()}
+            className="hidden items-center gap-1 border border-dashed border-border/80 px-1.5 py-0.5 text-type-2xs text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary sm:inline-flex"
+            title="Command palette (Ctrl/Cmd+K) — also opens shortcuts via ?"
+          >
+            <span className="text-primary">CMD</span>
+            <span>Ctrl+K</span>
+          </button>
           <span className="hidden tabular-nums text-muted-foreground sm:inline">{fmtClock(clock)}</span>
           {/* KD-UI-13: product mode (muted) — not a green freshness pill */}
           <span
-            className="rounded border border-border bg-muted/50 px-1.5 py-0.5 text-type-2xs font-medium uppercase tracking-wider text-muted-foreground"
+            className="border border-border bg-muted/40 px-1 py-0.5 text-type-2xs font-medium uppercase tracking-wider text-muted-foreground"
             title="LIVE-only terminal — market feeds only; no demo mode."
             aria-label="LIVE-only terminal — market feeds only; no demo mode."
           >
@@ -131,17 +144,17 @@ export function TerminalHeader({ onOpenShortcuts }: TerminalHeaderProps) {
           />
           <button
             onClick={() => useTerminalStore.getState().refresh()}
-            className="text-muted-foreground hover:text-foreground transition-colors"
+            className="text-muted-foreground hover:text-primary transition-colors"
             title="Refresh (R)"
           >
             ↻
           </button>
           <button
             onClick={() => onOpenShortcuts?.()}
-            className="text-muted-foreground hover:text-foreground transition-colors"
+            className="text-muted-foreground hover:text-primary transition-colors"
             title="Shortcuts (?)"
           >
-            ⌨
+            ?
           </button>
         </div>
       </header>

@@ -88,11 +88,11 @@ export function CommandPalette({ onClose, onHelp, onWatchlistFocus }: CommandPal
       onMouseDown={onClose}
     >
       <div
-        className="w-full max-w-lg overflow-hidden rounded-lg border border-border bg-card shadow-2xl"
+        className="w-full max-w-lg overflow-hidden border border-border bg-card shadow-2xl glow-amber"
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center gap-2 border-b border-border px-3 py-2.5">
-          <span className="font-mono text-type-2xs text-muted-foreground">GO</span>
+        <div className="flex items-center gap-2 border-b border-border bg-card px-3 py-2">
+          <span className="term-code text-type-xs">GO</span>
           <input
             ref={inputRef}
             value={query}
@@ -104,11 +104,11 @@ export function CommandPalette({ onClose, onHelp, onWatchlistFocus }: CommandPal
             aria-autocomplete="list"
             aria-controls="cmd-palette-list"
           />
-          <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-type-xs text-muted-foreground">
+          <kbd className="border border-border bg-muted px-1.5 py-0.5 font-mono text-type-xs text-muted-foreground">
             esc
           </kbd>
         </div>
-        <ul id="cmd-palette-list" className="max-h-72 overflow-y-auto py-1" role="listbox">
+        <ul id="cmd-palette-list" className="max-h-72 overflow-y-auto py-0.5" role="listbox">
           {results.length === 0 && (
             <li className="px-3 py-2 font-mono text-type-xs text-muted-foreground">
               No match — enter a ticker to switch symbol
@@ -128,7 +128,7 @@ export function CommandPalette({ onClose, onHelp, onWatchlistFocus }: CommandPal
                 onClick={() => run(d)}
               >
                 <span className="truncate">
-                  <span className="font-semibold text-foreground">
+                  <span className="term-code">
                     {d.codes[0] ?? d.functionId}
                   </span>
                   <span className="ml-2 text-muted-foreground">{d.label}</span>
@@ -140,8 +140,8 @@ export function CommandPalette({ onClose, onHelp, onWatchlistFocus }: CommandPal
             </li>
           ))}
         </ul>
-        <div className="border-t border-border px-3 py-1.5 font-mono text-type-2xs text-muted-foreground">
-          Ctrl/Cmd+K · codes from registry · not trade advice
+        <div className="border-t border-border px-3 py-1 font-mono text-type-2xs text-muted-foreground">
+          Ctrl/Cmd+K · registry · not trade advice
         </div>
       </div>
     </div>

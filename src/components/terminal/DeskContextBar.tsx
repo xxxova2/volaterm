@@ -32,17 +32,17 @@ export function DeskContextBar() {
 
   return (
     <div
-      className="flex h-4 shrink-0 items-center gap-1 border-b border-border/70 bg-card/30 px-1.5 font-mono text-type-2xs text-muted-foreground"
+      className="term-fn-bar h-4 shrink-0 border-b border-border text-muted-foreground"
       role="status"
       aria-label="Desk context"
     >
-      <span className="font-semibold text-foreground/90">{desk}</span>
+      <span className="font-semibold text-primary">{desk}</span>
       {sectionLabel && (
         <>
           <span className="text-muted-foreground/50" aria-hidden>
             ›
           </span>
-          <span className="text-foreground/90">{sectionLabel}</span>
+          <span className="font-semibold text-foreground/90">{sectionLabel}</span>
         </>
       )}
       {apis && apis.length > 0 && (

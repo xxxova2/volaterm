@@ -169,8 +169,11 @@ export function TerminalLayout() {
       <TerminalHeader onOpenShortcuts={() => setShortcutsOpen((o) => !o)} />
       <TabNav />
       {quoteStripOn && (
-        <div id="shell-quote-strip" className="shrink-0 border-b border-border px-1 py-0.5">
-          <WatchlistStrip className="border-0 bg-transparent" recordMetrics />
+        <div
+          id="shell-quote-strip"
+          className="shrink-0 border-b border-border bg-card/80 px-1 py-0.5"
+        >
+          <WatchlistStrip className="border-0 bg-transparent" recordMetrics compact />
         </div>
       )}
       <DeskContextBar />

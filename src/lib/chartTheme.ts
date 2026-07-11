@@ -141,30 +141,30 @@ export function chartTooltipProps() {
 /**
  * Static hex fallbacks for canvas, Three.js, and Plotly.
  * Hex literals are intentional and confined to this module (KD-UI-04).
- * Approximate cool graphite + steel theme from `src/index.css`.
+ * Approximate terminal navy + amber chrome from `src/index.css`.
  */
 export const CHART_RESOLVED = {
-  brand: '#6b8fb8',
-  up: '#3fb950',
+  brand: '#e8a838',
+  up: '#3ecf6a',
   down: '#e07050',
   info: '#6b9fd4',
-  warn: '#c9a227',
+  warn: '#d4a017',
   rate: '#a78bfa',
   /** Primary grid (gridHelper major / surface lattice) */
-  grid: '#2a2d36',
+  grid: '#1e2a3d',
   /** Secondary / minor grid lines */
-  gridMinor: '#1c1f26',
+  gridMinor: '#141c2b',
   /** Axis / muted labels */
-  label: '#8b919c',
-  mutedForeground: '#8b919c',
-  foreground: '#e8eaed',
-  background: '#12141a',
-  card: '#0e1014',
-  muted: '#1a1d24',
-  border: '#2a2e38',
+  label: '#8b95a8',
+  mutedForeground: '#8b95a8',
+  foreground: '#ebe6d8',
+  background: '#0a0e18',
+  card: '#0e1420',
+  muted: '#151c2c',
+  border: '#243044',
   emptyCell: 'rgba(0,0,0,0.04)',
-  /** Near-black cool graphite for dense zero cells (not pure #000) */
-  ink: '#0a0b0e',
+  /** Near-black navy for dense zero cells */
+  ink: '#070a10',
 } as const;
 
 /**

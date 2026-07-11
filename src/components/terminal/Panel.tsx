@@ -32,10 +32,12 @@ export function Panel({
   return (
     <div className={cn('term-panel flex flex-col overflow-hidden', className)}>
       {showHead && (
-        <div className="flex items-center justify-between gap-2 border-b border-border px-2.5 py-1 sm:px-3 sm:py-1.5">
+        <div className="term-fn-bar justify-between gap-2 normal-case tracking-normal">
           <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
             {title && (
-              <h3 className="text-panel-title font-semibold text-foreground">{title}</h3>
+              <h3 className="text-panel-title font-semibold uppercase tracking-wide text-primary">
+                {title}
+              </h3>
             )}
             {apis && apis.length > 0 && <ApiSources apis={apis} />}
             {asOf && (

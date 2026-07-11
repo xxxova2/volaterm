@@ -74,8 +74,9 @@ export function StatusBar() {
   const streamKind: FreshnessKind = streamConnected ? 'live' : 'unknown';
 
   return (
-    <footer className="flex h-5 items-center justify-between border-t border-border bg-card px-2 text-type-2xs font-mono text-muted-foreground">
-      <div className="flex items-center gap-2 sm:gap-3">
+    <footer className="flex h-5 items-center justify-between border-t border-border bg-card px-1.5 text-type-2xs font-mono text-muted-foreground sm:px-2">
+      <div className="flex min-w-0 items-center gap-1.5 overflow-hidden sm:gap-2.5">
+        <span className="term-code shrink-0 text-type-2xs">VT</span>
         <span className="flex items-center gap-1" title="Spot freshness">
           <span className="text-type-2xs uppercase opacity-70">spot</span>
           <FreshnessChip kind={spotKind} />
