@@ -176,6 +176,29 @@
   text-transform: uppercase;
 }
 
+/*
+ * Deep-red function menu bar — matches Bloomberg in-function chrome
+ * (student-guide / WEI / TOP panels: saturated red strip under command line).
+ */
+@utility term-fn-bar-red {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  min-height: 1.5rem;
+  padding: 0 0.25rem;
+  border-bottom: 1px solid color-mix(in oklab, #5a0008 70%, black);
+  /* Deep BBG red — not semantic down-tick red; chrome only */
+  background: linear-gradient(
+    180deg,
+    oklch(0.42 0.17 25) 0%,
+    oklch(0.32 0.15 25) 100%
+  );
+  font-family: var(--font-mono);
+  font-size: var(--type-2xs);
+  letter-spacing: 0.03em;
+  color: oklch(0.97 0.01 95);
+}
+
 @utility term-code {
   color: var(--brand);
   font-family: var(--font-mono);

@@ -10,8 +10,9 @@ import { useSpotStream } from '../../hooks/useSpotStream';
 import { toast } from 'sonner';
 import { perfMark } from '../../config/perfBudget';
 import { TerminalHeader } from '../terminal/TerminalHeader';
-import { TabNav } from '../terminal/TabNav';
-import { DeskContextBar } from '../terminal/DeskContextBar';
+import { PanelToolbar } from '../terminal/PanelToolbar';
+import { CommandLine } from '../terminal/CommandLine';
+import { FunctionMenuBar } from '../terminal/FunctionMenuBar';
 import { StatusBar } from '../terminal/StatusBar';
 import { ShortcutsOverlay } from '../terminal/ShortcutsOverlay';
 import { CommandPalette } from '../terminal/CommandPalette';
@@ -25,9 +26,18 @@ import { TABS } from '../terminal/tabs';
 import { findSectionMeta, jumpDeskSection } from '../../config/deskNav';
 import type { ActiveTab } from '../../lib/options/types';
 import { cn } from '../../lib/utils';
-import { isQuoteStripEnabled } from '../../lib/market/shellPrefs';
+import {
+  isDisplayStripEnabled,
+  isQuoteStripEnabled,
+  setDisplayStripEnabled,
+} from '../../lib/market/shellPrefs';
 import { renderDeskView } from './renderDeskView';
 
+/**
+ * Classic Bloomberg-style panel shell (v1):
+ * Header → [quote] → Toolbar → Command line → Red function menu → Function area → Status
+ * TabNav demoted (hotkeys 1–7 kept). SidePanel collapsed by default (Display toggle).
+ */
 export function TerminalLayout() {
   const {
     activeTab, setActiveTab, setSymbol, refresh, loading, source, symbol, uiDensity, setDeskContext,
@@ -37,6 +47,8 @@ export function TerminalLayout() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [symbolDialogOpen, setSymbolDialogOpen] = useState(false);
   const [quoteStripOn] = useState(() => isQuoteStripEnabled());
+  const [displayStripOn, setDisplayStripOn] = useState(() => isDisplayStripEnabled());
+  const [cmdFocusToken, setCmdFocusToken] = useState(0);
   /** First-open rates/macro briefing while heavy chain loads in the background. */
   const [bootOpen, setBootOpen] = useState(true);
   const heavyReady = Boolean(snapshot && chainAvailable && lastChainUpdate > 0) || (!loading && lastChainUpdate > 0);
@@ -52,6 +64,14 @@ export function TerminalLayout() {
       apis: meta?.apis,
     });
   }, [setDeskContext]);
+
+  const toggleDisplayStrip = useCallback(() => {
+    setDisplayStripOn((prev) => {
+      const next = !prev;
+      setDisplayStripEnabled(next);
+      return next;
+    });
+  }, []);
 
   // SSE spot ticks in live mode (Node/Docker server). No-ops if stream unavailable.
   useSpotStream(symbol, source === 'live');
@@ -93,12 +113,15 @@ export function TerminalLayout() {
   }, [activeTab, setActiveTab]);
 
   useKeyboardShortcuts({
-    'mod+k': () => setPaletteOpen(true),
+    'mod+k': () => {
+      // Focus always-on command line (BBG primary); palette remains as overlay fallback
+      setCmdFocusToken((n) => n + 1);
+      setPaletteOpen(false);
+    },
     r: refresh,
     s: () => setSymbolDialogOpen(true),
     space: () => useTerminalStore.getState().togglePlay(),
     l: () => {
-      // LIVE-only: L re-asserts live market feeds (demo disabled).
       void useTerminalStore.getState().setSource('live');
       toast.message('LIVE', { description: 'Refreshing market feeds' });
     },
@@ -111,15 +134,12 @@ export function TerminalLayout() {
     tab5: () => setActiveTab('desk'),
     tab6: () => setActiveTab('crypto'),
     tab7: () => setActiveTab('rates'),
-    // Letter aliases for desks
     b: () => setActiveTab('crypto'),
     m: () => setActiveTab('desk'),
     v: () => setActiveTab('vol'),
-    // Phase C — section jump within desk
     '[': () => jumpSection(-1),
     ']': () => jumpSection(1),
     d: () => useTerminalStore.getState().toggleUiDensity(),
-    // Board focus: j/k / arrows when a board is focused
     j: () => { if (!moveBoardFocus(1)) { /* no board */ } },
     k: () => { if (!moveBoardFocus(-1)) { /* no board */ } },
     y: () => { copyFocusedCell(); },
@@ -130,7 +150,6 @@ export function TerminalLayout() {
       }
     },
     escape: () => {
-      // Priority: palette → ShortcutsOverlay → board focus
       if (paletteOpen) {
         setPaletteOpen(false);
         return;
@@ -167,7 +186,6 @@ export function TerminalLayout() {
       )}
     >
       <TerminalHeader onOpenShortcuts={() => setShortcutsOpen((o) => !o)} />
-      <TabNav />
       {quoteStripOn && (
         <div
           id="shell-quote-strip"
@@ -176,17 +194,35 @@ export function TerminalLayout() {
           <WatchlistStrip className="border-0 bg-transparent" recordMetrics compact />
         </div>
       )}
-      <DeskContextBar />
+
+      {/* Classic BBG panel chrome */}
+      <PanelToolbar
+        onHelp={() => setShortcutsOpen(true)}
+        onWatchlistFocus={() => {
+          document.getElementById('shell-quote-strip')?.scrollIntoView({ block: 'nearest' });
+        }}
+        onOpenDisplay={toggleDisplayStrip}
+      />
+      <CommandLine
+        focusToken={cmdFocusToken}
+        onHelp={() => setShortcutsOpen(true)}
+        onWatchlistFocus={() => {
+          document.getElementById('shell-quote-strip')?.scrollIntoView({ block: 'nearest' });
+        }}
+      />
+      <FunctionMenuBar />
+
       <main
         className="min-h-0 flex-1 overflow-hidden p-0.5 sm:p-1"
         role="main"
-        aria-label="Terminal content area"
+        aria-label="Function area"
         id={`panel-${activeTab}`}
       >
         {renderDeskView(activeTab, loading)}
       </main>
-      {/* Bottom control strip — display / expiries / sources (was left rail) */}
-      <SidePanel />
+
+      {/* Display / expiries — collapsed by default; open via toolbar Display */}
+      {displayStripOn && <SidePanel />}
       {historicalFrames.length >= 2 && <PlaybackBar />}
       <StatusBar />
       {paletteOpen && (

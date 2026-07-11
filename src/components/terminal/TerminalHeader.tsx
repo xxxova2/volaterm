@@ -123,9 +123,9 @@ export function TerminalHeader({ onOpenShortcuts }: TerminalHeaderProps) {
             type="button"
             onClick={() => onOpenShortcuts?.()}
             className="hidden items-center gap-1 border border-dashed border-border/80 px-1.5 py-0.5 text-type-2xs text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary sm:inline-flex"
-            title="Command palette (Ctrl/Cmd+K) — also opens shortcuts via ?"
+            title="Focus command line (Ctrl/Cmd+K) — shortcuts via ?"
           >
-            <span className="text-primary">CMD</span>
+            <span className="text-primary">GO</span>
             <span>Ctrl+K</span>
           </button>
           <span className="hidden tabular-nums text-muted-foreground sm:inline">{fmtClock(clock)}</span>

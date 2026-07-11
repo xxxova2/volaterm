@@ -1,12 +1,19 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { isQuoteStripEnabled, setQuoteStripEnabled } from './shellPrefs';
+import {
+  isDisplayStripEnabled,
+  isQuoteStripEnabled,
+  setDisplayStripEnabled,
+  setQuoteStripEnabled,
+} from './shellPrefs';
 
 const KEY = 'ui.shell.quoteStrip';
+const DISPLAY_KEY = 'ui.shell.displayStrip';
 
 describe('shellPrefs', () => {
   afterEach(() => {
     try {
       localStorage.removeItem(KEY);
+      localStorage.removeItem(DISPLAY_KEY);
     } catch {
       /* ignore */
     }
@@ -27,5 +34,15 @@ describe('shellPrefs', () => {
     setQuoteStripEnabled(true);
     expect(localStorage.getItem(KEY)).toBe('1');
     expect(isQuoteStripEnabled()).toBe(true);
+  });
+
+  it('defaults display strip collapsed (max function area)', () => {
+    localStorage.removeItem(DISPLAY_KEY);
+    expect(isDisplayStripEnabled()).toBe(false);
+  });
+
+  it('honors display strip on', () => {
+    setDisplayStripEnabled(true);
+    expect(isDisplayStripEnabled()).toBe(true);
   });
 });
