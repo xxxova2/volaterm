@@ -16,6 +16,7 @@ import { Explain } from '../common/Explain';
 import { DeskLoading } from '../common/Skeleton';
 import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
 import { GexLevelsStrip } from '../common/GexLevelsStrip';
+import { SecurityDesCard } from '../common/SecurityDesCard';
 import { WatchlistStrip } from '../common/WatchlistStrip';
 import { NewsStrip } from '../common/NewsStrip';
 import { AlertsBar } from '../common/AlertsBar';
@@ -49,6 +50,7 @@ export function DashboardView() {
   const [macro, setMacro] = useState<MacroSummary | null>(null);
   const [macroHealth, setMacroHealth] = useState<'ok' | 'down' | 'pending'>('pending');
   const [macroRetry, setMacroRetry] = useState(0);
+  const [feedsOpen, setFeedsOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -117,6 +119,22 @@ export function DashboardView() {
     }
     return { ivHigh: 0, ivLow: 0 };
   }, [historicalFrames, snapshot]);
+
+  // Front (min-DTE) ATM IV per live frame — HIVG-lite strip series.
+  const histIvSeries = useMemo(() => {
+    const pts: { atmIv: number; timestamp: number }[] = [];
+    for (const f of historicalFrames) {
+      if (!f.snapshot.expiries.length) continue;
+      let minDteExpiry = f.snapshot.expiries[0]!;
+      for (const e of f.snapshot.expiries) {
+        if (e.dte < minDteExpiry.dte) minDteExpiry = e;
+      }
+      if (Number.isFinite(minDteExpiry.atmIV)) {
+        pts.push({ atmIv: minDteExpiry.atmIV, timestamp: f.timestamp });
+      }
+    }
+    return pts;
+  }, [historicalFrames]);
 
   const arbClean = (arbResult?.calendar.violations ?? 0) === 0 && (arbResult?.butterfly.violations ?? 0) === 0;
   const calendarCount = arbResult?.calendar.violations ?? 0;
@@ -293,58 +311,27 @@ export function DashboardView() {
         )}
       </div>
 
-      <GexLevelsStrip className="mb-2 rounded border border-border" showSpark />
-
-      <FeedHealth
-        source={source}
-        chainUsed={chainUsed}
-        macroHealth={macroHealth}
-        hasQuote={!!fmpQuote}
-        hasHistory={(fmpHistory?.length ?? 0) > 0}
-        onRetryMacro={() => setMacroRetry((n) => n + 1)}
+      {/* Security DES card — always-visible summary; sits under the regime band */}
+      <SecurityDesCard
+        symbol={symbol}
+        spot={snapshot.spot}
+        dayChgPct={dayChgPct}
+        atmIv={volRegime}
+        ivRankPct={ivData.percentile}
+        gexShort={gexSign}
+        gexRegimeLabel={gammaRegime.label}
+        gexRegimeTone={gammaRegime.tone}
+        nearestDte={frontExpiry?.dte ?? null}
+        chainLabel={chainUsed}
+        quotePath={quotePath}
+        histIvSeries={histIvSeries}
+        histIvCurrent={volRegime}
+        onOpenTerm={() => go('vol', 'vol-sub-term')}
       />
 
-      <SectionErrorBoundary name="Launchpad">
-        <LaunchpadGrid className="mb-2" />
-      </SectionErrorBoundary>
-
-      {!shellQuoteStrip && (
-        <SectionErrorBoundary name="Watchlist">
-          <WatchlistStrip className="mb-2" />
-        </SectionErrorBoundary>
-      )}
-
-      <SectionErrorBoundary name="Shared free-API desk">
-        <SharedDeskStrip symbol="SPY" className="mb-2" />
-      </SectionErrorBoundary>
-
-      <SectionErrorBoundary name="News events">
-        <NewsStrip symbol={symbol} className="mb-2" />
-      </SectionErrorBoundary>
-
-      <SectionErrorBoundary name="Alerts">
-        <AlertsBar className="mb-2" />
-      </SectionErrorBoundary>
-
-      <SectionErrorBoundary name="Strategy">
-        <StrategyBuilderStrip className="mb-2" />
-      </SectionErrorBoundary>
-
-      <DeskLayoutControls className="mb-2 px-1" />
-
-      <SectionErrorBoundary name="Macro strip">
-        <RatesStrip
-          rates={rates}
-          stir={stir}
-          macro={macro}
-          onOpen={() => go('rates')}
-          offlineLabel={UI_COPY.empty.macro}
-        />
-      </SectionErrorBoundary>
-
-      {/* Action chips */}
+      {/* Top action chips — max 3 visible on the landing screen */}
       <div className="mb-2 flex flex-wrap gap-1 px-1">
-        {actionChips.map((c) => (
+        {actionChips.slice(0, 3).map((c) => (
           <button
             key={c.label}
             type="button"
@@ -359,31 +346,90 @@ export function DashboardView() {
             {c.label}
           </button>
         ))}
-        <span className="ml-auto hidden font-mono text-type-2xs text-muted-foreground sm:inline">
-          Deep-link chips · not trade advice
-        </span>
       </div>
 
-      {/* Quick nav */}
-      <div className="mb-2 flex flex-wrap gap-1 px-1">
-        {([
-          ['vol', 'Vol Structure'],
-          ['positioning', 'Positioning'],
-          ['greeks', 'Greeks 1.0'],
-          ['desk', 'MM Desk'],
-          ['crypto', 'Crypto'],
-          ['rates', 'Macros & Rates'],
-        ] as const).map(([id, label]) => (
-          <button
-            key={id}
-            type="button"
-            onClick={() => go(id)}
-            className="rounded border border-border bg-card px-2 py-0.5 font-mono text-type-xs text-muted-foreground hover:border-border hover:text-foreground"
-          >
-            {label} →
-          </button>
-        ))}
-      </div>
+      <SectionErrorBoundary name="Launchpad">
+        <LaunchpadGrid className="mb-2" />
+      </SectionErrorBoundary>
+
+      <GexLevelsStrip className="mb-2 rounded border border-border" showSpark />
+
+      <FeedHealth
+        source={source}
+        chainUsed={chainUsed}
+        macroHealth={macroHealth}
+        hasQuote={!!fmpQuote}
+        hasHistory={(fmpHistory?.length ?? 0) > 0}
+        onRetryMacro={() => setMacroRetry((n) => n + 1)}
+      />
+
+      {/* Analytics — collapsed by default; Launchpad + regime band dominate the landing screen */}
+      <div className="mb-2 px-1">
+        <button
+          type="button"
+          onClick={() => setFeedsOpen((o) => !o)}
+          className="flex w-full items-center gap-1 font-mono text-type-2xs uppercase tracking-wider text-muted-foreground hover:text-foreground"
+        >
+          <span>{feedsOpen ? '▾' : '▸'}</span>
+          <span>Analytics</span>
+        </button>
+        {feedsOpen && (
+          <div className="mt-2">
+            {!shellQuoteStrip && (
+              <SectionErrorBoundary name="Watchlist">
+                <WatchlistStrip className="mb-2" />
+              </SectionErrorBoundary>
+            )}
+
+            <SectionErrorBoundary name="Shared free-API desk">
+              <SharedDeskStrip symbol="SPY" className="mb-2" />
+            </SectionErrorBoundary>
+
+            <SectionErrorBoundary name="News events">
+              <NewsStrip symbol={symbol} className="mb-2" />
+            </SectionErrorBoundary>
+
+            <SectionErrorBoundary name="Alerts">
+              <AlertsBar className="mb-2" />
+            </SectionErrorBoundary>
+
+            <SectionErrorBoundary name="Strategy">
+              <StrategyBuilderStrip className="mb-2" />
+            </SectionErrorBoundary>
+
+            <DeskLayoutControls className="mb-2 px-1" />
+
+            <SectionErrorBoundary name="Macro strip">
+              <RatesStrip
+                rates={rates}
+                stir={stir}
+                macro={macro}
+                onOpen={() => go('rates')}
+                offlineLabel={UI_COPY.empty.macro}
+              />
+            </SectionErrorBoundary>
+
+            {/* Action chips */}
+            <div className="mb-2 flex flex-wrap gap-1 px-1">
+              {actionChips.map((c) => (
+                <button
+                  key={c.label}
+                  type="button"
+                  onClick={() => go(c.tab, c.section)}
+                  className={`rounded border px-2 py-0.5 font-mono text-type-xs transition-colors hover:border-border ${
+                    c.tone === 'up' ? 'border-up/40 text-up'
+                      : c.tone === 'down' ? 'border-down/40 text-down'
+                        : c.tone === 'warn' ? 'border-warn/40 text-warn'
+                          : 'border-border text-muted-foreground'
+                  }`}
+                >
+                  {c.label}
+                </button>
+              ))}
+              <span className="ml-auto hidden font-mono text-type-2xs text-muted-foreground sm:inline">
+                Deep-link chips · not trade advice
+              </span>
+            </div>
 
       {/*
         Home hierarchy (D-PR-6): Vol regime spotlight (~2-col), then 1 / 2 / 3 grid.
@@ -570,8 +616,8 @@ export function DashboardView() {
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={expiryOI} margin={{ top: 4, right: 8, bottom: 18, left: 0 }}>
                     <CartesianGrid stroke="var(--grid)" strokeDasharray="2 4" />
-                    <XAxis dataKey="label" tick={{ fontSize: 9, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }} stroke="var(--border)" />
-                    <YAxis tick={{ fontSize: 9, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }} stroke="var(--border)" width={40} tickFormatter={v => `${(v / 1000).toFixed(0)}K`} />
+                    <XAxis dataKey="label" tick={{ fontSize: 11, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }} stroke="var(--border)" />
+                    <YAxis tick={{ fontSize: 11, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }} stroke="var(--border)" width={40} tickFormatter={v => `${(v / 1000).toFixed(0)}K`} />
                     <Tooltip
                       content={({ active, payload, label }) => {
                         if (!active || !payload?.length) return null;
@@ -602,6 +648,9 @@ export function DashboardView() {
             </ul>
           </Panel>
         </SectionErrorBoundary>
+      </div>
+          </div>
+        )}
       </div>
     </div>
   );

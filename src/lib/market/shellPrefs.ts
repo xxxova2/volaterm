@@ -1,17 +1,15 @@
-/** Shell UI prefs (localStorage). Quote strip defaults ON (terminal tape). */
+/** Shell UI prefs (localStorage). Quote strip defaults OFF (max function area). */
 
 const QUOTE_STRIP_KEY = 'ui.shell.quoteStrip';
 /** Display/expiry bottom strip — collapsed by default (BBG classic = max function area). */
 const DISPLAY_STRIP_KEY = 'ui.shell.displayStrip';
 
-/** On unless explicitly set to '0'. Missing key → on. */
+/** Off unless explicitly set to '1'. Missing key → off (WL lives under Home · Feeds). */
 export function isQuoteStripEnabled(): boolean {
   try {
-    const v = localStorage.getItem(QUOTE_STRIP_KEY);
-    if (v === null) return true;
-    return v === '1';
+    return localStorage.getItem(QUOTE_STRIP_KEY) === '1';
   } catch {
-    return true;
+    return false;
   }
 }
 

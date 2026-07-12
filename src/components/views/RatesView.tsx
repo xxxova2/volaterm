@@ -12,12 +12,12 @@
  *  7. Asset corr — cross-asset risk context, not a primary trading object.
  */
 import { useEffect, useState } from 'react';
+import { useTerminalStore } from '../../store/terminalStore';
 import { MacroPanel } from '../macrovol/MacroPanel';
 import { RatesPanel } from '../macrovol/RatesPanel';
 import { ApiSources } from '../macrovol/ApiSources';
 import { DataBadge } from '../macrovol/DataBadge';
 import { DeskChrome } from '../terminal/DeskChrome';
-import { DeskSubNav } from '../terminal/DeskSubNav';
 import { CollapsibleSection } from '../terminal/CollapsibleSection';
 import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
 import { RATES_SECTIONS } from '../../config/deskNav';
@@ -29,6 +29,8 @@ import { JapanCarryPanel } from '../macrovol/rates/JapanCarryPanel';
 
 export function RatesView() {
   const [corr, setCorr] = useState<CorrelationData | null>(null);
+  const deskSectionId = useTerminalStore((s) => s.deskSectionId);
+  const sectionLabel = RATES_SECTIONS.find((s) => s.id === deskSectionId)?.label;
 
   useEffect(() => {
     let cancelled = false;
@@ -48,10 +50,15 @@ export function RatesView() {
         sticky={false}
         dense
         className="h-6 border-border bg-card/40 px-1.5 py-0"
-        trailing={<ApiSources apis={['FRED', 'MoF', 'NYFed', 'yfinance', 'MacroVol']} />}
-      >
-        <DeskSubNav items={RATES_SECTIONS} label="" bare />
-      </DeskChrome>
+        trailing={
+          <span className="flex items-center gap-2">
+            {sectionLabel && (
+              <span className="font-mono text-type-2xs text-primary">› {sectionLabel}</span>
+            )}
+            <ApiSources apis={['FRED', 'MoF', 'NYFed', 'yfinance', 'MacroVol']} />
+          </span>
+        }
+      />
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         {/* 1. US macro prints — regime first */}

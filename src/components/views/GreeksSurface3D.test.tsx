@@ -211,8 +211,8 @@ describe('GreeksSurface3D component', () => {
   it('shows a placeholder when no snapshot is available', () => {
     useTerminalStore.setState({ snapshot: null });
     render(<GreeksSurface3D />);
-    expect(screen.getByText('No chain for 3D surface')).toBeInTheDocument();
-    expect(screen.getByText('Load a LIVE surface to render greek mesh.')).toBeInTheDocument();
+    expect(screen.getByText('No surface for 3D mesh')).toBeInTheDocument();
+    expect(screen.getByText(/MacroVol greeks or a LIVE chain/i)).toBeInTheDocument();
     expect(screen.queryByText(/LIVE or demo/i)).toBeNull();
   });
 });

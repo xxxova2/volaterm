@@ -25,9 +25,9 @@ This document **formalizes the as-built architecture** as the system of record, 
 
 | Concern | Implementation |
 |---------|----------------|
-| **Shell** | `TerminalLayout` → Header / TabNav / DeskContextBar / main desk / SidePanel strip / PlaybackBar (when `historicalFrames.length ≥ 2`) / StatusBar |
+| **Shell** | `TerminalLayout` → Header / FunctionMenuBar (7-desk + section codes) / DeskContextBar (hidden on home) / main desk / SidePanel strip / PlaybackBar (vol desk only when useful) / StatusBar |
 | **Desks (7)** | `TabId` / `TABS` in `tabs.ts`; `ActiveTab` in `lib/options/types.ts` (must stay in sync) |
-| **Section nav** | `deskNav.ts` registries + `DeskSubNav` + `[` `]` via `jumpDeskSection` |
+| **Section nav** | `deskNav.ts` + `deskSections.ts` + FunctionMenuBar + `[` `]` via `jumpDeskSection` |
 | **State** | Single Zustand store `terminalStore.ts` (no slices middleware); density via IIFE `localStorage` init |
 | **Vol data** | `DataProvider` seam: `LiveProvider` / `DemoProvider` in `lib/data/provider.ts` |
 | **Macro/rates** | MacroVol FastAPI `:8765` → Node `/api/macrovol/*` → `lib/macrovol/api.ts` |
@@ -89,18 +89,18 @@ Phases A–G delivered UX primitives. Without an architecture doc, the next feat
 flowchart TB
   subgraph shell [Terminal Shell]
     H[TerminalHeader]
-    T[TabNav 1-7]
+    T[FunctionMenuBar 1-7]
     C[DeskContextBar]
     M[main desk view]
     S[SidePanel bottom strip]
-    P[PlaybackBar]
+    P[PlaybackBar vol-only]
     SB[StatusBar]
   end
 
   T --> Home[Home DashboardView]
   T --> Vol[Vol Structure]
   T --> Pos[Positioning]
-  T --> Grk[Greeks lazy]
+  T --> Grk[Greeks 1.0 + mesh theme]
   T --> MM[MM Desk]
   T --> Cry[Crypto BtcView]
   T --> Rates[Macros and Rates]
@@ -147,17 +147,16 @@ Migration: stale `macro` tab → `rates` in `TerminalLayout`.
 ┌─────────────────────────────────────────────────────────────┐
 │ TerminalHeader  (symbol, source, chain mode, session)       │
 ├─────────────────────────────────────────────────────────────┤
-│ TabNav  (7 desks)                                           │
+│ FunctionMenuBar  (7 desks + section codes · [ ] jump)       │
 ├─────────────────────────────────────────────────────────────┤
-│ DeskContextBar  (desk › section · APIs · density)           │
+│ DeskContextBar  (desk › section · APIs · density; not home) │
 ├─────────────────────────────────────────────────────────────┤
 │ main  overflow hidden → desk owns scroll                    │
-│   [DeskSubNav sticky when multi-section]                    │
 │   sections with id + data-desk-section                      │
 ├─────────────────────────────────────────────────────────────┤
 │ SidePanel  Display · Exp · spot/r/q · chain sources         │
 ├─────────────────────────────────────────────────────────────┤
-│ PlaybackBar  (mounted only when historicalFrames.length ≥ 2)│
+│ PlaybackBar  (vol desk only)                                │
 │ StatusBar  LIVE/STALE · session · SSE · provenance · dens.  │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -198,7 +197,7 @@ sequenceDiagram
 
 - **Registries:** `RATES_SECTIONS`, `VOL_SECTIONS`, `GREEKS_SECTIONS`, `POSITIONING_SECTIONS` in `src/config/deskNav.ts`.
 - **Sub-mode desks** (vol/greeks/positioning): section ids are **button** ids; jump calls `.click()`.
-- **Scroll desks** (rates): section ids are **DOM section** ids; IntersectionObserver in `DeskSubNav`.
+- **Scroll desks** (rates): section ids are **DOM section** ids; section jump via FunctionMenuBar / `[` `]`.
 - **Home deep-link:** `sessionStorage.desk.jump = sectionId`, `setActiveTab('rates')`; `RatesView` consumes on mount.
 - **`setActiveTab`:** already clears `deskSectionId` / label / apis — board focus must clear too (see §3 P2).
 

@@ -1,15 +1,12 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import { render, screen, within, fireEvent } from '@testing-library/react';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import React from 'react';
 import { useTerminalStore } from '../../store/terminalStore';
 import {
   buildSnapshot,
   buildSurfaceGrid,
 } from '../../lib/options/synthetic';
-import { sviReadout } from '../../lib/options/surfaceTools';
-import { diagnoseArbitrage } from '../../lib/options/noarb';
 import { GreeksView } from './GreeksView';
-import { GREEK_META } from './greeksTypes';
 
 class ResizeObserverStub {
   observe() {}
@@ -19,9 +16,42 @@ class ResizeObserverStub {
 (globalThis as unknown as { ResizeObserver: typeof ResizeObserverStub }).ResizeObserver =
   ResizeObserverStub as unknown as typeof ResizeObserver;
 
-const GREEK_LABELS: readonly string[] = GREEK_META.map(g => g.label);
+vi.mock('../../lib/macrovol/api', () => ({
+  macrovolApi: {
+    greeks: vi.fn().mockResolvedValue({
+      ticker: 'SPY',
+      spot: 100,
+      total_points: 10,
+      atm: {
+        delta: 0.5,
+        gamma: 0.02,
+        vega: 0.1,
+        theta: -0.05,
+        vanna: 0.01,
+        charm: -0.001,
+      },
+      gex: [],
+      points: [],
+      surfaces: {
+        delta: {
+          T_vals: [0.08, 0.16],
+          K_vals: [95, 100, 105],
+          grid: [
+            [0.4, 0.5, 0.6],
+            [0.35, 0.48, 0.55],
+          ],
+        },
+      },
+      r: 0.04,
+      q: 0.013,
+      r_source: 'SOFR',
+      source: 'yfinance',
+    }),
+    greeksHistory: vi.fn().mockResolvedValue({ ticker: 'SPY', data: [] }),
+  },
+}));
 
-describe('GreeksView heatmap selector', () => {
+describe('GreeksView (Greeks 1.0 host)', () => {
   beforeEach(() => {
     const snapshot = buildSnapshot('SPY', Date.now(), 100, 0, 0);
     const surface = buildSurfaceGrid(snapshot);
@@ -29,17 +59,16 @@ describe('GreeksView heatmap selector', () => {
       symbol: 'SPY',
       snapshot,
       surface,
-      sviReadout: sviReadout(surface, snapshot.spot),
-      arbResult: diagnoseArbitrage(surface, snapshot.spot),
       historicalFrames: [],
       frameIndex: 0,
       isPlaying: false,
       speed: 1,
-      source: 'demo',
-      liveAvailable: false,
+      source: 'live',
+      liveAvailable: true,
       loading: false,
       lastUpdate: Date.now(),
       activeTab: 'greeks',
+      deskSectionId: 'greeks-desk',
       displayMode: 'strike',
       selectedExpiry: null,
       playbackInterval: null,
@@ -47,116 +76,31 @@ describe('GreeksView heatmap selector', () => {
     });
   });
 
-  it('renders all 13 Greek buttons in the heatmap selector', () => {
-    const { container } = render(<GreeksView />);
-
-    expect(screen.getByText('Heatmap')).toBeInTheDocument();
-
-    for (const label of GREEK_LABELS) {
-      const buttons = Array.from(container.querySelectorAll('button')).filter(
-        b => b.textContent?.trim() === label
-      );
-      expect(buttons.length).toBeGreaterThanOrEqual(1);
-    }
-
-    const allButtons = Array.from(container.querySelectorAll('button'));
-    const greekButtons = allButtons.filter(b =>
-      GREEK_LABELS.includes(b.textContent?.trim() ?? ''),
-    );
-    expect(greekButtons.length).toBeGreaterThanOrEqual(13);
-
-    expect(screen.getByText('All')).toBeInTheDocument();
-    expect(screen.getByText('ATM \u00b110%')).toBeInTheDocument();
-    expect(screen.getByText('ATM \u00b120%')).toBeInTheDocument();
-  });
-
-  it('clicking the canvas heatmap opens the inspector with strike and DTE', () => {
+  it('mounts Greeks 1.0 shell (not dual edition)', async () => {
     render(<GreeksView />);
-
-    const canvas = document.querySelector('canvas');
-    expect(canvas).toBeInTheDocument();
-
-    // Simulate click on the canvas to trigger cell selection.
-    fireEvent.mouseDown(canvas!, { clientX: 100, clientY: 100 });
-
-    const inspector = document.querySelector('[data-heatmap-inspector]');
-    expect(inspector).toBeTruthy();
-
-    // Click outside to dismiss.
-    fireEvent.mouseDown(document.body);
-    expect(document.querySelector('[data-heatmap-inspector]')).toBeNull();
+    await waitFor(() => {
+      expect(screen.getByText(/GREEKS 1\.0/i)).toBeInTheDocument();
+    });
+    expect(screen.queryByText('Terminal Greeks')).toBeNull();
+    expect(screen.queryByText('Open Greeks 1.0 (MacroVol API)')).toBeNull();
   });
 
-  it('renders the canvas and sub-view tabs', () => {
-    const { container } = render(<GreeksView />);
-
-    const canvas = document.querySelector('canvas');
-    expect(canvas).toBeInTheDocument();
-
-    // All 5 sub-view buttons must be present.
-    for (const label of ['Heatmap', 'Profile', 'Sensitivity', 'By Expiry', '3D Surface']) {
-      expect(screen.getByText(label)).toBeInTheDocument();
-    }
-  });
-
-  it('clicking ATM ±10% tightens the moneyness band on the heatmap', () => {
+  it('exposes Plotly / 3D mesh theme toggle', async () => {
     render(<GreeksView />);
-
-    const canvas = document.querySelector('canvas');
-    expect(canvas).toBeInTheDocument();
-
-    // Default is ATM ±20%; switch to ±10%.
-    fireEvent.click(screen.getByText('ATM \u00b110%'));
-    expect(screen.getByText('ATM \u00b110%').className).toContain('bg-secondary');
-
-    // Expand to All.
-    fireEvent.click(screen.getByText('All'));
-    expect(screen.getByText('All').className).toContain('bg-secondary');
+    await waitFor(() => {
+      expect(screen.getByTestId('greeks-theme-plotly')).toBeInTheDocument();
+    });
+    expect(screen.getByTestId('greeks-theme-mesh')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('greeks-theme-mesh'));
+    expect(localStorage.getItem('ui.greeks.surfaceTheme')).toBe('mesh');
   });
 
-  it('renders OTM/Calls/Puts side selectors', () => {
+  it('ATM greek cards drive selection labels', async () => {
     render(<GreeksView />);
-    expect(screen.getByText('OTM')).toBeInTheDocument();
-    expect(screen.getByText('Calls')).toBeInTheDocument();
-    expect(screen.getByText('Puts')).toBeInTheDocument();
-    fireEvent.click(screen.getByText('Calls'));
-    expect(screen.getByText('Calls').className).toMatch(/bg-up|text-up/);
-  });
-
-  it('renders the diagnostics strip above the heatmap with seeded values', () => {
-    render(<GreeksView />);
-
-    const strip = screen.getByTestId('greeks-diagnostics');
-    expect(strip).toBeInTheDocument();
-
-    const rmse = within(strip).getByTestId('diagnostics-svi-rmse');
-    expect(rmse.textContent).toMatch(/%/);
-
-    const calendar = within(strip).getByTestId('diagnostics-calendar');
-    const butterfly = within(strip).getByTestId('diagnostics-butterfly');
-    expect(calendar.textContent).toMatch(/^\d+$/);
-    expect(butterfly.textContent).toMatch(/^\d+$/);
-
-    const badge = within(strip).getByTestId('diagnostics-arb-badge');
-    expect(badge.getAttribute('data-arb-clean')).toBe('true');
-  });
-
-  it('still renders the diagnostics strip with placeholder dashes when diagnostics are null', () => {
-    useTerminalStore.setState({ sviReadout: null, arbResult: null });
-
-    render(<GreeksView />);
-
-    const strip = screen.getByTestId('greeks-diagnostics');
-    expect(strip).toBeInTheDocument();
-
-    const rmse = within(strip).getByTestId('diagnostics-svi-rmse');
-    const calendar = within(strip).getByTestId('diagnostics-calendar');
-    const butterfly = within(strip).getByTestId('diagnostics-butterfly');
-    expect(rmse.textContent).toBe('\u2014');
-    expect(calendar.textContent).toBe('\u2014');
-    expect(butterfly.textContent).toBe('\u2014');
-
-    const badge = within(strip).getByTestId('diagnostics-arb-badge');
-    expect(badge.getAttribute('data-arb-clean')).toBe('true');
+    await waitFor(() => {
+      expect(screen.getByText('ATM GREEKS SNAPSHOT')).toBeInTheDocument();
+    });
+    expect(screen.getByText('DELTA')).toBeInTheDocument();
+    expect(screen.getByText('GAMMA')).toBeInTheDocument();
   });
 });

@@ -6,7 +6,7 @@ import { useTerminalStore } from '../../store/terminalStore';
 import { EMPTY_PROVENANCE } from '../../lib/data/freshness';
 
 describe('TerminalHeader', () => {
-  it('renders MODE LIVE product chip (muted) and data freshness (demo disabled)', () => {
+  it('renders compact LIVE mode label and data freshness (demo disabled)', () => {
     useTerminalStore.setState({
       symbol: 'SPY',
       source: 'live',
@@ -23,21 +23,20 @@ describe('TerminalHeader', () => {
     });
     render(<TerminalHeader />);
     expect(screen.getByText('SPY')).toBeTruthy();
-    const modeChip = screen.getByText('MODE LIVE');
+    const modeChip = screen.getByText('LIVE');
     expect(modeChip).toBeTruthy();
     expect(
       screen.getByLabelText('LIVE-only terminal — market feeds only; no demo mode.'),
     ).toBeTruthy();
     // Product mode is muted — not an up/green freshness pill
     expect(modeChip.className).toMatch(/text-muted-foreground/);
-    expect(modeChip.className).toMatch(/bg-muted/);
     expect(modeChip.className).not.toMatch(/text-up|bg-up/);
     // Missing feeds → down (fail-closed); chip label is API DOWN
     expect(screen.getByLabelText('Data freshness: down')).toBeTruthy();
     expect(screen.getByText('API DOWN')).toBeTruthy();
     // Rich title on the data chip itself (not swallowed by nested default title)
     expect(screen.getByTitle(/Spot: down · Chain: down/)).toBeTruthy();
-    // No permanent solid green LIVE product pill, no DEMO
+    // No DEMO
     expect(screen.queryByText('DEMO')).toBeNull();
   });
 
@@ -67,7 +66,7 @@ describe('TerminalHeader', () => {
       },
     });
     render(<TerminalHeader />);
-    expect(screen.getByText('MODE LIVE')).toBeTruthy();
+    expect(screen.getByText('LIVE')).toBeTruthy();
     // chain missing → down; worst(live, down) = down
     expect(screen.getByLabelText('Data freshness: down')).toBeTruthy();
   });
@@ -93,7 +92,7 @@ describe('TerminalHeader', () => {
     expect(onOpenShortcuts).toHaveBeenCalledTimes(1);
   });
 
-  it('shows FMP company name when available', () => {
+  it('shows FMP spot in compact header (company name omitted for space)', () => {
     useTerminalStore.setState({
       symbol: 'SPY',
       source: 'live',
@@ -115,10 +114,11 @@ describe('TerminalHeader', () => {
       provenance: { ...EMPTY_PROVENANCE },
     });
     render(<TerminalHeader />);
-    expect(screen.getByText('State Street SPDR S&P 500 ETF')).toBeTruthy();
+    expect(screen.getByText('500.00')).toBeTruthy();
+    expect(screen.queryByText('State Street SPDR S&P 500 ETF')).toBeNull();
   });
 
-  it('shows live RFR when available', () => {
+  it('shows compact live RFR when available (lg+)', () => {
     useTerminalStore.setState({
       symbol: 'SPY',
       source: 'live',
@@ -133,7 +133,8 @@ describe('TerminalHeader', () => {
       lastChainUpdate: 0,
       provenance: { ...EMPTY_PROVENANCE },
     });
-    render(<TerminalHeader />);
-    expect(screen.getByText('3.98%')).toBeTruthy();
+    const { container } = render(<TerminalHeader />);
+    // Compact form: "r 3.98" (hidden below lg via class, still in DOM)
+    expect(container.textContent).toMatch(/r\s*3\.98/);
   });
 });

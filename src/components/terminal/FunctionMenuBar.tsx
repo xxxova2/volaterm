@@ -38,18 +38,12 @@ export function FunctionMenuBar() {
       label: meta?.label ?? id,
       apis: meta?.apis,
     });
-    // Trigger section jump click path used by desks
+    // Drive the single store value desks subscribe to (no DOM .click()).
+    useTerminalStore.getState().setDeskSection(id);
     requestAnimationFrame(() => {
-      const el = document.getElementById(id);
-      if (el) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        return;
+      if (!id.startsWith('vol-sub-') && !id.startsWith('greeks-sub-') && !id.startsWith('pos-sub-')) {
+        document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }
-      // Sub-mode buttons often use data or role — try click on matching control
-      const btn = document.querySelector(
-        `[data-section-id="${id}"], button[aria-controls="${id}"]`,
-      ) as HTMLElement | null;
-      btn?.click();
     });
   };
 

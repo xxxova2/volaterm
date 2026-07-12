@@ -27,8 +27,32 @@ import {
 import { DataBadge } from '../macrovol/DataBadge';
 import { IVSurfaceMacro } from '../macrovol/IVSurfaceMacro';
 import { useTerminalStore } from '../../store/terminalStore';
+import type { GreekKey } from './greeksTypes';
+import { cn } from '../../lib/utils';
 
 const Plot = lazy(() => import('react-plotly.js'));
+const GreeksSurface3D = lazy(() =>
+  import('./GreeksSurface3D').then((m) => ({ default: m.GreeksSurface3D })),
+);
+
+type SurfaceTheme = 'plotly' | 'mesh';
+const THEME_KEY = 'ui.greeks.surfaceTheme';
+
+function loadSurfaceTheme(): SurfaceTheme {
+  try {
+    return localStorage.getItem(THEME_KEY) === 'mesh' ? 'mesh' : 'plotly';
+  } catch {
+    return 'plotly';
+  }
+}
+
+function saveSurfaceTheme(t: SurfaceTheme) {
+  try {
+    localStorage.setItem(THEME_KEY, t);
+  } catch { /* ignore */ }
+}
+
+const MESH_GREEKS = new Set<string>(['delta', 'gamma', 'vega', 'theta', 'vanna', 'charm']);
 
 const TICKERS = [
   { label: 'SPY', value: 'SPY' },
@@ -53,6 +77,9 @@ type Section = 'greeks' | 'iv';
 export function Greeks10View() {
   const storeSymbol = useTerminalStore((s) => s.symbol);
   const snapshot = useTerminalStore((s) => s.snapshot);
+  const deskSectionId = useTerminalStore((s) => s.deskSectionId);
+  const setDeskSection = useTerminalStore((s) => s.setDeskSection);
+  const setDeskContext = useTerminalStore((s) => s.setDeskContext);
   const [ticker, setTicker] = useState(() => {
     const s = storeSymbol || 'SPY';
     return /^[A-Z.^]{1,12}$/i.test(s) ? s : 'SPY';
@@ -62,10 +89,37 @@ export function Greeks10View() {
   const [ohlc, setOhlc] = useState<HistoryData['data']>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [section, setSection] = useState<Section>('greeks');
+  const [section, setSection] = useState<Section>(() =>
+    deskSectionId === 'greeks-iv' ? 'iv' : 'greeks',
+  );
+  const [surfaceTheme, setSurfaceTheme] = useState<SurfaceTheme>(loadSurfaceTheme);
   const [custom, setCustom] = useState('');
-  /** When true, follow terminal symbol changes so both editions compare the same underlier. */
+  /** When true, follow terminal symbol so mesh + MacroVol share the underlier. */
   const [followTerminal, setFollowTerminal] = useState(true);
+  /** Expand ticker chips only when user wants a desk-local override. */
+  const [symbolPickerOpen, setSymbolPickerOpen] = useState(false);
+
+  // Red bar / [ ] drive Desk vs IV
+  useEffect(() => {
+    if (deskSectionId === 'greeks-iv') setSection('iv');
+    else if (deskSectionId === 'greeks-desk' || !deskSectionId) setSection('greeks');
+  }, [deskSectionId]);
+
+  useEffect(() => {
+    const id = section === 'iv' ? 'greeks-iv' : 'greeks-desk';
+    setDeskSection(id);
+    setDeskContext({
+      id,
+      label: section === 'iv' ? 'IV Surface' : 'Greeks Desk',
+      apis: ['MacroVol', 'yfinance'],
+    });
+    return () => setDeskContext({ id: null, label: null, apis: [] });
+  }, [section, setDeskSection, setDeskContext]);
+
+  // Re-read theme when landing from 3D deep-link
+  useEffect(() => {
+    setSurfaceTheme(loadSurfaceTheme());
+  }, []);
 
   async function load(t: string) {
     setLoading(true);
@@ -122,34 +176,42 @@ export function Greeks10View() {
     .sort((a, b) => a.strike - b.strike);
 
   const colorscale = PLOTLY_CS_GREEK[selectedGreek] ?? PLOTLY_CS_GREEK.delta;
+  const meshGreek: GreekKey = MESH_GREEKS.has(selectedGreek)
+    ? (selectedGreek as GreekKey)
+    : 'gamma';
+
+  const setTheme = (t: SurfaceTheme) => {
+    setSurfaceTheme(t);
+    saveSurfaceTheme(t);
+  };
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      {/* Header / section toggle */}
-      <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2">
+      {/* Header — G1.0 style; Desk/IV also on red bar */}
+      <div className="flex flex-wrap items-center gap-1.5 border-b border-border px-2 py-1">
         <span className="text-type-xs font-mono font-bold tracking-wider text-foreground">GREEKS 1.0</span>
-        <span className="text-type-xs font-mono text-muted-foreground">
-          MacroVol · BS · yfinance · OTM surfaces
+        <span className="hidden text-type-2xs font-mono text-muted-foreground sm:inline">
+          MacroVol · BS · OTM
           {data?.r != null && (
-            <> · r={(data.r * 100).toFixed(2)}% ({data.r_source || 'SOFR'}) · q={((data.q ?? 0.013) * 100).toFixed(2)}%</>
+            <> · r={(data.r * 100).toFixed(2)}% · q={((data.q ?? 0.013) * 100).toFixed(2)}%</>
           )}
-          {' · '}θ &amp; charm /day · ν /1vol
-          {' · '}synced with terminal 3D units
+          {' · '}θ/charm /day · ν /1vol
         </span>
-        <div className="ml-auto flex gap-1">
+        <div className="ml-auto flex flex-wrap items-center gap-1">
           {([
-            { id: 'greeks' as const, label: 'Greeks Desk' },
-            { id: 'iv' as const, label: 'IV Surface' },
+            { id: 'greeks' as const, label: 'Desk' },
+            { id: 'iv' as const, label: 'IV' },
           ]).map((s) => (
             <button
               key={s.id}
               type="button"
               onClick={() => setSection(s.id)}
-              className={`rounded px-2.5 py-1 font-mono text-type-xs ${
+              className={cn(
+                'rounded px-2 py-0.5 font-mono text-type-xs',
                 section === s.id
                   ? 'bg-primary text-primary-foreground'
-                  : 'border border-border text-muted-foreground hover:border-primary'
-              }`}
+                  : 'border border-border text-muted-foreground hover:border-primary',
+              )}
             >
               {s.label}
             </button>
@@ -162,64 +224,84 @@ export function Greeks10View() {
           <IVSurfaceMacro defaultTicker={ticker} />
         ) : (
           <div className="flex flex-col gap-5 p-3 font-mono">
-            {/* Ticker picker */}
-            <div className="flex flex-wrap gap-1.5">
-              {TICKERS.map((t) => (
-                <button
-                  key={t.value}
-                  type="button"
-                  onClick={() => {
-                    setFollowTerminal(false);
-                    setTicker(t.value);
-                  }}
-                  className={`rounded-lg border px-3 py-1.5 text-xs ${
-                    ticker === t.value
-                      ? 'border-primary bg-primary text-primary-foreground font-bold'
-                      : 'border-border text-muted-foreground hover:border-primary hover:text-foreground'
-                  }`}
-                >
-                  {t.label}
-                </button>
-              ))}
-              <input
-                className="w-28 rounded-lg border border-border bg-background px-2 py-1.5 text-xs outline-none"
-                placeholder="Custom…"
-                value={custom}
-                onChange={(e) => setCustom(e.target.value.toUpperCase())}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && custom.trim()) {
-                    setFollowTerminal(false);
-                    setTicker(custom.trim());
-                  }
-                }}
-              />
+            {/*
+              Symbol chrome: when following terminal (default), underlier is already
+              in the header — do not burn a full chip row. Expand only on Change.
+            */}
+            <div className="flex flex-wrap items-center gap-1.5 text-type-xs">
+              <span className="font-semibold text-foreground">{ticker}</span>
+              <span className="text-muted-foreground">
+                {followTerminal ? '· terminal' : '· desk override'}
+              </span>
+              {loading && (
+                <span className="text-muted-foreground" title="MacroVol option chain fetch">
+                  · chain…
+                </span>
+              )}
+              {!loading && data && (
+                <span className="text-muted-foreground">
+                  · spot {data.spot != null ? `$${data.spot.toFixed(2)}` : '—'}
+                </span>
+              )}
               <button
                 type="button"
-                onClick={() => {
-                  setFollowTerminal((f) => !f);
-                  if (!followTerminal && storeSymbol && /^[A-Z.^]{1,12}$/i.test(storeSymbol)) {
-                    setTicker(storeSymbol);
-                  }
-                }}
-                className={`rounded border px-2 py-1 text-type-xs ${
-                  followTerminal
-                    ? 'border-primary/50 bg-primary/10 text-foreground'
-                    : 'border-border text-muted-foreground'
-                }`}
-                title="When on, Greeks 1.0 tracks the terminal symbol so 3D Surface and this desk share the same underlier"
+                onClick={() => setSymbolPickerOpen((o) => !o)}
+                className="rounded border border-border px-1.5 py-0.5 text-muted-foreground hover:border-primary hover:text-foreground"
               >
-                {followTerminal ? `Follow terminal: ${storeSymbol || '—'}` : 'Follow off'}
+                {symbolPickerOpen ? 'Hide' : 'Change'}
               </button>
-              {!followTerminal && storeSymbol && storeSymbol !== ticker && (
+              {!followTerminal && (
                 <button
                   type="button"
-                  onClick={() => setTicker(storeSymbol)}
-                  className="rounded border border-border px-2 py-1 text-type-xs text-muted-foreground"
+                  onClick={() => {
+                    setFollowTerminal(true);
+                    setSymbolPickerOpen(false);
+                    if (storeSymbol && /^[A-Z.^]{1,12}$/i.test(storeSymbol)) {
+                      setTicker(storeSymbol);
+                    }
+                  }}
+                  className="rounded border border-primary/40 bg-primary/10 px-1.5 py-0.5 text-foreground"
+                  title="Track terminal symbol (header underlier)"
                 >
-                  Use terminal: {storeSymbol}
+                  Follow terminal
                 </button>
               )}
             </div>
+            {symbolPickerOpen && (
+              <div className="flex flex-wrap gap-1.5">
+                {TICKERS.map((t) => (
+                  <button
+                    key={t.value}
+                    type="button"
+                    onClick={() => {
+                      setFollowTerminal(false);
+                      setTicker(t.value);
+                      setSymbolPickerOpen(false);
+                    }}
+                    className={`rounded border px-2 py-1 text-type-xs ${
+                      ticker === t.value
+                        ? 'border-primary bg-primary text-primary-foreground font-bold'
+                        : 'border-border text-muted-foreground hover:border-primary hover:text-foreground'
+                    }`}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+                <input
+                  className="w-24 rounded border border-border bg-background px-2 py-1 text-type-xs outline-none"
+                  placeholder="Custom…"
+                  value={custom}
+                  onChange={(e) => setCustom(e.target.value.toUpperCase())}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && custom.trim()) {
+                      setFollowTerminal(false);
+                      setTicker(custom.trim());
+                      setSymbolPickerOpen(false);
+                    }
+                  }}
+                />
+              </div>
+            )}
             {data?.surface_note && (
               <p className="text-type-2xs leading-snug text-muted-foreground">{data.surface_note}</p>
             )}
@@ -227,11 +309,6 @@ export function Greeks10View() {
               <p className="text-type-2xs leading-snug text-muted-foreground">{data.charm_note}</p>
             )}
 
-            {loading && (
-              <div className="text-type-xs text-muted-foreground">
-                Computing Greeks for {ticker}… fetching option chain via MacroVol API (15–30s)
-              </div>
-            )}
             {error && (
               <div className="rounded border border-down/40 bg-down/15 px-3 py-2 text-xs text-down">
                 {error} — Try SPY if index options fail. Ensure MacroVol API is on :8765.
@@ -274,54 +351,114 @@ export function Greeks10View() {
                   </div>
                 </div>
 
-                {/* 3D Greek surface */}
-                {surfaceData && surfaceData.T_vals?.length > 0 && (
-                  <div>
-                    <div className="mb-1 flex items-center gap-2">
-                      <h3 className="text-xs font-semibold" style={{ color: greek.color }}>{greek.label} SURFACE</h3>
-                      <span className="text-type-xs text-muted-foreground">{greek.desc}</span>
-                    </div>
-                    <div className="overflow-hidden rounded-xl border border-border bg-card">
-                      <Suspense fallback={<div className="p-8 text-center text-xs text-muted-foreground">Loading surface…</div>}>
-                        <Plot
-                          data={[{
-                            type: 'surface',
-                            x: surfaceData.T_vals,
-                            y: surfaceData.K_vals,
-                            z: surfaceData.grid,
-                            colorscale,
-                            colorbar: {
-                              ...PLOTLY_COLORBAR,
-                              title: { text: greek.label, font: PLOTLY_COLORBAR.title.font },
-                            },
-                            hovertemplate: `Strike: $%{y:.0f}<br>${greek.label}: %{z:.4f}<extra></extra>`,
-                          } as never]}
-                          layout={{
-                            ...PLOTLY_LAYOUT_BASE,
-                            margin: { l: 0, r: 50, t: 24, b: 0 },
-                            scene: {
-                              xaxis: {
-                                title: { text: 'DTE' },
-                                ticktext: surfaceData.T_vals.map((t) => `${Math.round(t * 365)}d`),
-                                tickvals: surfaceData.T_vals,
-                                ...PLOTLY_SCENE_AXIS,
-                              },
-                              yaxis: { title: { text: 'Strike ($)' }, ...PLOTLY_SCENE_AXIS },
-                              zaxis: { title: { text: greek.label }, ...PLOTLY_SCENE_AXIS },
-                              bgcolor: CHART_RESOLVED.card,
-                              camera: { eye: { x: 1.6, y: -1.6, z: 0.9 } },
-                              aspectmode: 'manual',
-                              aspectratio: { x: 2, y: 1.2, z: 0.8 },
-                            },
-                            height: 460,
-                          } as never}
-                          config={{ responsive: true, displayModeBar: true, displaylogo: false }}
-                          style={{ width: '100%' }}
-                        />
-                      </Suspense>
+                {/* Greek field — Plotly (G1.0) or R3F mesh theme (same greek / symbol) */}
+                <div>
+                  <div className="mb-1 flex flex-wrap items-center gap-2">
+                    <h3 className="text-xs font-semibold" style={{ color: greek.color }}>{greek.label} SURFACE</h3>
+                    <span className="text-type-xs text-muted-foreground">{greek.desc}</span>
+                    <div className="ml-auto flex items-center gap-1" role="group" aria-label="Surface theme">
+                      <span className="text-type-2xs text-muted-foreground">Viz</span>
+                      {([
+                        { id: 'plotly' as const, label: 'Plotly' },
+                        { id: 'mesh' as const, label: '3D mesh' },
+                      ]).map((t) => (
+                        <button
+                          key={t.id}
+                          type="button"
+                          data-testid={`greeks-theme-${t.id}`}
+                          onClick={() => setTheme(t.id)}
+                          className={cn(
+                            'rounded px-2 py-0.5 font-mono text-type-2xs',
+                            surfaceTheme === t.id
+                              ? 'bg-primary text-primary-foreground'
+                              : 'border border-border text-muted-foreground hover:border-primary',
+                          )}
+                        >
+                          {t.label}
+                        </button>
+                      ))}
                     </div>
                   </div>
-                )}
+                  <p className="mb-1 text-type-2xs text-muted-foreground">
+                    {surfaceTheme === 'plotly'
+                      ? 'Plotly · MacroVol interpolated OTM field (same API as ATM cards)'
+                      : surfaceData?.T_vals?.length
+                        ? '3D mesh · MacroVol grid (same numbers as Plotly) · OTM · θ/charm /day · ν /1vol'
+                        : '3D mesh · desk LIVE chain fallback until MacroVol grid loads · OTM · θ/charm /day'}
+                    {data?.r != null && (
+                      <span className="ml-2 tabular-nums">
+                        r={(data.r * 100).toFixed(2)}%
+                        {data.r_source ? ` (${data.r_source})` : ''}
+                        {data.q != null ? ` · q=${(data.q * 100).toFixed(2)}%` : ''}
+                      </span>
+                    )}
+                  </p>
+                  <div className="overflow-hidden rounded-xl border border-border bg-card">
+                    {surfaceTheme === 'plotly' ? (
+                      surfaceData && surfaceData.T_vals?.length > 0 ? (
+                        <Suspense fallback={<div className="p-8 text-center text-xs text-muted-foreground">Loading surface…</div>}>
+                          <Plot
+                            data={[{
+                              type: 'surface',
+                              x: surfaceData.T_vals,
+                              y: surfaceData.K_vals,
+                              z: surfaceData.grid,
+                              colorscale,
+                              colorbar: {
+                                ...PLOTLY_COLORBAR,
+                                title: { text: greek.label, font: PLOTLY_COLORBAR.title.font },
+                              },
+                              hovertemplate: `Strike: $%{y:.0f}<br>${greek.label}: %{z:.4f}<extra></extra>`,
+                            } as never]}
+                            layout={{
+                              ...PLOTLY_LAYOUT_BASE,
+                              margin: { l: 0, r: 50, t: 24, b: 0 },
+                              scene: {
+                                xaxis: {
+                                  title: { text: 'DTE' },
+                                  ticktext: surfaceData.T_vals.map((t) => `${Math.round(t * 365)}d`),
+                                  tickvals: surfaceData.T_vals,
+                                  ...PLOTLY_SCENE_AXIS,
+                                },
+                                yaxis: { title: { text: 'Strike ($)' }, ...PLOTLY_SCENE_AXIS },
+                                zaxis: { title: { text: greek.label }, ...PLOTLY_SCENE_AXIS },
+                                bgcolor: CHART_RESOLVED.card,
+                                camera: { eye: { x: 1.6, y: -1.6, z: 0.9 } },
+                                aspectmode: 'manual',
+                                aspectratio: { x: 2, y: 1.2, z: 0.8 },
+                              },
+                              height: 460,
+                            } as never}
+                            config={{ responsive: true, displayModeBar: true, displaylogo: false }}
+                            style={{ width: '100%' }}
+                          />
+                        </Suspense>
+                      ) : (
+                        <div className="p-6 text-center text-type-xs text-muted-foreground">
+                          No MacroVol surface grid for {greek.label} yet.
+                        </div>
+                      )
+                    ) : (
+                      <Suspense fallback={<div className="p-8 text-center text-xs text-muted-foreground">Loading 3D mesh…</div>}>
+                        <div className="h-[460px]">
+                          <GreeksSurface3D
+                            greek={meshGreek}
+                            hideGreekPicker
+                            className="h-full"
+                            macrovolGrid={surfaceData ?? null}
+                            macrovolSpot={data?.spot}
+                            macrovolMeta={{
+                              r: data?.r,
+                              q: data?.q,
+                              r_source: data?.r_source,
+                              source: data?.source,
+                            }}
+                          />
+                        </div>
+                      </Suspense>
+                    )}
+                  </div>
+                </div>
 
                 {/* Price history + GEX/Charm heatmaps */}
                 <HeatMaps
@@ -402,7 +539,20 @@ export function Greeks10View() {
                 {/* GEX calendar */}
                 {data.points && <GexCalendar data={data} />}
 
-                <DataBadge asOf={data.as_of} source={`${data.source || 'yfinance'} · MacroVol`} staleThresholdMin={60} />
+                <DataBadge
+                  asOf={data.as_of}
+                  source={[
+                    data.source || 'yfinance',
+                    'MacroVol',
+                    data.r != null ? `r=${(data.r * 100).toFixed(2)}%` : null,
+                    data.r_source ? `(${data.r_source})` : null,
+                    data.q != null ? `q=${(data.q * 100).toFixed(2)}%` : null,
+                    data.units?.theta ? `θ ${data.units.theta}` : 'θ/charm /day',
+                    data.units?.vega ? `ν ${data.units.vega}` : 'ν /1vol',
+                    data.units?.surface_side || 'OTM surface',
+                  ].filter(Boolean).join(' · ')}
+                  staleThresholdMin={60}
+                />
               </>
             )}
           </div>

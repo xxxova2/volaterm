@@ -19,9 +19,9 @@ describe('shellPrefs', () => {
     }
   });
 
-  it('defaults quote strip on when key missing (terminal tape)', () => {
+  it('defaults quote strip off when key missing (max function area)', () => {
     localStorage.removeItem(KEY);
-    expect(isQuoteStripEnabled()).toBe(true);
+    expect(isQuoteStripEnabled()).toBe(false);
   });
 
   it('honors explicit off', () => {

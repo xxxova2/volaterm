@@ -37,32 +37,27 @@ describe('jumpDeskSection', () => {
       <div id="sec-snapshot"></div>
       <div id="sec-stir"></div>
     `;
-    // jsdom may not implement scrollIntoView
     Element.prototype.scrollIntoView = () => {};
   });
   afterEach(() => {
     document.body.innerHTML = '';
   });
 
-  it('jumps to next present section', async () => {
-    const { jumpDeskSection } = await import('./deskNav');
+  it('jumps to next rates section via store', async () => {
+    const { jumpDeskSection, useTerminalStore } = await import('./deskNav');
+    const store = await import('../store/terminalStore');
+    store.useTerminalStore.setState({ activeTab: 'rates', deskSectionId: 'sec-macro' });
     const next = jumpDeskSection('rates', 1);
     expect(next).toBeTruthy();
-    expect(['sec-macro', 'sec-snapshot', 'sec-stir']).toContain(next!);
+    expect(store.useTerminalStore.getState().deskSectionId).toBe(next);
   });
 
-  it('clicks vol-sub mode buttons when jumping', async () => {
-    document.body.innerHTML = `
-      <button id="vol-sub-surface" data-desk-section="1" data-desk-section-active="1"></button>
-      <button id="vol-sub-smile" data-desk-section="1"></button>
-      <button id="vol-sub-term" data-desk-section="1"></button>
-    `;
-    const smile = document.getElementById('vol-sub-smile')!;
-    const clicked: string[] = [];
-    smile.addEventListener('click', () => clicked.push('smile'));
+  it('sets store section for vol-sub mode buttons when jumping', async () => {
     const { jumpDeskSection } = await import('./deskNav');
+    const store = await import('../store/terminalStore');
+    store.useTerminalStore.setState({ activeTab: 'vol', deskSectionId: 'vol-sub-surface' });
     const next = jumpDeskSection('vol', 1);
     expect(next).toBe('vol-sub-smile');
-    expect(clicked).toEqual(['smile']);
+    expect(store.useTerminalStore.getState().deskSectionId).toBe('vol-sub-smile');
   });
 });

@@ -36,6 +36,18 @@
         if (root && fb && !root.childElementCount) fb.classList.add('show');
       }, 4000);
     </script>
+    <!--
+      Vite 8 + @vitejs/plugin-react 6 should inject this via transformIndexHtml.
+      In this environment the preamble is missing and every TSX dies with
+      "$RefreshSig$ is not defined" → black #root. Explicit import is safe:
+      production build strips / ignores the refresh runtime path.
+    -->
+    <script type="module">
+      import { injectIntoGlobalHook } from '/@react-refresh';
+      injectIntoGlobalHook(window);
+      window.$RefreshReg$ = () => {};
+      window.$RefreshSig$ = () => (type) => type;
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

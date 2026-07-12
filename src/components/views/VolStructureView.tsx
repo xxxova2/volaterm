@@ -2,7 +2,7 @@
  * Vol Structure desk — surface + smile + term + surface-quality (arb diagnostics).
  * Replaces standalone Vol Surface / Smile / Term / Arbitrage tabs.
  */
-import { useEffect, useState, lazy, Suspense } from 'react';
+import { useEffect, lazy, Suspense } from 'react';
 import { SmileView } from './SmileView';
 import { TermView } from './TermView';
 import { ArbitrageView } from './ArbitrageView';
@@ -11,8 +11,6 @@ import { DeskLoading } from '../common/Skeleton';
 import { EmptyState } from '../common/EmptyState';
 import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
 import { UI_COPY } from '../../config/uiCopy';
-import { DeskChrome } from '../terminal/DeskChrome';
-import { DeskModeBar } from '../terminal/DeskModeBar';
 import { GexLevelsStrip } from '../common/GexLevelsStrip';
 import { consumeDeskJumpOnMount } from '../../lib/market/deskJump';
 
@@ -35,11 +33,13 @@ const SUBS: { id: Sub; label: string; blurb: string; domId: string }[] = [
 ];
 
 export function VolStructureView() {
-  const [sub, setSub] = useState<Sub>('surface');
+  const deskSectionId = useTerminalStore((s) => s.deskSectionId);
   const setDeskContext = useTerminalStore((s) => s.setDeskContext);
   const snapshot = useTerminalStore((s) => s.snapshot);
   const loading = useTerminalStore((s) => s.loading);
   const chainUsed = useTerminalStore((s) => s.chainUsed);
+
+  const sub: Sub = (SUBS.find((s) => s.domId === deskSectionId)?.id ?? 'surface') as Sub;
 
   useEffect(() => consumeDeskJumpOnMount(), []);
 
@@ -68,33 +68,8 @@ export function VolStructureView() {
     );
   }
 
-  const activeDomId = SUBS.find((s) => s.id === sub)?.domId ?? 'vol-sub-surface';
-
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <DeskChrome
-        label="VOL STRUCTURE"
-        trailing={
-          <span className="hidden font-mono text-type-2xs text-muted-foreground xl:inline">
-            Fit = SVI / model · not feed arb · [ ] cycle · parity under Positioning
-          </span>
-        }
-      >
-        <DeskModeBar
-          items={SUBS.map((s) => ({
-            id: s.domId,
-            label: s.label,
-            title: s.blurb,
-          }))}
-          activeId={activeDomId}
-          onSelect={(domId) => {
-            const m = SUBS.find((s) => s.domId === domId);
-            if (m) setSub(m.id);
-          }}
-          asSectionButtons
-        />
-      </DeskChrome>
-
       {/* Sticky dealer levels on vol surface / smile / term (Phase 3) */}
       <GexLevelsStrip compact showSpark className="bg-card/40" />
 

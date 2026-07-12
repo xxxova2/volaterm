@@ -1,7 +1,10 @@
 /**
  * Deep-link section jump after desk mount (sessionStorage desk.jump).
- * Button-mode desks (vol/pos/greeks) use element.click(); rates scrolls into view.
+ * Button-mode desks (vol/pos/greeks) and scroll desks (rates) all resolve to a
+ * single store value via setDeskSection — no DOM .click() needed.
  */
+
+import { useTerminalStore } from '../../store/terminalStore';
 
 export const DESK_JUMP_KEY = 'desk.jump';
 
@@ -17,21 +20,22 @@ function resolveElement(sectionId: string, root: ParentNode = document): HTMLEle
 }
 
 /**
- * Apply a section jump against the live DOM (optionally scoped to a root).
+ * Apply a section jump: set the store's active desk section (which both the
+ * red function bar and the desk view subscribe to). For non-sub-mode sections
+ * (rates sections), also scroll the matching element into view.
  */
 export function applyDeskJump(sectionId: string, root: ParentNode = document): boolean {
-  const el = resolveElement(sectionId, root);
-  if (!el) return false;
+  useTerminalStore.getState().setDeskSection(sectionId);
 
   const isSubMode =
     sectionId.startsWith('vol-sub-')
     || sectionId.startsWith('greeks-sub-')
     || sectionId.startsWith('pos-sub-');
 
-  if (isSubMode) {
-    el.click();
-  } else {
-    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  if (!isSubMode) {
+    const el = resolveElement(sectionId, root);
+    el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    return !!el;
   }
   return true;
 }

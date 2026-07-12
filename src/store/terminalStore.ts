@@ -28,6 +28,7 @@ import {
 } from '../lib/data/freshness';
 import { perfMark, perfTimeSync } from '../config/perfBudget';
 import type { BoardFocusState } from '../hooks/useBoardFocus';
+import { findSectionMeta, sectionsForTab } from '../config/deskSections';
 
 function processSurface(surface: SurfaceGrid, spot: number) {
   const readout = sviReadout(surface, spot);
@@ -138,6 +139,8 @@ interface TerminalStore {
   setUiDensity: (d: 'dense' | 'readable') => void;
   toggleUiDensity: () => void;
   setDeskContext: (ctx: { id: string | null; label: string | null; apis?: string[] }) => void;
+  /** Set the active desk section by id (resolves label/apis from the section registry). */
+  setDeskSection: (sectionId: string | null) => void;
   setBoardFocus: (focus: BoardFocusState) => void;
   setKeyboardBoardFocusEnabled: (on: boolean) => void;
   setCryptoDualCharts: (on: boolean) => void;
@@ -184,8 +187,9 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
     try {
       const raw = localStorage.getItem('ui.density');
       if (raw === 'readable') return 'readable' as const;
+      if (raw === 'dense') return 'dense' as const;
     } catch { /* ignore */ }
-    return 'dense' as const;
+    return 'readable' as const;
   })(),
   deskSectionId: null,
   deskSectionLabel: null,
@@ -480,6 +484,25 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
       deskSectionId: id,
       deskSectionLabel: label,
       deskSectionApis: apis ?? [],
+    });
+  },
+
+  /**
+   * Single source of truth for which desk section is active. Resolves the
+   * label/apis from the section registry so the red function bar, [ ] jump
+   * keys, and deep-link codes all drive one store value (no DOM .click()).
+   */
+  setDeskSection: (sectionId) => {
+    const tab = get().activeTab;
+    if (!sectionId || !sectionsForTab(tab).some((s) => s.id === sectionId)) {
+      set({ deskSectionId: null, deskSectionLabel: null, deskSectionApis: [] });
+      return;
+    }
+    const meta = findSectionMeta(sectionId, tab);
+    set({
+      deskSectionId: sectionId,
+      deskSectionLabel: meta?.label ?? null,
+      deskSectionApis: meta?.apis ?? [],
     });
   },
 

@@ -21,7 +21,7 @@ Default ports: Vite `3000` (or `VITE_PORT`), API `3001` (or `PORT`), MacroVol `8
 | **1** | **Home** | Dashboard, portfolio strip, deep-links into desks |
 | **2** | **Vol Structure** | 3D IV surface, smile/skew, term structure, quality |
 | **3** | **Positioning** | Option chain, dealer GEX / γ-flip, key levels, parity edge |
-| **4** | **Greeks** | Heatmap, profile, sensitivity, by-expiry, 3D surface |
+| **4** | **Greeks** | Greeks 1.0 desk (ATM cards, Plotly surface, GEX/OI) · 3D mesh as surface theme · IV section |
 | **5** | **MM Desk** | Blotter-first MM tools, scenarios, hedging |
 | **6** | **Crypto** | Dual BTC/ETH Deribit tape; optional 2× thin charts; full book for active underlier |
 | **7** | **Macros & Rates** | FRED/NYFed macro strip, STIR path, SERFF, UST curve, DV01 |
@@ -57,12 +57,12 @@ Default ports: Vite `3000` (or `VITE_PORT`), API `3001` (or `PORT`), MacroVol `8
 ```
 src/
 ├── components/
-│   ├── terminal/     # Shell (Header, TabNav, DeskSubNav, StatusBar, …)
+│   ├── terminal/     # Shell (Header, FunctionMenuBar, StatusBar, …)
 │   ├── layout/       # TerminalLayout + SidePanel
 │   ├── common/       # Freshness, VirtualRows, ImplyDrawer, CSV, …
 │   ├── macrovol/     # RatesPanel, MacroPanel, ApiSources
 │   └── views/        # Desk views (Home, Vol, Positioning, Greeks, Desk, Crypto, Rates)
-├── config/           # deskNav, constants
+├── config/           # deskNav, deskSections, functionRegistry, constants
 ├── hooks/            # keyboard, density, spot stream, …
 ├── store/            # terminalStore, toastStore
 └── lib/

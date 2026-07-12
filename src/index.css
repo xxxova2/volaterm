@@ -106,16 +106,16 @@
 
   /*
    * Modular type scale (D-PR-2)
-   * 2xs 9 / xs 10 / sm 11 / base 12 / md 13 / lg 15 / xl 18 / 2xl 24
+   * 2xs 10 / xs 11 / sm 12 / base 13 / md 14 / lg 16 / xl 19 / 2xl 26
    */
-  --type-2xs: 9px;
-  --type-xs: 10px;
-  --type-sm: 11px;
-  --type-base: 12px;
-  --type-md: 13px;
-  --type-lg: 15px;
-  --type-xl: 18px;
-  --type-2xl: 24px;
+  --type-2xs: 10px;
+  --type-xs: 11px;
+  --type-sm: 12px;
+  --type-base: 13px;
+  --type-md: 14px;
+  --type-lg: 16px;
+  --type-xl: 19px;
+  --type-2xl: 26px;
   --type-line: 1.2;
 }
 
@@ -287,46 +287,76 @@
   --panel-title: var(--type-xs);
   --panel-meta: var(--type-2xs);
   --row-h: 1.5rem;
-  --type-2xs: 9px;
-  --type-xs: 10px;
-  --type-sm: 11px;
-  --type-base: 12px;
-  --type-md: 13px;
-  --type-lg: 15px;
-  --type-xl: 18px;
-  --type-2xl: 24px;
-}
-
-.density-dense {
-  --desk-pad: 0.25rem;
-  --desk-gap: 0.4rem;
-  --type-2xs: 8px;
-  --type-xs: 9px;
-  --type-sm: 10px;
-  --type-base: 11px;
-  --type-md: 12px;
-  --type-lg: 14px;
-  --type-xl: 16px;
-  --type-2xl: 22px;
-  --panel-title: var(--type-xs);
-  --panel-meta: var(--type-2xs);
-  --row-h: 1.35rem;
-}
-
-.density-readable {
-  --desk-pad: 0.75rem;
-  --desk-gap: 1rem;
   --type-2xs: 10px;
   --type-xs: 11px;
   --type-sm: 12px;
   --type-base: 13px;
   --type-md: 14px;
   --type-lg: 16px;
-  --type-xl: 20px;
+  --type-xl: 19px;
   --type-2xl: 26px;
+}
+
+.density-dense {
+  --desk-pad: 0.25rem;
+  --desk-gap: 0.4rem;
+  --type-2xs: 10px;
+  --type-xs: 11px;
+  --type-sm: 12px;
+  --type-base: 13px;
+  --type-md: 14px;
+  --type-lg: 15px;
+  --type-xl: 18px;
+  --type-2xl: 24px;
+  --panel-title: var(--type-xs);
+  --panel-meta: var(--type-2xs);
+  --row-h: 1.35rem;
+  --chrome-h: 1.5rem;
+  --chrome-status-h: 1.25rem;
+}
+
+.density-readable {
+  --desk-pad: 0.75rem;
+  --desk-gap: 1rem;
+  --type-2xs: 12px;
+  --type-xs: 13px;
+  --type-sm: 14px;
+  --type-base: 15px;
+  --type-md: 16px;
+  --type-lg: 18px;
+  --type-xl: 23px;
+  --type-2xl: 30px;
   --panel-title: var(--type-sm);
   --panel-meta: var(--type-xs);
   --row-h: 2rem;
+  /* Readable type, but keep shell chrome tight (BBG = max function area). */
+  --chrome-h: 1.5rem;
+  --chrome-status-h: 1.35rem;
+}
+
+/* Chrome strip heights follow density (default readable is taller; dense shrinks). */
+.density-readable header,
+.density-readable [role="toolbar"],
+.density-readable [role="search"],
+.density-readable .term-fn-bar-red {
+  min-height: var(--chrome-h);
+  height: var(--chrome-h);
+}
+.density-readable footer {
+  min-height: var(--chrome-status-h);
+  height: var(--chrome-status-h);
+}
+
+.density-dense header,
+.density-dense [role="toolbar"],
+.density-dense [role="search"],
+.density-dense .term-fn-bar-red {
+  min-height: var(--chrome-h);
+  height: var(--chrome-h);
+}
+.density-dense footer {
+  min-height: var(--chrome-status-h);
+  height: var(--chrome-status-h);
 }
 
 .density-readable .term-panel {

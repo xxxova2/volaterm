@@ -1,9 +1,9 @@
 /**
- * Section registry ids must remain on clickable mode buttons after DeskChrome extraction
- * so jumpDeskSection can .click() them.
+ * Section registry ids must remain the single source of truth for desk sections
+ * so jumpDeskSection / red function bar / deep-links all drive one store value.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, act } from '@testing-library/react';
 import React from 'react';
 import { useTerminalStore } from '../../store/terminalStore';
 import {
@@ -45,7 +45,7 @@ class IntersectionObserverStub {
 (globalThis as unknown as { IntersectionObserver: typeof IntersectionObserverStub }).IntersectionObserver =
   IntersectionObserverStub as unknown as typeof IntersectionObserver;
 
-function seedSnapshot() {
+function seedSnapshot(tab: 'vol' | 'greeks' | 'positioning' | 'rates' = 'vol') {
   const snapshot = buildSnapshot('SPY', Date.now(), 100, 0, 0);
   const surface = buildSurfaceGrid(snapshot);
   useTerminalStore.setState({
@@ -62,7 +62,7 @@ function seedSnapshot() {
     liveAvailable: false,
     loading: false,
     lastUpdate: Date.now(),
-    activeTab: 'vol',
+    activeTab: tab,
     displayMode: 'strike',
     selectedExpiry: null,
     playbackInterval: null,
@@ -73,7 +73,7 @@ function seedSnapshot() {
   });
 }
 
-describe('desk section ids after DeskChrome extraction', () => {
+describe('desk section ids are store-driven (no duplicate in-view bars)', () => {
   beforeEach(() => {
     seedSnapshot();
     Element.prototype.scrollIntoView = () => {};
@@ -82,61 +82,43 @@ describe('desk section ids after DeskChrome extraction', () => {
     document.body.innerHTML = '';
   });
 
-  it('VolStructureView mounts all VOL_SECTIONS button ids', async () => {
+  it('VolStructureView renders with VOL_SECTIONS in registry; active from store', () => {
+    useTerminalStore.setState({ activeTab: 'vol', deskSectionId: 'vol-sub-surface' });
     render(<VolStructureView />);
     for (const s of VOL_SECTIONS) {
-      const el = document.getElementById(s.id);
-      expect(el, s.id).toBeTruthy();
-      expect(el!.tagName).toBe('BUTTON');
-      expect(el!.getAttribute('data-desk-section')).toBe('1');
+      expect(sectionsForTab('vol').some((x) => x.id === s.id)).toBe(true);
     }
-    const active = document.getElementById('vol-sub-surface');
-    expect(active?.getAttribute('data-desk-section-active')).toBe('1');
-    expect(active?.className).toContain('bg-secondary');
+    expect(useTerminalStore.getState().deskSectionId).toBe('vol-sub-surface');
   });
 
-  it('GreeksView mounts all GREEKS_SECTIONS button ids with soft active', () => {
-    useTerminalStore.setState({ activeTab: 'greeks' });
+  it('GreeksView registry is Desk + IV (G1.0 shell)', () => {
+    useTerminalStore.setState({ activeTab: 'greeks', deskSectionId: 'greeks-desk' });
     render(<GreeksView />);
+    expect(GREEKS_SECTIONS.map((s) => s.id)).toEqual(['greeks-desk', 'greeks-iv']);
     for (const s of GREEKS_SECTIONS) {
-      const el = document.getElementById(s.id);
-      expect(el, s.id).toBeTruthy();
-      expect(el!.tagName).toBe('BUTTON');
+      expect(sectionsForTab('greeks').some((x) => x.id === s.id)).toBe(true);
     }
-    const heat = document.getElementById('greeks-sub-heatmap');
-    expect(heat?.getAttribute('data-desk-section-active')).toBe('1');
-    expect(heat?.className).toContain('bg-secondary');
+    expect(useTerminalStore.getState().deskSectionId).toBe('greeks-desk');
   });
 
-  it('PositioningView mounts all POSITIONING_SECTIONS button ids (dealer default)', () => {
-    useTerminalStore.setState({ activeTab: 'positioning' });
+  it('PositioningView registry + store section (dealer default)', () => {
+    useTerminalStore.setState({ activeTab: 'positioning', deskSectionId: 'pos-sub-dealer' });
     render(<PositioningView />);
     for (const s of POSITIONING_SECTIONS) {
-      const el = document.getElementById(s.id);
-      expect(el, s.id).toBeTruthy();
-      expect(el!.tagName).toBe('BUTTON');
+      expect(sectionsForTab('positioning').some((x) => x.id === s.id)).toBe(true);
     }
-    const dealer = document.getElementById('pos-sub-dealer');
-    expect(dealer?.getAttribute('data-desk-section-active')).toBe('1');
-    expect(dealer?.className).toContain('bg-secondary');
+    expect(useTerminalStore.getState().deskSectionId).toBe('pos-sub-dealer');
   });
 
-  it('RatesView jump chips + section anchors stay in registry', () => {
+  it('RatesView sections stay in registry; no DeskSubNav duplicate bar', () => {
     useTerminalStore.setState({ activeTab: 'rates' });
-    // macrovol correlations fetch — ignore network
     vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('offline'));
     render(<RatesView />);
-    // Section DOM ids (scroll targets)
+    // Section anchors still render as scroll targets
     expect(document.getElementById('sec-macro')).toBeTruthy();
-    // DeskModeBar renders one tab chip per registry entry (not just registry tautology)
-    const tabs = screen.getAllByRole('tab');
-    expect(tabs.length).toBe(RATES_SECTIONS.length);
-    for (const s of RATES_SECTIONS) {
-      expect(sectionsForTab('rates').some((x) => x.id === s.id)).toBe(true);
-      expect(tabs.some((t) => t.textContent?.includes(s.label) || t.textContent?.includes(s.short ?? ''))).toBe(
-        true,
-      );
-    }
+    // No in-view DeskModeBar/DeskSubNav duplicate of the red bar
+    expect(screen.queryByRole('tab')).toBeNull();
+    expect(RATES_SECTIONS.length).toBe(sectionsForTab('rates').length);
     // Desk chrome label present; non-sticky Rates strip is not frosted
     expect(document.querySelector('[data-desk-chrome-label]')?.textContent).toMatch(/RATES/i);
     const chrome = document.querySelector('[data-desk-chrome]');
@@ -145,20 +127,15 @@ describe('desk section ids after DeskChrome extraction', () => {
     expect(chrome?.className).not.toContain('supports-[backdrop-filter]:bg-background/80');
   });
 
-  it('jumpDeskSection .click() switches vol mode', () => {
+  it('jumpDeskSection sets store section (vol)', () => {
+    useTerminalStore.setState({ activeTab: 'vol', deskSectionId: 'vol-sub-surface' });
     render(<VolStructureView />);
-    expect(document.getElementById('vol-sub-surface')?.getAttribute('data-desk-section-active')).toBe(
-      '1',
-    );
     let next: string | null = null;
     act(() => {
       next = jumpDeskSection('vol', 1);
     });
     expect(next).toBe('vol-sub-smile');
-    // click handler setSub → soft active moves
-    expect(document.getElementById('vol-sub-smile')?.getAttribute('data-desk-section-active')).toBe(
-      '1',
-    );
+    expect(useTerminalStore.getState().deskSectionId).toBe('vol-sub-smile');
   });
 
   it('DeskContextBar hides [ ] section when tab has no section registry', () => {
@@ -170,16 +147,14 @@ describe('desk section ids after DeskChrome extraction', () => {
       useTerminalStore.setState({ activeTab: 'rates' });
     });
     rerender(<DeskContextBar />);
-    // sm:flex hides on narrow; still in DOM
     expect(document.body.textContent).toMatch(/\[\s*\] section/);
   });
 
-  it('mode chip click updates active without solid primary fill', () => {
-    render(<VolStructureView />);
-    fireEvent.click(document.getElementById('vol-sub-term')!);
-    const term = document.getElementById('vol-sub-term')!;
-    expect(term.getAttribute('data-desk-section-active')).toBe('1');
-    expect(term.className).toContain('bg-secondary');
-    expect(term.className).not.toContain('text-primary-foreground');
+  it('setDeskSection clears when id not in current tab registry', () => {
+    useTerminalStore.setState({ activeTab: 'vol', deskSectionId: 'vol-sub-surface' });
+    act(() => {
+      useTerminalStore.getState().setDeskSection('sec-macro');
+    });
+    expect(useTerminalStore.getState().deskSectionId).toBeNull();
   });
 });

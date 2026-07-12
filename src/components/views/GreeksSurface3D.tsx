@@ -5,8 +5,13 @@ import * as THREE from 'three';
 import { useTerminalStore } from '../../store/terminalStore';
 import { VISUAL_CONFIG } from '../../config/constants';
 import { CANVAS } from '../../lib/chartTheme';
+import type { SurfaceGrid } from '../../lib/macrovol/api';
 import { GREEK_META, type GreekKey } from './greeksTypes';
 import { greekRamp01, useGreekSurfaceGeometry } from './useGreekSurfaceGeometry';
+import {
+  buildGreekSurfaceFromMacroVolGrid,
+  type GreekSurfaceInfo,
+} from './buildGreekSurfaceGeometry';
 import { cn } from '../../lib/utils';
 import { EmptyState } from '../common/EmptyState';
 
@@ -18,6 +23,14 @@ interface ReadoutPoint {
   expiry: string;
   value: number;
 }
+
+export type MacrovolMeshMeta = {
+  r?: number;
+  q?: number;
+  r_source?: string;
+  source?: string;
+  units?: string;
+};
 
 function SurfaceMesh({
   geo,
@@ -57,7 +70,7 @@ function Axes({
   info,
   greekLabel,
 }: {
-  info: NonNullable<ReturnType<typeof useGreekSurfaceGeometry>>;
+  info: GreekSurfaceInfo;
   greekLabel: string;
 }) {
   const labelCls = 'text-type-2xs font-mono whitespace-nowrap';
@@ -150,9 +163,47 @@ function Legend({
   );
 }
 
-export function GreeksSurface3D() {
+export type GreeksSurface3DProps = {
+  /** Controlled greek (Greeks 1.0 ATM cards). Uncontrolled when omitted. */
+  greek?: GreekKey;
+  onGreekChange?: (g: GreekKey) => void;
+  /** Hide internal greek picker when parent owns selection. */
+  hideGreekPicker?: boolean;
+  className?: string;
+  /**
+   * MacroVol interpolated grid for this greek (Option A same-API path).
+   * When present and valid, mesh uses these numbers (matches Plotly).
+   * Falls back to desk LIVE chain when missing/empty (Option C).
+   */
+  macrovolGrid?: SurfaceGrid | null;
+  macrovolSpot?: number;
+  macrovolMeta?: MacrovolMeshMeta;
+};
+
+export function GreeksSurface3D({
+  greek: greekProp,
+  onGreekChange,
+  hideGreekPicker = false,
+  className,
+  macrovolGrid = null,
+  macrovolSpot,
+  macrovolMeta,
+}: GreeksSurface3DProps = {}) {
   const snapshot = useTerminalStore(s => s.snapshot);
-  const [greek, setGreek] = useState<GreekKey>('gamma');
+  const [greekLocal, setGreekLocal] = useState<GreekKey>(greekProp ?? 'gamma');
+  const greek = greekProp ?? greekLocal;
+  const setGreek = useCallback(
+    (g: GreekKey) => {
+      if (greekProp == null) setGreekLocal(g);
+      onGreekChange?.(g);
+    },
+    [greekProp, onGreekChange],
+  );
+
+  useEffect(() => {
+    if (greekProp != null) setGreekLocal(greekProp);
+  }, [greekProp]);
+
   const [wireframe, setWireframe] = useState(false);
   const [hover, setHover] = useState<ReadoutPoint | null>(null);
   const [pointerOver, setPointerOver] = useState(false);
@@ -166,7 +217,23 @@ export function GreeksSurface3D() {
     return () => mq.removeEventListener('change', sync);
   }, []);
 
-  const info = useGreekSurfaceGeometry(greek);
+  const deskInfo = useGreekSurfaceGeometry(greek);
+
+  const macroInfo = useMemo(() => {
+    if (!macrovolGrid?.T_vals?.length || !macrovolGrid?.K_vals?.length) return null;
+    const spot = macrovolSpot ?? snapshot?.spot;
+    if (spot == null || !(spot > 0)) return null;
+    return buildGreekSurfaceFromMacroVolGrid(macrovolGrid, spot);
+  }, [macrovolGrid, macrovolSpot, snapshot?.spot]);
+
+  useEffect(() => {
+    return () => {
+      macroInfo?.geo.dispose();
+    };
+  }, [macroInfo]);
+
+  // Prefer MacroVol when ready (Option A); else desk chain (Option C fallback).
+  const info = macroInfo ?? deskInfo;
   const autoRotate = !reduceMotion && !pointerOver;
 
   const atmX = useMemo(() => {
@@ -185,14 +252,22 @@ export function GreeksSurface3D() {
 
   const buildReadout = useCallback(
     (px: number, pz: number): ReadoutPoint | null => {
-      if (!info || !snapshot) return null;
+      if (!info) return null;
       const cell = info.mapPointToCell(px, pz);
       if (!cell) return null;
       const strike = info.strikes[cell.strikeIdx];
       const dte = info.dtes[cell.expiryIdx];
+      if (strike == null || dte == null) return null;
+
+      if (info.source === 'macrovol') {
+        const v = info.values[cell.expiryIdx]?.[cell.strikeIdx];
+        if (v == null || !Number.isFinite(v)) return null;
+        return { strike, dte, expiry: `${dte}d`, value: v };
+      }
+
+      if (!snapshot) return null;
       const slice = snapshot.expiries[cell.expiryIdx];
-      if (strike == null || dte == null || !slice) return null;
-      // OTM convention — must match useGreekSurfaceGeometry mesh (put K<S, call K≥S)
+      if (!slice) return null;
       const preferPut = strike < info.spot;
       const primary = preferPut ? slice.puts : slice.calls;
       const secondary = preferPut ? slice.calls : slice.puts;
@@ -228,30 +303,61 @@ export function GreeksSurface3D() {
   const greekRow1 = GREEK_META.slice(0, 7);
   const greekRow2 = GREEK_META.slice(7);
 
-  if (!snapshot) {
+  const hasAnyData = Boolean(info) || Boolean(snapshot) || Boolean(macroInfo);
+  if (!hasAnyData) {
     return (
       <EmptyState
         kind="no-data"
-        title="No chain for 3D surface"
-        body="Load a LIVE surface to render greek mesh."
+        title="No surface for 3D mesh"
+        body="Load MacroVol greeks or a LIVE chain to render the mesh."
         className="h-full"
       />
     );
   }
 
+  if (!info) {
+    return (
+      <EmptyState
+        kind="no-data"
+        title="Building mesh…"
+        body={macrovolGrid ? 'MacroVol grid not dense enough yet; waiting for desk chain…' : 'Need ≥2 expiries on the chain.'}
+        className="h-full"
+      />
+    );
+  }
+
+  const r = macrovolMeta?.r;
+  const q = macrovolMeta?.q;
+  const rSrc = macrovolMeta?.r_source;
+  const provLabel =
+    info.source === 'macrovol'
+      ? `MacroVol OTM grid · same API as Plotly`
+      : `desk LIVE chain · fallback`;
+
   return (
     <div
-      className="relative h-full w-full"
+      className={cn('relative h-full w-full min-h-[320px]', className)}
       onPointerEnter={() => setPointerOver(true)}
       onPointerLeave={() => setPointerOver(false)}
+      data-mesh-source={info.source}
     >
       <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex flex-wrap gap-x-2 gap-y-0.5 border-b border-border/50 bg-background/90 px-2 py-0.5 font-mono text-type-2xs text-muted-foreground backdrop-blur-sm">
-        <span className="text-foreground">OTM listed</span>
-        <span>· θ &amp; charm /day · ν /1vol</span>
-        <span>· same units as Greeks 1.0</span>
-        <span className="text-muted-foreground/80">
-          chain {snapshot.symbol} · levels may differ vs MacroVol yfinance when r/q or IV source differ
+        <span className="text-foreground" data-testid="mesh-provenance">
+          {provLabel}
         </span>
+        <span>· OTM · θ &amp; charm /day · ν /1vol</span>
+        {r != null && Number.isFinite(r) && (
+          <span>
+            r={(r * 100).toFixed(2)}%
+            {rSrc ? ` (${rSrc})` : ''}
+          </span>
+        )}
+        {q != null && Number.isFinite(q) && <span>q={(q * 100).toFixed(2)}%</span>}
+        {info.source === 'desk' && snapshot && (
+          <span className="text-muted-foreground/80">
+            {snapshot.symbol} · may differ vs MacroVol when r/q/IV source differ
+          </span>
+        )}
       </div>
       <Canvas
         camera={{ position: [3.4, 2.8, 3.8], fov: 42 }}
@@ -271,27 +377,21 @@ export function GreeksSurface3D() {
           autoRotate={autoRotate}
           autoRotateSpeed={0.4}
         />
-        {info && (
-          <>
-            <SurfaceMesh
-              geo={info.geo}
-              wireframe={wireframe}
-              onPointerMove={handlePointerMove}
-              onClick={handleClick}
-            />
-            <AtmLine x={atmX} />
-            <Axes info={info} greekLabel={GREEK_META.find(g => g.key === greek)?.label ?? greek} />
-          </>
-        )}
+        <SurfaceMesh
+          geo={info.geo}
+          wireframe={wireframe}
+          onPointerMove={handlePointerMove}
+          onClick={handleClick}
+        />
+        <AtmLine x={atmX} />
+        <Axes info={info} greekLabel={GREEK_META.find(g => g.key === greek)?.label ?? greek} />
       </Canvas>
 
-      {info && (
-        <Legend
-          minV={info.minV}
-          maxV={info.maxV}
-          greekLabel={GREEK_META.find(g => g.key === greek)?.label ?? greek}
-        />
-      )}
+      <Legend
+        minV={info.minV}
+        maxV={info.maxV}
+        greekLabel={GREEK_META.find(g => g.key === greek)?.label ?? greek}
+      />
 
       <div className="absolute left-3 top-8 flex flex-col gap-2">
         <div className="flex items-center gap-1">
@@ -302,52 +402,54 @@ export function GreeksSurface3D() {
           >
             {wireframe ? 'Solid' : 'Wireframe'}
           </button>
-          {info && (
-            <div className="px-2 py-1 text-type-2xs font-mono bg-card/80 border border-border rounded text-muted-foreground">
-              <div>
-                Spot <span className="text-foreground tabular-nums">{snapshot.spot.toFixed(2)}</span>
-              </div>
-              <div>
-                {GREEK_META.find(g => g.key === greek)?.label ?? greek}{' '}
-                <span className="text-cyan tabular-nums">
-                  {info.minV.toExponential(2)}–{info.maxV.toExponential(2)}
-                </span>
-              </div>
+          <div className="px-2 py-1 text-type-2xs font-mono bg-card/80 border border-border rounded text-muted-foreground">
+            <div>
+              Spot <span className="text-foreground tabular-nums">{info.spot.toFixed(2)}</span>
             </div>
-          )}
-        </div>
-        <div className="flex flex-col gap-0.5 px-2 py-1 bg-card/80 border border-border rounded">
-          <div className="flex gap-1">
-            {greekRow1.map(g => (
-              <button
-                key={g.key}
-                data-greek-button={g.key}
-                onClick={() => setGreek(g.key)}
-                className={cn(
-                  'px-1.5 py-0.5 text-type-xs font-mono rounded',
-                  greek === g.key ? 'bg-secondary text-foreground ring-1 ring-border' : 'text-muted-foreground hover:text-foreground',
-                )}
-              >
-                {g.label}
-              </button>
-            ))}
-          </div>
-          <div className="flex gap-1">
-            {greekRow2.map(g => (
-              <button
-                key={g.key}
-                data-greek-button={g.key}
-                onClick={() => setGreek(g.key)}
-                className={cn(
-                  'px-1.5 py-0.5 text-type-xs font-mono rounded',
-                  greek === g.key ? 'bg-secondary text-foreground ring-1 ring-border' : 'text-muted-foreground hover:text-foreground',
-                )}
-              >
-                {g.label}
-              </button>
-            ))}
+            <div>
+              {GREEK_META.find(g => g.key === greek)?.label ?? greek}{' '}
+              <span className="text-cyan tabular-nums">
+                {info.minV.toExponential(2)}–{info.maxV.toExponential(2)}
+              </span>
+            </div>
           </div>
         </div>
+        {!hideGreekPicker && (
+          <div className="flex flex-col gap-0.5 px-2 py-1 bg-card/80 border border-border rounded">
+            <div className="flex gap-1">
+              {greekRow1.map(g => (
+                <button
+                  key={g.key}
+                  type="button"
+                  data-greek-button={g.key}
+                  onClick={() => setGreek(g.key)}
+                  className={cn(
+                    'px-1.5 py-0.5 text-type-xs font-mono rounded',
+                    greek === g.key ? 'bg-secondary text-foreground ring-1 ring-border' : 'text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  {g.label}
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-1">
+              {greekRow2.map(g => (
+                <button
+                  key={g.key}
+                  type="button"
+                  data-greek-button={g.key}
+                  onClick={() => setGreek(g.key)}
+                  className={cn(
+                    'px-1.5 py-0.5 text-type-xs font-mono rounded',
+                    greek === g.key ? 'bg-secondary text-foreground ring-1 ring-border' : 'text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  {g.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {hover && (

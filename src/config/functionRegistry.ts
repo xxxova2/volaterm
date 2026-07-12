@@ -33,23 +33,33 @@ export type FunctionDescriptor = {
 /** Exact code → functionId (v1). */
 const CODE_MAP: Record<string, FunctionId> = {
   HOME: 'home',
+  DES: 'home',
   VOL: 'vol',
   SURF: 'vol:vol-sub-surface',
+  OVDV: 'vol:vol-sub-surface',
   SMILE: 'vol:vol-sub-smile',
+  SKEW: 'vol:vol-sub-smile',
   TERM: 'vol:vol-sub-term',
   FIT: 'vol:vol-sub-quality',
+  HIVG: 'vol:vol-sub-term',
+  HVT: 'vol',
   POS: 'positioning',
   CHAIN: 'positioning:pos-sub-chain',
+  OMON: 'positioning:pos-sub-chain',
   DEAL: 'positioning:pos-sub-dealer',
   GEX: 'positioning:pos-sub-dealer',
   LVL: 'positioning:pos-sub-levels',
   EDGE: 'positioning:pos-sub-edge',
   STRAT: 'positioning:pos-sub-strategy',
+  OVME: 'positioning:pos-sub-strategy',
   GRK: 'greeks',
-  HEAT: 'greeks:greeks-sub-heatmap',
-  PROF: 'greeks:greeks-sub-profile',
-  SENS: 'greeks:greeks-sub-sensitivity',
-  EXP: 'greeks:greeks-sub-byexpiry',
+  DESK: 'greeks:greeks-desk',
+  IVG: 'greeks:greeks-iv',
+  /** Legacy codes → desk (HEAT/PROF/…) or mesh theme (3D). */
+  HEAT: 'greeks:greeks-desk',
+  PROF: 'greeks:greeks-desk',
+  SENS: 'greeks:greeks-desk',
+  EXP: 'greeks:greeks-desk',
   '3D': 'greeks:greeks-sub-surface3d',
   MM: 'desk',
   BTC: 'crypto',
@@ -68,6 +78,21 @@ const CODE_MAP: Record<string, FunctionId> = {
   JGB: 'rates:sec-japan',
   HELP: '__shell:help',
   WL: '__shell:watchlist',
+};
+
+/**
+ * Study-aliases (BBG-study synonyms that resolve to our primary codes).
+ * These are keywords only — our codes (SURF/CHAIN/SMILE/…) stay authoritative.
+ * functionId → extra keywords surfaced in palette / command-line search.
+ */
+const STUDY_ALIAS_KEYWORDS: Record<string, string[]> = {
+  'vol:vol-sub-surface': ['ovdv', 'option monitor surface', 'vol surface'],
+  'vol:vol-sub-smile': ['skew', 'vol smile', 'risk reversal'],
+  'positioning:pos-sub-chain': ['omon', 'option monitor', 'chain monitor'],
+  'vol:vol-sub-term': ['hivg', 'historical implied vol', 'term structure'],
+  vol: ['hvt', 'historical vol', 'hist vol', 'realized vol'],
+  'positioning:pos-sub-strategy': ['ovme', 'option payoff', 'scenario', 'strategy builder'],
+  home: ['des', 'description', 'security description'],
 };
 
 function buildRegistry(): FunctionDescriptor[] {
@@ -103,8 +128,19 @@ function buildRegistry(): FunctionDescriptor[] {
         label: `${tabLabel(tab)} · ${s.label}`,
         tab,
         sectionId: s.id,
-        heavy: s.id === 'greeks-sub-surface3d',
+        heavy: s.id === 'greeks-iv',
         keywords: [s.label, s.short ?? '', s.id, tab],
+      });
+    }
+  }
+
+  // Attach study-alias keywords (BBG-study synonyms) to the matching functionId
+  for (const [fid, kws] of Object.entries(STUDY_ALIAS_KEYWORDS)) {
+    const existing = byId.get(fid);
+    if (existing) {
+      upsert({
+        ...existing,
+        keywords: [...(existing.keywords ?? []), ...kws],
       });
     }
   }
@@ -255,18 +291,25 @@ export function openFunction(
   }
 
   if (d) {
-    // Tiles: no-op until BBG-06/07
-    if (d.sectionId) setDeskJump(d.sectionId);
+    // Legacy 3D code → mesh theme + Greeks desk
+    let sectionId = d.sectionId;
+    if (sectionId === 'greeks-sub-surface3d' || sectionId === 'greeks-mesh') {
+      try {
+        localStorage.setItem('ui.greeks.surfaceTheme', 'mesh');
+      } catch { /* ignore */ }
+      sectionId = 'greeks-desk';
+    }
+    if (sectionId) setDeskJump(sectionId);
     useTerminalStore.getState().setActiveTab(d.tab);
     if (d.symbol) {
       useTerminalStore.getState().setSymbol(d.symbol);
     }
-    if (d.sectionId) {
-      const meta = findSectionMeta(d.sectionId, d.tab);
-      // Context applied after mount by views; set provisional label
+    if (sectionId) {
+      useTerminalStore.getState().setDeskSection(sectionId);
+      const meta = findSectionMeta(sectionId, d.tab);
       if (meta) {
         useTerminalStore.getState().setDeskContext({
-          id: d.sectionId,
+          id: sectionId,
           label: meta.label,
           apis: meta.apis,
         });

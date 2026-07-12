@@ -16,6 +16,7 @@ import { FunctionMenuBar } from '../terminal/FunctionMenuBar';
 import { StatusBar } from '../terminal/StatusBar';
 import { ShortcutsOverlay } from '../terminal/ShortcutsOverlay';
 import { CommandPalette } from '../terminal/CommandPalette';
+import { DeskContextBar } from '../terminal/DeskContextBar';
 import { BootBriefing } from '../terminal/BootBriefing';
 import { PlaybackBar } from '../terminal/PlaybackBar';
 import { SymbolDialog } from '../terminal/SymbolDialog';
@@ -114,9 +115,9 @@ export function TerminalLayout() {
 
   useKeyboardShortcuts({
     'mod+k': () => {
-      // Focus always-on command line (BBG primary); palette remains as overlay fallback
+      // Focus always-on command line AND open the command palette overlay
       setCmdFocusToken((n) => n + 1);
-      setPaletteOpen(false);
+      setPaletteOpen(true);
     },
     r: refresh,
     s: () => setSymbolDialogOpen(true),
@@ -186,16 +187,18 @@ export function TerminalLayout() {
       )}
     >
       <TerminalHeader onOpenShortcuts={() => setShortcutsOpen((o) => !o)} />
+      {/* Optional multi-symbol tape — off by default (WL under Home · Feeds / toolbar). */}
       {quoteStripOn && (
         <div
           id="shell-quote-strip"
-          className="shrink-0 border-b border-border bg-card/80 px-1 py-0.5"
+          className="shrink-0 border-b border-border bg-card/80 px-1"
         >
           <WatchlistStrip className="border-0 bg-transparent" recordMetrics compact />
         </div>
       )}
+      {!quoteStripOn && <div id="shell-quote-strip" className="sr-only" aria-hidden />}
 
-      {/* Classic BBG panel chrome */}
+      {/* Classic BBG: toolbar → command → red desk menu (7 desks + sections) */}
       <PanelToolbar
         onHelp={() => setShortcutsOpen(true)}
         onWatchlistFocus={() => {
@@ -211,6 +214,7 @@ export function TerminalLayout() {
         }}
       />
       <FunctionMenuBar />
+      {activeTab !== 'home' && <DeskContextBar />}
 
       <main
         className="min-h-0 flex-1 overflow-hidden p-0.5 sm:p-1"
@@ -223,7 +227,8 @@ export function TerminalLayout() {
 
       {/* Display / expiries — collapsed by default; open via toolbar Display */}
       {displayStripOn && <SidePanel />}
-      {historicalFrames.length >= 2 && <PlaybackBar />}
+      {/* Playback only on Vol Structure when multi-frame history exists (not global chrome). */}
+      {activeTab === 'vol' && historicalFrames.length >= 2 && <PlaybackBar />}
       <StatusBar />
       {paletteOpen && (
         <CommandPalette

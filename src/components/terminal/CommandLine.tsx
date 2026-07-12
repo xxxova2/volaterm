@@ -183,7 +183,7 @@ export function CommandLine({
   return (
     <div
       ref={wrapRef}
-      className="relative flex h-7 shrink-0 items-stretch border-b border-border bg-[#060a10]"
+      className="relative flex h-6 shrink-0 items-stretch border-b border-border bg-[#060a10]"
       role="search"
       aria-label="Command line"
     >

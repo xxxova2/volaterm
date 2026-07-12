@@ -12,7 +12,6 @@ import { DiagnosticsStrip } from './DiagnosticsStrip';
 import { Explain } from '../common/Explain';
 import { EmptyState } from '../common/EmptyState';
 import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
-import { FreshnessFromDomain } from '../common/Freshness';
 import { VirtualRows } from '../common/VirtualRows';
 import { fmtCompact, fmtPrice, fmtPct, fmtSigned } from '../../lib/format';
 import {
@@ -32,8 +31,6 @@ import {
   type FocusableBoardApi,
 } from '../../hooks/useBoardFocus';
 import { PERF_BUDGET } from '../../config/perfBudget';
-import { DeskChrome } from '../terminal/DeskChrome';
-import { DeskModeBar } from '../terminal/DeskModeBar';
 import { GexLevelsStrip } from '../common/GexLevelsStrip';
 import { StrategyBuilderStrip } from '../common/StrategyBuilderStrip';
 import { consumeDeskJumpOnMount } from '../../lib/market/deskJump';
@@ -67,7 +64,8 @@ function metricFields(m: DealerMetric) {
 type StrikeZoom = 'all' | 'atm20' | 'atm10' | 'atm5';
 
 export function PositioningView() {
-  const [sub, setSub] = useState<Sub>('dealer');
+  const deskSectionId = useTerminalStore((s) => s.deskSectionId);
+  const sub: Sub = (SUBS.find((s) => s.domId === deskSectionId)?.id ?? 'dealer') as Sub;
   const [metric, setMetric] = useState<DealerMetric>('gex');
   const [weight, setWeight] = useState<ExposureWeight>('oi');
   const [strikeZoom, setStrikeZoom] = useState<StrikeZoom>('atm20');
@@ -75,14 +73,6 @@ export function PositioningView() {
   const sviReadout = useTerminalStore((s) => s.sviReadout);
   const arbResult = useTerminalStore((s) => s.arbResult);
   const setDeskContext = useTerminalStore((s) => s.setDeskContext);
-  const chainAvailable = useTerminalStore((s) => s.chainAvailable);
-  const chainUsed = useTerminalStore((s) => s.chainUsed);
-  const lastChainUpdate = useTerminalStore((s) => s.lastChainUpdate);
-  const provenance = useTerminalStore((s) => s.provenance);
-
-  // Fail-closed: never optimistic live from snapshot presence alone; FreshnessFromDomain re-ticks age
-  const chainMissing = !chainAvailable || chainUsed === 'none';
-  const chainAsOfMs = provenance.chain?.asOfMs ?? (lastChainUpdate > 0 ? lastChainUpdate : null);
 
   useEffect(() => consumeDeskJumpOnMount(), []);
 
@@ -200,36 +190,8 @@ export function PositioningView() {
   const flip = dealer?.gammaFlip;
   const aboveFlip = flip != null && snapshot ? snapshot.spot >= flip : null;
 
-  const activeDomId = SUBS.find((s) => s.id === sub)?.domId ?? 'pos-sub-dealer';
-
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <DeskChrome
-        label="POSITIONING"
-        trailing={
-          <FreshnessFromDomain
-            asOfMs={chainAsOfMs}
-            domain="chain"
-            down={chainMissing}
-            previousKind={provenance.chain?.kind}
-          />
-        }
-      >
-        <DeskModeBar
-          items={SUBS.map((s) => ({
-            id: s.domId,
-            label: s.label,
-            title: s.blurb,
-          }))}
-          activeId={activeDomId}
-          onSelect={(domId) => {
-            const m = SUBS.find((s) => s.domId === domId);
-            if (m) setSub(m.id);
-          }}
-          asSectionButtons
-        />
-      </DeskChrome>
-
       {/* Sticky GEX walls + regime + session path (Phase 2.5 / 3) */}
       <GexLevelsStrip className="bg-card/50" showSpark />
 

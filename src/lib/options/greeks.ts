@@ -48,7 +48,6 @@ export function computeGreeks(
   const d2 = d1 - volSqrtT;
 
   const pdf = normPdf(d1);
-  const nd2 = type === 'call' ? normCdf(d2) : normCdf(-d2);
   const sign = type === 'call' ? 1 : -1;
 
   const eq = Math.exp(-q * T);
@@ -58,9 +57,12 @@ export function computeGreeks(
   const gamma = eq * pdf / (S * volSqrtT);
   // Raw mathematical vega (dV/dσ) and theta (dV/dT, T in years).
   const vegaRaw = S * eq * pdf * sqrtT;
+  // BS θ (per year): diffusion term shared; r/q terms flip with call vs put.
+  // put r-term is +rKe^{-rT}N(-d2) — not -rK·nd2 with put nd2 (that double-flips wrong).
   const thetaRaw = (-eq * S * pdf * vol / (2 * sqrtT)
-    - r * K * ert * nd2
-    + sign * q * S * eq * (type === 'call' ? normCdf(d1) : normCdf(-d1)));
+    + (type === 'call'
+      ? -r * K * ert * normCdf(d2) + q * S * eq * normCdf(d1)
+      : +r * K * ert * normCdf(-d2) - q * S * eq * normCdf(-d1)));
   // Market convention used across the terminal:
   //   θ  → P&L per calendar day   (raw / 365)
   //   ν  → P&L per 1 volatility point (raw / 100)

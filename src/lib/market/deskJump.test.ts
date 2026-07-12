@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { applyDeskJump, setDeskJump, DESK_JUMP_KEY, consumeDeskJumpOnMount } from './deskJump';
+import { useTerminalStore } from '../../store/terminalStore';
 
 describe('deskJump', () => {
   beforeEach(() => {
@@ -12,14 +13,16 @@ describe('deskJump', () => {
     expect(sessionStorage.getItem(DESK_JUMP_KEY)).toBe('sec-stir');
   });
 
-  it('applyDeskJump clicks sub-mode buttons', () => {
+  it('applyDeskJump sets store section for sub-mode buttons', () => {
+    useTerminalStore.setState({ activeTab: 'positioning' });
     const btn = document.createElement('button');
     btn.id = 'pos-sub-levels';
     const click = vi.fn();
     btn.click = click;
     document.body.appendChild(btn);
     expect(applyDeskJump('pos-sub-levels')).toBe(true);
-    expect(click).toHaveBeenCalled();
+    expect(click).not.toHaveBeenCalled();
+    expect(useTerminalStore.getState().deskSectionId).toBe('pos-sub-levels');
   });
 
   it('applyDeskJump scrolls rates sections', () => {
