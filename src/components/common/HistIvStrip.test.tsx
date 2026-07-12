@@ -47,3 +47,4 @@ describe('HistIvStrip', () => {
     expect(btn).toBeInTheDocument();
   });
 });
+

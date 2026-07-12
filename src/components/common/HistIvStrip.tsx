@@ -7,7 +7,6 @@
  */
 import { fmtPct } from '../../lib/format';
 import { cn } from '../../lib/utils';
-import type { ActiveTab } from '../../lib/options/types';
 
 export type HistIvPoint = {
   /** front (min-DTE) atmIV as a fraction */
