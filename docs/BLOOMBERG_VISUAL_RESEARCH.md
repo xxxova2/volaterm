@@ -6,6 +6,14 @@
 | **Started** | 2026-07-13 |
 | **Product** | VOLATERM |
 | **Principle** | Inspire density + command language; never clone branding or fake institutional feeds |
+| **Long source reader (not summarized)** | **`docs/BLOOMBERG_SOURCE_READER.md`** (~2.4k lines / ~132KB) — full public essays, PDF extracts, HN bodies, X posts, image URLs, organized by topic |
+
+### Operating model (remember)
+
+- **You** paste Hy3 packs; run app; decide commit/next pack.
+- **Grok (orchestrator)** = BBG research + gap map + review Hy3 reports + next pack prompts. Does **not** sit inside Hy3.
+- **Hy3** = scoped implementer of packs you paste.
+- BBG mastery is an **ongoing** track here; Hy3 packs ship slices of it (not “BBG after Hy3”).
 
 ---
 
@@ -60,6 +68,11 @@
 - Pass 2: more Launchpad / monitor screenshots; table cell spark patterns
 - Pass 3: options functions OMON/OVDV stills from public tutorials
 - Pass 4: token CSS proposal (amber fields, red desk bar) for Hy3 pack
+- **Parallel track:** SpotGamma/TRACE-style positioning visuals → `docs/POSITIONING_TRACE_RESEARCH.md` (Images #1–#10 kept; not BBG but same “levels that matter” desk job)
+
+### Utah BBG libguide (2026-07-13)
+
+Source: [campusguides.lib.utah.edu/bloomberg](https://campusguides.lib.utah.edu/bloomberg) — campus policy + product definition (integrated multi-asset terminal; `TRAI` / `BCER` + GO training). Reinforces command+GO grammar; not option GEX screen reference.
 
 ---
 
@@ -68,3 +81,5 @@
 | Date | Note |
 |------|------|
 | 2026-07-13 | Pass 1 scaffold after orchestration Home packs 1–5 |
+| 2026-07-13 | Link TRACE/positioning visual pack; Utah guide note |
+| 2026-07-13 | Built `docs/BLOOMBERG_SOURCE_READER.md` — topic-organized long corpus (official color/Launchpad essays, student PDF full text, Launchpad + tips PDFs, NYIT keys, HN thread, X media URLs). Not a summary. |

@@ -205,19 +205,19 @@ export function CanvasHeatmap({
     : `linear-gradient(90deg, ${colorWithAlpha(legend.info, 0.08)} 0%, ${colorWithAlpha(legend.info, 0.55)} 50%, ${colorWithAlpha(legend.info, 0.93)} 100%)`;
 
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex-1 overflow-hidden" ref={containerRef}>
+    <div className="flex h-full min-h-0 flex-col gap-1">
+      <div className="min-h-0 flex-1 overflow-hidden" ref={containerRef}>
         <canvas
           ref={canvasRef}
           onMouseMove={handleMouseMove}
           onMouseLeave={handleMouseLeave}
           onMouseDown={handleClick}
-          className="cursor-crosshair"
+          className="h-full w-full cursor-crosshair"
           style={{ width: dim.w, height: dim.h }}
         />
       </div>
 
-      <div className="flex items-center justify-between gap-2 px-1">
+      <div className="flex shrink-0 items-center justify-between gap-2 px-1">
         <div className="flex items-center gap-2">
           <span className="text-type-2xs font-mono text-muted-foreground min-w-[4ch] text-right">{txt}</span>
           <div

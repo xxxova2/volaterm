@@ -14,7 +14,7 @@ const Greeks10View = lazy(() =>
   import('./Greeks10View').then((m) => ({ default: m.Greeks10View })),
 );
 
-/** Map legacy deep-links (heatmap / 3D / etc.) onto Desk vs IV + mesh theme. */
+/** Map legacy deep-links (heatmap / 3D / old IV tab) onto Desk + mesh theme. */
 function applyLegacyGreeksJump(sectionId: string | null) {
   if (!sectionId) return;
   if (sectionId === 'greeks-sub-surface3d' || sectionId === 'greeks-mesh') {
@@ -24,15 +24,14 @@ function applyLegacyGreeksJump(sectionId: string | null) {
     useTerminalStore.getState().setDeskSection('greeks-desk');
     return;
   }
+  // greeks-iv retired — IV is Vol Structure; all other greeks-* → desk
   if (
     sectionId.startsWith('greeks-sub-')
     || sectionId === 'greeks-desk'
+    || sectionId === 'greeks-iv'
+    || sectionId === 'iv'
   ) {
     useTerminalStore.getState().setDeskSection('greeks-desk');
-    return;
-  }
-  if (sectionId === 'greeks-iv' || sectionId === 'iv') {
-    useTerminalStore.getState().setDeskSection('greeks-iv');
   }
 }
 

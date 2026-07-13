@@ -2,14 +2,18 @@ import type { VolSnapshot, GreeksProfile, SensitivityMatrix } from './types';
 import { computeGreeks } from './greeks';
 import { normCdf } from './black-scholes';
 
+/** Unit greek keys available on each quote for strike profiles. */
+export type ProfileGreekKey = 'delta' | 'gamma' | 'theta' | 'vega' | 'vanna' | 'charm';
+
 /**
- * Generates a Greeks profile for a specific expiry
- * @param snap - Volatility snapshot containing option data
- * @param expiryIdx - Index of the expiry to analyze
- * @param key - Which Greek to profile ('delta', 'gamma', 'theta', or 'vega')
- * @returns Object containing strikes and corresponding Greek values
+ * Generates a Greeks profile for a specific expiry (per listed quote — call and put rows).
+ * Includes charm / vanna for Benn-style second-order desk profiles.
  */
-export function greeksProfile(snap: VolSnapshot, expiryIdx: number, key: 'delta' | 'gamma' | 'theta' | 'vega'): GreeksProfile {
+export function greeksProfile(
+  snap: VolSnapshot,
+  expiryIdx: number,
+  key: ProfileGreekKey,
+): GreeksProfile {
   const slice = snap.expiries[expiryIdx];
   if (!slice) return { strikes: [], values: [] };
 
@@ -288,13 +292,50 @@ export interface DealerExposure {
   totalVEX: number;
   totalCharm: number;
   gammaFlip: number | null;
+  /** Call Resistance — strike of max call GEX (MenthorQ CR). */
   callWall: number | null;
+  /** Put Support — strike of most negative put GEX (MenthorQ PS). */
   putWall: number | null;
+  /**
+   * High Vol Level — strike of max |net GEX| (vol magnet / key γ node).
+   * MenthorQ-style HVL proxy from public OI; not proprietary.
+   */
+  highVolLevel: number | null;
   /** Weight actually applied (may auto-fallback from oi → volume/unit). */
   weight: ExposureWeight;
   /** True when caller asked for oi but feed had no OI. */
   weightFallback: boolean;
   unitNote: string;
+}
+
+/** One expiry row for MenthorQ-style matrix. */
+export interface DealerExpiryRow {
+  expiry: string;
+  dte: number;
+  totalGEX: number;
+  totalDEX: number;
+  gexShare: number;
+  dexShare: number;
+  callWall: number | null;
+  putWall: number | null;
+  highVolLevel: number | null;
+  gammaFlip: number | null;
+  /** Front ATM-style expected move when atmIV present. */
+  expMove: number | null;
+}
+
+/** Profile series for dual-axis GEX/DEX charts. */
+export interface DealerProfilePoint {
+  strike: number;
+  netGEX: number;
+  netDEX: number;
+  netCharm: number;
+  /** Running sum of netGEX (low→high strikes). */
+  gexCum: number;
+  /** Running sum of netDEX. */
+  dexCum: number;
+  /** Running sum of netCharm. */
+  charmCum: number;
 }
 
 type WeightableQuote = {
@@ -410,12 +451,21 @@ function flipFromSeries(points: { strike: number; net: number }[]): number | nul
  */
 export function dealerExposure(
   snap: VolSnapshot,
-  opts?: { maxDte?: number; weight?: ExposureWeight },
+  opts?: {
+    maxDte?: number;
+    /** Keep only expiries with dte ≤ this (same as maxDte when both set — use one). */
+    minDte?: number;
+    /** Exact expiry ISO date (YYYY-MM-DD) to isolate one slice. */
+    expiry?: string;
+    weight?: ExposureWeight;
+  },
 ): DealerExposure {
   const requested = opts?.weight ?? 'oi';
   const resolved = resolveExposureWeight(snap, requested);
   const weight = resolved.weight;
   const maxDte = opts?.maxDte;
+  const minDte = opts?.minDte;
+  const expiryFilter = opts?.expiry;
   const mult = snap.contractSize ?? 100;
   const S = snap.spot;
 
@@ -428,7 +478,9 @@ export function dealerExposure(
   const map = new Map<number, Acc>();
 
   for (const slice of snap.expiries) {
+    if (expiryFilter != null && slice.expiry !== expiryFilter) continue;
     if (maxDte != null && slice.dte > maxDte) continue;
+    if (minDte != null && slice.dte < minDte) continue;
     for (const q of [...slice.calls, ...slice.puts]) {
       const w = weightOf(q, weight);
       if (w <= 0) continue;
@@ -494,6 +546,19 @@ export function dealerExposure(
   const putWall = points.length
     ? [...points].sort((a, b) => a.putGEX - b.putGEX)[0]!.strike
     : null;
+  let highVolLevel: number | null = null;
+  if (points.length) {
+    let best = points[0]!;
+    let bestAbs = Math.abs(best.netGEX);
+    for (const p of points) {
+      const a = Math.abs(p.netGEX);
+      if (a > bestAbs) {
+        bestAbs = a;
+        best = p;
+      }
+    }
+    highVolLevel = best.strike;
+  }
 
   return {
     points,
@@ -504,10 +569,71 @@ export function dealerExposure(
     gammaFlip,
     callWall,
     putWall,
+    highVolLevel,
     weight,
     weightFallback: resolved.fallback,
     unitNote: resolved.note,
   };
+}
+
+/** Cumulative GEX/DEX profiles for dual-line MenthorQ-style charts. */
+export function dealerProfiles(exposure: DealerExposure): DealerProfilePoint[] {
+  let gexCum = 0;
+  let dexCum = 0;
+  let charmCum = 0;
+  return exposure.points.map((p) => {
+    gexCum += p.netGEX;
+    dexCum += p.netDEX;
+    charmCum += p.netCharm;
+    return {
+      strike: p.strike,
+      netGEX: p.netGEX,
+      netDEX: p.netDEX,
+      netCharm: p.netCharm,
+      gexCum,
+      dexCum,
+      charmCum,
+    };
+  });
+}
+
+/**
+ * Per-expiry GEX/DEX matrix (MenthorQ-style). Shares of |book| for readability.
+ */
+export function dealerExposureByExpiry(
+  snap: VolSnapshot,
+  opts?: { weight?: ExposureWeight },
+): DealerExpiryRow[] {
+  const weight = opts?.weight ?? 'oi';
+  const rows: DealerExpiryRow[] = [];
+  for (const slice of snap.expiries) {
+    const d = dealerExposure(snap, { expiry: slice.expiry, weight });
+    const T = Math.max(slice.dte, 0) / 365;
+    const expMove =
+      slice.atmIV > 0 && T > 0
+        ? snap.spot * slice.atmIV * Math.sqrt(T)
+        : null;
+    rows.push({
+      expiry: slice.expiry,
+      dte: slice.dte,
+      totalGEX: d.totalGEX,
+      totalDEX: d.totalDEX,
+      gexShare: 0,
+      dexShare: 0,
+      callWall: d.callWall,
+      putWall: d.putWall,
+      highVolLevel: d.highVolLevel,
+      gammaFlip: d.gammaFlip,
+      expMove,
+    });
+  }
+  const absG = rows.reduce((s, r) => s + Math.abs(r.totalGEX), 0);
+  const absD = rows.reduce((s, r) => s + Math.abs(r.totalDEX), 0);
+  for (const r of rows) {
+    r.gexShare = absG > 0 ? Math.abs(r.totalGEX) / absG : 0;
+    r.dexShare = absD > 0 ? Math.abs(r.totalDEX) / absD : 0;
+  }
+  return rows.sort((a, b) => a.dte - b.dte);
 }
 
 /**
@@ -528,6 +654,120 @@ export function gammaExposure(
     })),
     totalGEX: d.totalGEX,
     gammaFlip: d.gammaFlip,
+  };
+}
+
+/** Metric for strike × expiry dealer calendar (TRACE/VS3D-style cross-section). */
+export type DealerCalendarMetric = 'gex' | 'dex' | 'vex' | 'charm';
+
+export interface DealerCalendarGrid {
+  rows: { expiry: string; dte: number }[];
+  strikes: number[];
+  /** values[rowIdx][strikeIdx] — null when no weight at that node. */
+  values: (number | null)[][];
+  min: number;
+  max: number;
+  metric: DealerCalendarMetric;
+  weight: ExposureWeight;
+  unitNote: string;
+}
+
+function metricFromPoint(
+  p: DealerPoint,
+  metric: DealerCalendarMetric,
+): number {
+  switch (metric) {
+    case 'dex': return p.netDEX;
+    case 'vex': return p.netVEX;
+    case 'charm': return p.netCharm;
+    default: return p.netGEX;
+  }
+}
+
+/**
+ * Strike × expiry dealer exposure grid (calendar GEX / charm heat).
+ * Cross-section of the live chain by expiry — **not** multi-day TRACE history.
+ * spotBand filters strikes around spot; maxStrikes / maxExpiries cap UI cost.
+ */
+export function dealerCalendarGrid(
+  snap: VolSnapshot,
+  metric: DealerCalendarMetric = 'gex',
+  opts?: {
+    weight?: ExposureWeight;
+    /** Keep strikes within this fraction of spot (default 0.12). */
+    spotBand?: number;
+    maxStrikes?: number;
+    maxExpiries?: number;
+  },
+): DealerCalendarGrid {
+  const requested = opts?.weight ?? 'oi';
+  const resolved = resolveExposureWeight(snap, requested);
+  const weight = resolved.weight;
+  const band = opts?.spotBand ?? 0.12;
+  const maxStrikes = opts?.maxStrikes ?? 48;
+  const maxExpiries = opts?.maxExpiries ?? 14;
+  const S = snap.spot;
+
+  const slices = [...snap.expiries]
+    .sort((a, b) => a.dte - b.dte)
+    .slice(0, maxExpiries);
+
+  const perExp = slices.map((slice) => {
+    const d = dealerExposure(snap, { expiry: slice.expiry, weight });
+    const map = new Map<number, number>();
+    for (const p of d.points) {
+      if (band < Infinity && Math.abs(p.strike - S) / S > band) continue;
+      map.set(p.strike, metricFromPoint(p, metric));
+    }
+    return { expiry: slice.expiry, dte: slice.dte, map };
+  });
+
+  const strikeSet = new Set<number>();
+  for (const e of perExp) {
+    for (const k of e.map.keys()) strikeSet.add(k);
+  }
+  let strikes = [...strikeSet].sort((a, b) => a - b);
+  if (strikes.length > maxStrikes) {
+    // Keep nearest to spot
+    strikes = [...strikes]
+      .sort((a, b) => Math.abs(a - S) - Math.abs(b - S))
+      .slice(0, maxStrikes)
+      .sort((a, b) => a - b);
+  }
+
+  const rows = perExp.map((e) => ({ expiry: e.expiry, dte: e.dte }));
+  const values: (number | null)[][] = perExp.map((e) =>
+    strikes.map((k) => {
+      const v = e.map.get(k);
+      return v != null && Number.isFinite(v) ? v : null;
+    }),
+  );
+
+  let min = 0;
+  let max = 0;
+  let any = false;
+  for (const row of values) {
+    for (const v of row) {
+      if (v == null || !Number.isFinite(v)) continue;
+      if (!any) {
+        min = max = v;
+        any = true;
+      } else {
+        if (v < min) min = v;
+        if (v > max) max = v;
+      }
+    }
+  }
+
+  return {
+    rows,
+    strikes,
+    values,
+    min,
+    max,
+    metric,
+    weight,
+    unitNote: resolved.note,
   };
 }
 

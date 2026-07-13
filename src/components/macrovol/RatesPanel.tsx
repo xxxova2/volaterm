@@ -10,7 +10,9 @@ import { ShapeSection } from './rates/ShapeSection';
 import { NyFedBoard } from './rates/NyFedBoard';
 import { StirSection } from './rates/StirSection';
 import { BasisSection } from './rates/BasisSection';
+import { CashFuturesMonitor } from './rates/CashFuturesMonitor';
 import { PlumbingSection } from './rates/PlumbingSection';
+import { PlumbingBarometer } from './rates/PlumbingBarometer';
 import { CurveSection } from './rates/CurveSection';
 import { CorrSection } from './rates/CorrSection';
 import { PremiumSection } from './rates/PremiumSection';
@@ -79,7 +81,9 @@ export function RatesPanel({
           onClose={() => setImplyDrawer(null)}
         />
 
-        {/* ── 1. MONEY MARKETS: data → chart ─────────────────────────── */}
+        {/* ── 1. MONEY MARKETS: barometer → data strip → basis → plumbing ─ */}
+        <PlumbingBarometer plumbing={plumbing} basis={basis} summary={summary} />
+
         <MoneyMarketStrip
           summary={summary}
           basis={basis}
@@ -97,6 +101,13 @@ export function RatesPanel({
             compactData
           />
         )}
+
+        <CashFuturesMonitor
+          treasuryFutures={stir?.treasury_futures}
+          curve={curve}
+          sofr={summary?.sofr ?? stir?.sofr ?? plumbing?.sofr}
+          effr={summary?.effr ?? plumbing?.effr}
+        />
 
         <PlumbingSection plumbing={plumbing} />
 

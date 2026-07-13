@@ -2,18 +2,19 @@ import { useMemo, useState } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 import { useTerminalStore } from '../../store/terminalStore';
 import { Panel } from '../terminal/Panel';
-import { greeksProfile } from '../../lib/options/analytics';
+import { greeksProfile, type ProfileGreekKey } from '../../lib/options/analytics';
 import { fmtPrice } from '../../lib/format';
-import { CHART, CHART_GREEK, chartAxisTick, chartGridProps } from '../../lib/chartTheme';
+import { CHART, CHART_GREEK, CHART_GREEK_EXT, chartAxisTick, chartGridProps } from '../../lib/chartTheme';
 
-type GreekKey = 'delta' | 'gamma' | 'theta' | 'vega';
+type GreekKey = ProfileGreekKey;
 
 const GREEKS: { key: GreekKey; label: string }[] = [
   { key: 'delta', label: 'Delta' },
   { key: 'gamma', label: 'Gamma' },
   { key: 'theta', label: 'Theta' },
   { key: 'vega', label: 'Vega' },
-
+  { key: 'vanna', label: 'Vanna' },
+  { key: 'charm', label: 'Charm' },
 ];
 
 const COLORS: Record<GreekKey, string> = {
@@ -21,6 +22,8 @@ const COLORS: Record<GreekKey, string> = {
   gamma: CHART_GREEK.gamma,
   theta: CHART_GREEK.theta,
   vega: CHART_GREEK.vega,
+  vanna: CHART_GREEK_EXT.vanna,
+  charm: CHART_GREEK_EXT.charm,
 };
 
 export function GreeksProfileView() {

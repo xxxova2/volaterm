@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import {
   macrovolApi,
   type RatesSummary,
@@ -8,8 +8,11 @@ import {
   type CryptoSpotData,
 } from '../../lib/macrovol/api';
 import { cn } from '../../lib/utils';
+import { BRAND } from '../../config/brand';
+import { BOOT_EDUCATION } from '../../config/bootEducation';
 
 const BOOT_MS = 30_000;
+const EDU_ROTATE_MS = 8_000;
 
 function fmtPct(v: number | null | undefined, digits = 2): string {
   if (v == null || !Number.isFinite(v)) return '—';
@@ -34,8 +37,8 @@ export type BootBriefingProps = {
 };
 
 /**
- * First-open screen: show basic rates/macro immediately while chain APIs load
- * in the background (up to ~30s, or sooner when heavy data is ready).
+ * First-open screen: meme + founder + education while rates load fast
+ * and option chains load in the background (up to ~30s).
  */
 export function BootBriefing({ heavyReady, onEnter }: BootBriefingProps) {
   const [rates, setRates] = useState<RatesSummary | null>(null);
@@ -46,6 +49,7 @@ export function BootBriefing({ heavyReady, onEnter }: BootBriefingProps) {
   const [err, setErr] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const [loadingBrief, setLoadingBrief] = useState(true);
+  const [eduIdx, setEduIdx] = useState(0);
   const entered = useRef(false);
 
   const enter = useCallback(() => {
@@ -80,6 +84,14 @@ export function BootBriefing({ heavyReady, onEnter }: BootBriefingProps) {
       }
     })();
     return () => { cancelled = true; };
+  }, []);
+
+  // Rotate education cards while loading.
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      setEduIdx((i) => (i + 1) % BOOT_EDUCATION.length);
+    }, EDU_ROTATE_MS);
+    return () => window.clearInterval(id);
   }, []);
 
   // 30s progress clock; auto-enter when time's up or heavy path is ready.
@@ -141,6 +153,16 @@ export function BootBriefing({ heavyReady, onEnter }: BootBriefingProps) {
     { label: 'NFP', value: fmtN(macro?.nfp_mom, 0, 'k'), sub: 'jobs mom' },
   ];
 
+  const edu = BOOT_EDUCATION[eduIdx] ?? BOOT_EDUCATION[0]!;
+  const topicLabel = useMemo(() => {
+    switch (edu.topic) {
+      case 'greeks': return 'GREEKS';
+      case 'positioning': return 'POSITIONING';
+      case 'rates': return 'RATES / SOFR';
+      default: return 'MARKET';
+    }
+  }, [edu.topic]);
+
   return (
     <div
       className="fixed inset-0 z-[100] flex flex-col bg-[#050505] text-foreground"
@@ -149,26 +171,121 @@ export function BootBriefing({ heavyReady, onEnter }: BootBriefingProps) {
     >
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,_#0f172a_0%,_#050505_55%)]" />
 
-      <header className="relative flex items-center justify-between border-b border-border/60 px-4 py-3">
+      <header className="relative flex items-center justify-between gap-3 border-b border-border/60 px-4 py-3">
         <div>
           <div className="font-mono text-type-xs uppercase tracking-[0.2em] text-muted-foreground">
-            VOLATERM · boot
+            {BRAND.productName} · boot
           </div>
           <h1 className="text-type-lg font-semibold tracking-tight">
             Markets briefing
           </h1>
         </div>
-        <button
-          type="button"
-          onClick={enter}
-          className="rounded border border-border bg-card px-3 py-1.5 font-mono text-type-xs uppercase tracking-wider text-foreground hover:bg-muted"
-        >
-          Enter terminal
-        </button>
+        <div className="flex items-center gap-3">
+          <a
+            href={BRAND.founderXUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hidden items-center gap-2 rounded border border-border/70 bg-card/60 px-2.5 py-1.5 font-mono text-type-2xs text-muted-foreground hover:border-border hover:text-foreground sm:flex"
+          >
+            <span className="text-muted-foreground/80">{BRAND.founderRole}</span>
+            <span className="text-foreground">{BRAND.founderXHandle}</span>
+            <span className="text-muted-foreground">on X</span>
+          </a>
+          <button
+            type="button"
+            onClick={enter}
+            className="rounded border border-border bg-card px-3 py-1.5 font-mono text-type-xs uppercase tracking-wider text-foreground hover:bg-muted"
+          >
+            Enter terminal
+          </button>
+        </div>
       </header>
 
-      <main className="relative flex flex-1 flex-col gap-4 overflow-y-auto p-4 md:p-6">
-        <p className="max-w-2xl text-type-sm text-muted-foreground">
+      <main className="relative flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4 md:p-6">
+        {/* Top: founder + rotating education (compact) */}
+        <section className="grid shrink-0 grid-cols-1 gap-3 lg:grid-cols-2">
+          <div className="rounded border border-border/70 bg-card/70 px-3 py-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <div className="font-mono text-type-2xs uppercase tracking-wider text-muted-foreground">
+                  Built by
+                </div>
+                <div className="mt-0.5 font-mono text-type-sm text-foreground">
+                  {BRAND.founderName}{' '}
+                  <span className="text-muted-foreground">· {BRAND.founderRole}</span>
+                </div>
+              </div>
+              <a
+                href={BRAND.founderXUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="rounded border border-sky-500/40 bg-sky-500/10 px-3 py-1.5 font-mono text-type-xs text-sky-300 hover:bg-sky-500/20"
+              >
+                Follow {BRAND.founderXHandle}
+              </a>
+            </div>
+            <p className="mt-2 max-w-xl text-type-xs text-muted-foreground">
+              {BRAND.productName} — {BRAND.tagline}. Free APIs load on a shared server budget
+              (not per visitor burst). Chains update on the desk cadence while you read.
+            </p>
+          </div>
+
+          <div
+            className="flex min-h-[120px] flex-col rounded border border-border/70 bg-card/80 px-3 py-2.5"
+            aria-live="polite"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-mono text-type-2xs uppercase tracking-wider text-amber-400/90">
+                While you wait · {topicLabel}
+              </span>
+              <span className="font-mono text-type-2xs text-muted-foreground">
+                {eduIdx + 1}/{BOOT_EDUCATION.length}
+              </span>
+            </div>
+            <h2 className="mt-1 font-mono text-type-sm font-semibold text-foreground">
+              {edu.title}
+            </h2>
+            <p className="mt-1.5 flex-1 text-type-xs leading-relaxed text-muted-foreground">
+              {edu.body}
+            </p>
+            <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+              <span className="font-mono text-type-2xs text-muted-foreground/80">
+                Source: {edu.source} · educational only
+              </span>
+              <div className="flex gap-1">
+                {BOOT_EDUCATION.map((c, i) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    aria-label={`Show tip ${i + 1}`}
+                    onClick={() => setEduIdx(i)}
+                    className={cn(
+                      'h-1.5 w-1.5 rounded-full transition-colors',
+                      i === eduIdx ? 'bg-amber-400' : 'bg-muted-foreground/40 hover:bg-muted-foreground/70',
+                    )}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Meme: ~42% of viewport height — fills empty lower page */}
+        <figure className="flex h-[42vh] min-h-[220px] max-h-[48vh] shrink-0 flex-col overflow-hidden rounded border border-border/70 bg-card/50">
+          <img
+            src={BRAND.bootMemeSrc}
+            alt={BRAND.bootMemeAlt}
+            className="h-full min-h-0 w-full flex-1 object-contain bg-white"
+            width={640}
+            height={480}
+            decoding="async"
+          />
+          <figcaption className="shrink-0 border-t border-border/60 px-2 py-1.5 font-mono text-type-2xs text-muted-foreground">
+            {BRAND.bootMemeAlt}
+          </figcaption>
+        </figure>
+
+        <p className="max-w-2xl shrink-0 text-type-sm text-muted-foreground">
           Basics from FRED · Frankfurter FX · FiscalData auctions · CoinGecko while option chains load.
           You are not blocked on the heavy APIs.
         </p>
@@ -219,9 +336,19 @@ export function BootBriefing({ heavyReady, onEnter }: BootBriefingProps) {
               style={{ width: `${heavyReady ? 100 : progress}%` }}
             />
           </div>
-          <div className="font-mono text-type-2xs text-muted-foreground/80">
-            Source: MacroVol · FRED · Frankfurter · FiscalData · CoinGecko
-            {rates?.as_of ? ` · as of ${new Date(rates.as_of).toLocaleString()}` : ''}
+          <div className="flex flex-wrap items-center justify-between gap-2 font-mono text-type-2xs text-muted-foreground/80">
+            <span>
+              Source: MacroVol · FRED · Frankfurter · FiscalData · CoinGecko
+              {rates?.as_of ? ` · as of ${new Date(rates.as_of).toLocaleString()}` : ''}
+            </span>
+            <a
+              href={BRAND.founderXUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sky-400/90 hover:text-sky-300 sm:hidden"
+            >
+              {BRAND.founderXHandle}
+            </a>
           </div>
         </div>
       </main>

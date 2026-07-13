@@ -20,7 +20,11 @@ export const GLOSSARY: Record<string, GlossaryEntry> = {
   },
   theta: {
     title: 'Theta (Θ)',
-    body: 'Time decay: how much value the option loses per day. For a long option theta is usually negative (you pay for time). Shown per 1 day.',
+    body: 'Time decay per day. Long options usually have negative θ (you pay for time). Short θ is NOT free income — it compensates for expected gamma/volga/vanna risk (Taylor/GVV). Shown per 1 day.',
+  },
+  taylorGvv: {
+    title: 'Taylor / GVV identity',
+    body: 'dV ≈ θ dt + Δ dS + ν dσ + ½ Γ dS² + ½ Volga dσ² + Vanna dS dσ. Short option θ is the premium for taking those second-order risks — not a free carry.',
   },
   // vega shown per 1 vol point (market convention)
   vega: {
@@ -170,12 +174,48 @@ export const GLOSSARY: Record<string, GlossaryEntry> = {
     body: 'Strike where cumulative net GEX crosses zero. With net long γ above the flip, hedges tend to dampen; below (short γ) they can amplify. Mixed when net GEX sign and spot-vs-flip disagree — treat as transition risk.',
   },
   callWall: {
-    title: 'Call Wall',
-    body: 'Strike with the largest call GEX — a common “test level” / range ceiling where dealer hedging can cap rallies if inventory holds.',
+    title: 'Call Resistance (CR)',
+    body: 'Strike with the largest call GEX — Call Resistance wall. A common test level / range ceiling where dealer hedging can cap rallies if inventory holds.',
   },
   putWall: {
-    title: 'Put Wall',
-    body: 'Strike with the most negative put GEX — a common “test level” / range floor where dealer hedging can support or pin price.',
+    title: 'Put Support (PS)',
+    body: 'Strike with the most negative put GEX — Put Support wall. A common test level / range floor where dealer hedging can support or pin price.',
+  },
+  highVolLevel: {
+    title: 'High Vol Level (HVL)',
+    body: 'Strike of maximum |net GEX| on the book — a “vol magnet” / key γ node. Spot vs HVL frames whether the structure is still intact. Public OI proxy, not proprietary MenthorQ levels.',
+  },
+  gexProfile: {
+    title: 'GEX Profile',
+    body: 'Shape of net gamma exposure across strikes (bars) and often a cumulative profile line. +GEX clusters dampen; −GEX troughs can amplify path.',
+  },
+  dexProfile: {
+    title: 'DEX Profile',
+    body: 'Delta exposure across strikes — directional hedge pressure as spot walks. Sister to GEX: γ dampens/amplifies size of moves; DEX tilts hedge direction.',
+  },
+  dealerGradient: {
+    title: 'Dealer 3-pane (VS3D B3 layout)',
+    body: 'Dashboard strip: Positions by Strike (listed put← / call→ OI) beside dual Gamma and Charm gradients (K × DTE heat). Green/red lobes = where γ dampens/amplifies and where charm rehedge concentrates. Live-chain cross-section only — not multi-day TRACE tape, not proprietary MM inventory. Click a cell to isolate that expiry on the dealer chart.',
+  },
+  gexChange1d: {
+    title: 'GEX / DEX Change 1D',
+    body: 'Change in net dealer GEX or DEX vs the prior calendar day’s last sample in this browser (localStorage). Session Δ uses the first sample of today. OI-inferred only — not exchange open interest flow prints. Empty until a prior day is recorded.',
+  },
+  cashFuturesBasis: {
+    title: 'Cash–futures basis (UST)',
+    body: 'Classic relative-value: long cash CTD bond, short Treasury futures, finance in repo. Leverage + margin + rollover risk drive unwind risk when funding tightens (SOFR vs EFFR, RRP drain). VOLATERM pairs continuous futures marks with cash yields for context — not CTD-adjusted basis or G-SIB scores.',
+  },
+  equityForwardBasis: {
+    title: 'Equity forward / basis',
+    body: 'F − S along the option chain: market futures marks when present, else theo F = S e^{(r−q)T}. Annualized carry (F/S − 1)/T. For equities this is the listed cash–forward curve, not UST CTD basis.',
+  },
+  plumbingRegime: {
+    title: 'Plumbing regime',
+    body: 'Funding-corridor state from SOFR−EFFR, RRP, and reserves: excess cash (RRP elevated) vs private-repo / excess collateral (RRP drained). Educational — not a G-SIB score.',
+  },
+  sofrEffr: {
+    title: 'SOFR − EFFR',
+    body: 'Secured overnight vs effective fed funds. Positive SOFR−EFFR can flag dealer balance-sheet / capacity stress in private repo relative to unsecured EFFR prints.',
   },
   maxPain: {
     title: 'Max Pain',

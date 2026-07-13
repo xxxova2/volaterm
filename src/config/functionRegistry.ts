@@ -54,7 +54,8 @@ const CODE_MAP: Record<string, FunctionId> = {
   OVME: 'positioning:pos-sub-strategy',
   GRK: 'greeks',
   DESK: 'greeks:greeks-desk',
-  IVG: 'greeks:greeks-iv',
+  /** IV surface lives on Vol Structure (legacy Greeks IV tab removed). */
+  IVG: 'vol:vol-sub-surface',
   /** Legacy codes → desk (HEAT/PROF/…) or mesh theme (3D). */
   HEAT: 'greeks:greeks-desk',
   PROF: 'greeks:greeks-desk',
@@ -128,7 +129,6 @@ function buildRegistry(): FunctionDescriptor[] {
         label: `${tabLabel(tab)} · ${s.label}`,
         tab,
         sectionId: s.id,
-        heavy: s.id === 'greeks-iv',
         keywords: [s.label, s.short ?? '', s.id, tab],
       });
     }

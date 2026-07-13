@@ -25,6 +25,7 @@ export const RATES_SECTIONS: DeskNavItem[] = [
   { id: 'sec-macro', label: 'US Macro', short: 'Macro', apis: ['FRED'] },
   { id: 'sec-mm-strip', label: 'Money Mkts', short: 'MM', apis: ['FRED', 'NYFed'] },
   { id: 'sec-basis', label: 'ON Basis', short: 'Basis', apis: ['FRED', 'MacroVol'] },
+  { id: 'sec-cash-futures', label: 'Cash–Futures', short: 'C/F', apis: ['yfinance', 'FRED'] },
   { id: 'sec-plumbing', label: 'Plumbing', short: 'Plumb', apis: ['FRED'] },
   { id: 'sec-ust-data', label: 'UST Yields', short: 'UST', apis: ['FRED'] },
   { id: 'sec-curves', label: 'Curve Charts', short: 'Charts', apis: ['FRED', 'yfinance', 'MacroVol', 'FiscalData'] },
@@ -50,11 +51,11 @@ export const VOL_SECTIONS: DeskNavItem[] = [
 
 /**
  * Greeks 1.0 shell sections (red bar).
- * 3D mesh is a surface *theme* inside Desk — not a peer product tab.
+ * IV surface lives on Vol Structure — not a peer Greeks tab (legacy MacroVol split removed).
+ * 3D mesh is a surface *theme* inside Desk.
  */
 export const GREEKS_SECTIONS: DeskNavItem[] = [
   { id: 'greeks-desk', label: 'Greeks Desk', short: 'Desk', apis: ['MacroVol', 'yfinance'] },
-  { id: 'greeks-iv', label: 'IV Surface', short: 'IV', apis: ['MacroVol', 'yfinance'] },
 ];
 
 export const POSITIONING_SECTIONS: DeskNavItem[] = [

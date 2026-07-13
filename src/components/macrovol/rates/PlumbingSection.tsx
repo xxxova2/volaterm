@@ -4,6 +4,7 @@ import {
 import type { PlumbingData } from '../../../lib/macrovol/api';
 import { DataBadge } from '../DataBadge';
 import { CollapsibleSection } from '../../terminal/CollapsibleSection';
+import { Explain } from '../../common/Explain';
 import { CHART, chartAxisTick, chartGridProps, chartTooltipStyle } from '../../../lib/chartTheme';
 
 export function PlumbingSection({ plumbing }: { plumbing: PlumbingData | null }) {
@@ -34,8 +35,14 @@ export function PlumbingSection({ plumbing }: { plumbing: PlumbingData | null })
       apis={['FRED']}
       defaultOpen
       storageKey="rates.sec.plumbing"
-      subtitle="Data (IORB/SOFR/EFFR/RRP) then RRP volume & reserve balance charts · RRP rate is derived (IORB−10bp) when not overridden"
+      subtitle="RRP floor · private repo (SOFR) · EFFR · IORB · SRF ceiling · RRP volume & reserves history"
     >
+      <p className="mb-2 text-type-2xs leading-snug text-muted-foreground">
+        <Explain term="plumbingRegime">Funding hierarchy</Explain>
+        : RRP is the floor for excess cash; private repo (SOFR complex) is where dealer balance
+        sheet capacity shows up; SRF is the ceiling in a scramble. SOFR&gt;EFFR can flag secured
+        tightness vs regulatory-arb EFFR. Public FRED only — not G-SIB scores or haircuts.
+      </p>
       <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
         {rateCards.map((c) => (
           <div key={c.key} className="rounded-lg border border-border bg-background/50 p-3">

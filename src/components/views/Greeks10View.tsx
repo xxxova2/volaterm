@@ -1,12 +1,16 @@
 /**
- * Greeks 1.0 — MacroVol-style rich Greeks desk.
- * Uses MacroVol FastAPI (yfinance) for interpolated greek surfaces, GEX/Charm heatmaps,
- * ATM snapshot, OI ladder, GEX calendar — plus terminal-token IV surface.
+ * Greeks 1.0 — MacroVol-backed Greeks desk (surfaces, GEX, OI ladder, calendar).
+ * IV surface is Vol Structure only — no peer IV tab here.
+ * GEX / positions / calendar: dense VS3D/MenthorQ-style chrome (OI-inferred).
  */
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Cell,
+  ComposedChart, Line,
 } from 'recharts';
+import { dealerExposure } from '../../lib/options/analytics';
+import type { VolSnapshot } from '../../lib/options/types';
+import { fmtCompact, fmtPrice } from '../../lib/format';
 import { macrovolApi, type GreeksData, type HistoryData } from '../../lib/macrovol/api';
 import {
   CHART,
@@ -25,10 +29,13 @@ import {
   chartTooltipStyle,
 } from '../../lib/chartTheme';
 import { DataBadge } from '../macrovol/DataBadge';
-import { IVSurfaceMacro } from '../macrovol/IVSurfaceMacro';
+import { Explain } from '../common/Explain';
 import { useTerminalStore } from '../../store/terminalStore';
 import type { GreekKey } from './greeksTypes';
 import { cn } from '../../lib/utils';
+import { DealerGreekProfiles } from './DealerGreekProfiles';
+import { ChartZoom, useChartZoom } from '../common/ChartZoom';
+import { SessionGexHeatmap } from './SessionGexHeatmap';
 
 const Plot = lazy(() => import('react-plotly.js'));
 const GreeksSurface3D = lazy(() =>
@@ -67,17 +74,14 @@ const GREEKS = [
   { key: 'delta', label: 'DELTA', desc: 'Rate of price change per $1 move in spot', formula: '∂V/∂S = Φ(d₁)', color: CHART_GREEK_EXT.delta },
   { key: 'gamma', label: 'GAMMA', desc: 'Rate of delta change. Peaks ATM', formula: '∂²V/∂S² = φ(d₁)/(S·σ·√T)', color: CHART_GREEK_EXT.gamma },
   { key: 'vega', label: 'VEGA', desc: 'P&L per 1% IV move. Always positive', formula: '∂V/∂σ = S·φ(d₁)·√T', color: CHART_GREEK_EXT.vega },
-  { key: 'theta', label: 'THETA', desc: 'Daily time decay. Negative for long options', formula: '∂V/∂t = −(S·φ(d₁)·σ)/(2√T)', color: CHART_GREEK_EXT.theta },
+  { key: 'theta', label: 'THETA', desc: 'θ ≠ free income — pays for Γ/volga/vanna risk', formula: '∂V/∂t · Taylor: dV≈θdt+…', color: CHART_GREEK_EXT.theta },
   { key: 'vanna', label: 'VANNA', desc: 'dVega/dSpot. How vega changes with spot', formula: '∂²V/∂S∂σ = −φ(d₁)·d₂/σ', color: CHART_GREEK_EXT.vanna },
   { key: 'charm', label: 'CHARM', desc: 'dDelta/dTime. Delta decay per day', formula: '∂²V/∂S∂t', color: CHART_GREEK_EXT.charm },
 ];
 
-type Section = 'greeks' | 'iv';
-
 export function Greeks10View() {
   const storeSymbol = useTerminalStore((s) => s.symbol);
   const snapshot = useTerminalStore((s) => s.snapshot);
-  const deskSectionId = useTerminalStore((s) => s.deskSectionId);
   const setDeskSection = useTerminalStore((s) => s.setDeskSection);
   const setDeskContext = useTerminalStore((s) => s.setDeskContext);
   const [ticker, setTicker] = useState(() => {
@@ -89,9 +93,6 @@ export function Greeks10View() {
   const [ohlc, setOhlc] = useState<HistoryData['data']>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [section, setSection] = useState<Section>(() =>
-    deskSectionId === 'greeks-iv' ? 'iv' : 'greeks',
-  );
   const [surfaceTheme, setSurfaceTheme] = useState<SurfaceTheme>(loadSurfaceTheme);
   const [custom, setCustom] = useState('');
   /** When true, follow terminal symbol so mesh + MacroVol share the underlier. */
@@ -99,22 +100,15 @@ export function Greeks10View() {
   /** Expand ticker chips only when user wants a desk-local override. */
   const [symbolPickerOpen, setSymbolPickerOpen] = useState(false);
 
-  // Red bar / [ ] drive Desk vs IV
   useEffect(() => {
-    if (deskSectionId === 'greeks-iv') setSection('iv');
-    else if (deskSectionId === 'greeks-desk' || !deskSectionId) setSection('greeks');
-  }, [deskSectionId]);
-
-  useEffect(() => {
-    const id = section === 'iv' ? 'greeks-iv' : 'greeks-desk';
-    setDeskSection(id);
+    setDeskSection('greeks-desk');
     setDeskContext({
-      id,
-      label: section === 'iv' ? 'IV Surface' : 'Greeks Desk',
+      id: 'greeks-desk',
+      label: 'Greeks Desk',
       apis: ['MacroVol', 'yfinance'],
     });
     return () => setDeskContext({ id: null, label: null, apis: [] });
-  }, [section, setDeskSection, setDeskContext]);
+  }, [setDeskSection, setDeskContext]);
 
   // Re-read theme when landing from 3D deep-link
   useEffect(() => {
@@ -187,7 +181,6 @@ export function Greeks10View() {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      {/* Header — G1.0 style; Desk/IV also on red bar */}
       <div className="flex flex-wrap items-center gap-1.5 border-b border-border px-2 py-1">
         <span className="text-type-xs font-mono font-bold tracking-wider text-foreground">GREEKS 1.0</span>
         <span className="hidden text-type-2xs font-mono text-muted-foreground sm:inline">
@@ -195,35 +188,30 @@ export function Greeks10View() {
           {data?.r != null && (
             <> · r={(data.r * 100).toFixed(2)}% · q={((data.q ?? 0.013) * 100).toFixed(2)}%</>
           )}
-          {' · '}θ/charm /day · ν /1vol
+          {' · '}θ/charm /day · ν /1vol · IV → Vol Structure
         </span>
-        <div className="ml-auto flex flex-wrap items-center gap-1">
-          {([
-            { id: 'greeks' as const, label: 'Desk' },
-            { id: 'iv' as const, label: 'IV' },
-          ]).map((s) => (
-            <button
-              key={s.id}
-              type="button"
-              onClick={() => setSection(s.id)}
-              className={cn(
-                'rounded px-2 py-0.5 font-mono text-type-xs',
-                section === s.id
-                  ? 'bg-primary text-primary-foreground'
-                  : 'border border-border text-muted-foreground hover:border-primary',
-              )}
-            >
-              {s.label}
-            </button>
-          ))}
-        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        {section === 'iv' ? (
-          <IVSurfaceMacro defaultTicker={ticker} />
-        ) : (
-          <div className="flex flex-col gap-5 p-3 font-mono">
+          <div className="flex flex-col gap-3 p-2 font-mono">
+            {/* Benn / GVV framing — always one click via Explain */}
+            <div className="rounded-lg border border-border/70 bg-card/40 px-2.5 py-1.5 text-type-2xs leading-snug text-muted-foreground">
+              <Explain term="taylorGvv">
+                <span className="font-semibold text-foreground">Taylor / GVV</span>
+              </Explain>
+              {' · '}
+              dV ≈ θ dt + Δ dS + ν dσ + ½ Γ dS² + ½ Volga dσ² + Vanna dS dσ
+              {' · '}
+              <Explain term="theta">θ</Explain>
+              {' compensates expected second-order risk — short options are not free carry. '}
+              Surface shape (GVV) links to these risk factors — keep IV surface as gold standard.
+            </div>
+
+            {/* OI-weighted charm / vanna strike profiles from terminal chain */}
+            {snapshot && (
+              <CharmVannaStrikeProfiles snapshot={snapshot} />
+            )}
+
             {/*
               Symbol chrome: when following terminal (default), underlier is already
               in the header — do not burn a full chip row. Expand only on Change.
@@ -317,35 +305,33 @@ export function Greeks10View() {
 
             {data && !loading && (
               <>
-                {/* ATM snapshot */}
+                {/* ATM snapshot — chips only; formulas live in Explain on greek labels */}
                 <div>
-                  <div className="mb-2 flex flex-wrap items-center gap-2">
-                    <h3 className="text-xs font-semibold text-foreground">ATM GREEKS SNAPSHOT</h3>
-                    <span className="text-type-xs text-muted-foreground">
-                      {ticker} · Spot: ${data.spot?.toFixed(2)} · {data.total_points} option points · nearest expiry
+                  <div className="mb-1 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                    <h3 className="text-type-2xs font-semibold tracking-wide text-foreground">ATM</h3>
+                    <span className="text-type-2xs text-muted-foreground">
+                      {ticker} · ${data.spot?.toFixed(2)} · {data.total_points} pts
                     </span>
-                    <span className="text-type-xs text-up">API: {data.source || 'yfinance'} · MacroVol</span>
                   </div>
-                  <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-6">
+                  <div className="grid grid-cols-3 gap-1 sm:grid-cols-6">
                     {GREEKS.map((g) => (
                       <button
                         key={g.key}
                         type="button"
                         onClick={() => setSelectedGreek(g.key)}
-                        className={`rounded-xl border p-3 text-left transition-all ${
+                        title={`${g.desc} · ${g.formula}`}
+                        className={`rounded border px-1.5 py-1 text-left transition-all ${
                           selectedGreek === g.key
                             ? 'border-primary bg-primary/10'
                             : 'border-border bg-card hover:border-border/80'
                         }`}
                       >
-                        <div className="text-type-xs font-mono" style={{ color: g.color }}>{g.label}</div>
-                        <div className="text-lg font-bold text-foreground">
+                        <div className="text-[10px] font-mono" style={{ color: g.color }}>{g.label}</div>
+                        <div className="font-mono text-sm font-bold tabular-nums text-foreground">
                           {data.atm?.[g.key as keyof typeof data.atm] != null
                             ? Number(data.atm[g.key as keyof typeof data.atm]).toFixed(4)
                             : '—'}
                         </div>
-                        <div className="mt-1 text-type-2xs leading-snug text-muted-foreground">{g.desc}</div>
-                        <div className="mt-1 text-type-2xs text-muted-foreground/70">{g.formula}</div>
                       </button>
                     ))}
                   </div>
@@ -427,20 +413,20 @@ export function Greeks10View() {
                                 aspectmode: 'manual',
                                 aspectratio: { x: 2, y: 1.2, z: 0.8 },
                               },
-                              height: 460,
+                              height: 320,
                             } as never}
                             config={{ responsive: true, displayModeBar: true, displaylogo: false }}
                             style={{ width: '100%' }}
                           />
                         </Suspense>
                       ) : (
-                        <div className="p-6 text-center text-type-xs text-muted-foreground">
+                        <div className="p-4 text-center text-type-2xs text-muted-foreground">
                           No MacroVol surface grid for {greek.label} yet.
                         </div>
                       )
                     ) : (
-                      <Suspense fallback={<div className="p-8 text-center text-xs text-muted-foreground">Loading 3D mesh…</div>}>
-                        <div className="h-[460px]">
+                      <Suspense fallback={<div className="p-4 text-center text-type-2xs text-muted-foreground">Loading 3D mesh…</div>}>
+                        <div className="h-[320px]">
                           <GreeksSurface3D
                             greek={meshGreek}
                             hideGreekPicker
@@ -469,75 +455,36 @@ export function Greeks10View() {
                   ohlc={ohlc}
                 />
 
-                {/* GEX bar chart */}
-                {gexChartData.length > 0 && (
-                  <div>
-                    <h3 className="text-xs font-semibold text-foreground">GAMMA EXPOSURE (GEX)</h3>
-                    <p className="mt-0.5 text-type-xs text-muted-foreground">
-                      Naive dealer GEX (call + / put −) · + = stabilizing · − = destabilizing · not inventory model
-                    </p>
-                    <div className="mt-2 grid grid-cols-3 gap-2">
-                      <div className="rounded-lg border border-border bg-card p-3">
-                        <div className="text-type-xs text-muted-foreground">NET GEX</div>
-                        <div className={`text-lg font-bold ${gexTotal > 0 ? 'text-up' : 'text-down'}`}>
-                          ${(gexTotal / 1e6).toFixed(1)}M
-                        </div>
-                      </div>
-                      <div className="rounded-lg border border-border bg-card p-3">
-                        <div className="text-type-xs text-muted-foreground">GEX FLIP</div>
-                        <div className="text-lg font-bold text-foreground">
-                          {flipStrike != null ? `$${flipStrike.toFixed(0)}` : '—'}
-                        </div>
-                      </div>
-                      <div className="rounded-lg border border-border bg-card p-3">
-                        <div className="text-type-xs text-muted-foreground">SPOT vs FLIP</div>
-                        <div className={`text-lg font-bold ${
-                          flipSide === 'above' ? 'text-up' : flipSide === 'below' ? 'text-down' : 'text-muted-foreground'
-                        }`}>
-                          {flipSide ? flipSide.toUpperCase() : '—'}
-                        </div>
-                      </div>
-                    </div>
-                    {data.gex_convention && (
-                      <p className="mt-1 text-type-2xs text-muted-foreground/80">{data.gex_convention}</p>
-                    )}
-                    <div className="mt-2 rounded-xl border border-border bg-card p-3">
-                      <ResponsiveContainer width="100%" height={260}>
-                        <BarChart data={gexChartData} margin={{ top: 5, right: 16, left: 8, bottom: 32 }}>
-                          <CartesianGrid {...chartGridProps} />
-                          <XAxis dataKey="strike" tick={{ ...chartAxisTick, fontSize: 9 }} angle={-45} textAnchor="end" />
-                          <YAxis tick={{ ...chartAxisTick, fontSize: 9 }} tickFormatter={(v) => `$${v}M`} />
-                          <Tooltip
-                            contentStyle={chartTooltipStyle}
-                            formatter={(v: number) => [`$${v}M`, 'GEX']}
-                            labelFormatter={(l) => `Strike: $${l}`}
-                          />
-                          <ReferenceLine y={0} stroke={CHART.refLine} strokeWidth={1.5} />
-                          <ReferenceLine
-                            x={Math.round(data.spot)}
-                            stroke={CHART.series.brand}
-                            strokeDasharray="4 2"
-                            label={{ value: `Spot $${data.spot?.toFixed(0)}`, fill: CHART.series.brand, fontSize: 9 }}
-                          />
-                          <Bar dataKey="gex" radius={[2, 2, 0, 0]}>
-                            {gexChartData.map((entry, index) => (
-                              <Cell
-                                key={index}
-                                fill={entry.isAtm ? CHART.series.brand : entry.gex >= 0 ? CHART.series.up : CHART.series.down}
-                              />
-                            ))}
-                          </Bar>
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </div>
+                {/* Live chain gamma + charm strike profiles (same book as Positioning) */}
+                {snapshot && (
+                  <div className="rounded border border-border bg-card/30 p-2">
+                    <DealerGreekProfiles snapshot={snapshot} weight="oi" />
                   </div>
                 )}
 
-                {/* OI by strike */}
-                {data.points && <OiByStrike data={data} />}
+                {snapshot && (
+                  <SessionGexHeatmap snapshot={snapshot} symbol={ticker} weight="oi" />
+                )}
 
-                {/* GEX calendar */}
-                {data.points && <GexCalendar data={data} />}
+                {/* Dense GEX book: bars ‖ OI ladder ‖ strike×expiry (VS3D / MenthorQ density) */}
+                {(gexChartData.length > 0 || data.points) && (
+                  <div className="flex flex-col gap-2">
+                    <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
+                      {gexChartData.length > 0 && (
+                        <GexBarsPanel
+                          gexChartData={gexChartData}
+                          gexTotal={gexTotal}
+                          flipStrike={flipStrike}
+                          flipSide={flipSide}
+                          spot={data.spot}
+                          ticker={ticker}
+                        />
+                      )}
+                      {data.points && <OiByStrike data={data} ticker={ticker} />}
+                    </div>
+                    {data.points && <GexCalendar data={data} ticker={ticker} />}
+                  </div>
+                )}
 
                 <DataBadge
                   asOf={data.as_of}
@@ -556,9 +503,111 @@ export function Greeks10View() {
               </>
             )}
           </div>
-        )}
       </div>
     </div>
+  );
+}
+
+/** Plotly that fills ChartZoom overlay when open; fixed desk height otherwise. */
+function PlotlyFill({
+  data,
+  layoutBase,
+  inlineHeight,
+}: {
+  data: never[];
+  layoutBase: Record<string, unknown>;
+  inlineHeight: number;
+}) {
+  const { zoomed } = useChartZoom();
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [boxH, setBoxH] = useState(inlineHeight);
+
+  useEffect(() => {
+    if (!zoomed) {
+      setBoxH(inlineHeight);
+      return;
+    }
+    const el = wrapRef.current;
+    if (!el) return;
+    const measure = () => {
+      const h = Math.floor(el.getBoundingClientRect().height);
+      if (h > 40) setBoxH(h);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [zoomed, inlineHeight]);
+
+  return (
+    <div
+      ref={wrapRef}
+      className={cn('w-full min-h-0', zoomed ? 'h-full min-h-0 flex-1' : '')}
+      style={zoomed ? { height: '100%' } : { height: inlineHeight }}
+    >
+      <Suspense fallback={null}>
+        <Plot
+          data={data}
+          layout={{
+            ...layoutBase,
+            height: boxH,
+            autosize: true,
+          } as never}
+          config={{ responsive: true, displayModeBar: false, displaylogo: false }}
+          style={{ width: '100%', height: boxH }}
+          useResizeHandler
+        />
+      </Suspense>
+    </div>
+  );
+}
+
+function HeatmapPlot({
+  grid,
+  colorscale,
+  label,
+  spot,
+}: {
+  grid: NonNullable<GreeksData['gex_grid']>;
+  colorscale: [number, string][];
+  label: string;
+  spot: number;
+}) {
+  const dteLabels = grid.T_vals.map((t) => Math.round(t * 365));
+  return (
+    <PlotlyFill
+      inlineHeight={220}
+      data={[{
+        type: 'heatmap',
+        x: dteLabels,
+        y: grid.K_vals,
+        z: grid.grid,
+        colorscale,
+        zsmooth: 'best',
+        colorbar: {
+          title: { text: label, font: { color: CHART_RESOLVED.mutedForeground, size: 10 } },
+          thickness: 12,
+          tickfont: { color: CHART_RESOLVED.mutedForeground, size: 9 },
+        },
+        hovertemplate: `DTE: %{x}d<br>Strike: $%{y:.0f}<br>${label}: %{z:.2f}<extra></extra>`,
+      } as never]}
+      layoutBase={{
+        ...PLOTLY_LAYOUT_BASE,
+        font: { ...PLOTLY_LAYOUT_BASE.font, size: 9 },
+        margin: { l: 40, r: 28, t: 18, b: 28 },
+        title: { text: label, font: { color: CHART_RESOLVED.foreground, size: 10 }, x: 0.02 },
+        xaxis: { title: { text: 'DTE' }, ...PLOTLY_AXIS },
+        yaxis: { title: { text: 'K' }, ...PLOTLY_AXIS },
+        shapes: [{
+          type: 'line',
+          x0: Math.min(...dteLabels),
+          y0: spot,
+          x1: Math.max(...dteLabels),
+          y1: spot,
+          line: { color: CHART_HEX.brand, width: 1.5, dash: 'dash' },
+        }],
+      }}
+    />
   );
 }
 
@@ -571,111 +620,167 @@ function HeatMaps({
   ticker: string;
   ohlc: HistoryData['data'];
 }) {
-  const makeHeatmap = (grid: GreeksData['gex_grid'], colorscale: [number, string][], label: string) => {
-    if (!grid?.T_vals?.length || !grid?.K_vals?.length) return null;
-    const dteLabels = grid.T_vals.map((t) => Math.round(t * 365));
-    return (
-      <Suspense fallback={null}>
-        <Plot
-          data={[{
-            type: 'heatmap',
-            x: dteLabels,
-            y: grid.K_vals,
-            z: grid.grid,
-            colorscale,
-            zsmooth: 'best',
-            colorbar: {
-              title: { text: label, font: { color: CHART_RESOLVED.mutedForeground, size: 10 } },
-              thickness: 12,
-              tickfont: { color: CHART_RESOLVED.mutedForeground, size: 9 },
-            },
-            hovertemplate: `DTE: %{x}d<br>Strike: $%{y:.0f}<br>${label}: %{z:.2f}<extra></extra>`,
-          } as never]}
-          layout={{
-            ...PLOTLY_LAYOUT_BASE,
-            font: { ...PLOTLY_LAYOUT_BASE.font, size: 9 },
-            margin: { l: 48, r: 36, t: 28, b: 40 },
-            title: { text: `${label} HEAT MAP`, font: { color: CHART_RESOLVED.foreground, size: 11 }, x: 0.05 },
-            xaxis: { title: { text: 'DTE' }, ...PLOTLY_AXIS },
-            yaxis: { title: { text: 'Strike ($)' }, ...PLOTLY_AXIS },
-            shapes: [{
-              type: 'line',
-              x0: Math.min(...dteLabels),
-              y0: spot,
-              x1: Math.max(...dteLabels),
-              y1: spot,
-              line: { color: CHART_HEX.brand, width: 2, dash: 'dash' },
-            }],
-            height: 340,
-          } as never}
-          config={{ responsive: true, displayModeBar: false, displaylogo: false }}
-          style={{ width: '100%' }}
-        />
-      </Suspense>
-    );
-  };
+  const hasGex = !!(gexGrid?.T_vals?.length && gexGrid?.K_vals?.length);
+  const hasCharm = !!(charmGrid?.T_vals?.length && charmGrid?.K_vals?.length);
 
   return (
-    <div className="flex flex-col gap-3">
-      {ohlc.length > 0 && (
-        <div className="overflow-hidden rounded-xl border border-border bg-card">
-          <Suspense fallback={null}>
-            <Plot
-              data={[{
-                type: 'candlestick',
-                x: ohlc.map((d) => d.date),
-                open: ohlc.map((d) => d.open),
-                high: ohlc.map((d) => d.high),
-                low: ohlc.map((d) => d.low),
-                close: ohlc.map((d) => d.close),
-                increasing: { line: { color: CHART_HEX.up } },
-                decreasing: { line: { color: CHART_HEX.down } },
-                name: ticker,
-              } as never]}
-              layout={{
-                ...PLOTLY_LAYOUT_BASE,
-                font: { ...PLOTLY_LAYOUT_BASE.font, size: 9 },
-                margin: { l: 48, r: 16, t: 28, b: 40 },
-                title: { text: `${ticker} PRICE HISTORY`, font: { color: CHART_RESOLVED.foreground, size: 11 }, x: 0.05 },
-                xaxis: { rangeslider: { visible: false }, gridcolor: PLOTLY_AXIS.gridcolor },
-                yaxis: { title: { text: 'Price ($)' }, gridcolor: PLOTLY_AXIS.gridcolor },
-                height: 220,
-                showlegend: false,
-              } as never}
-              config={{ responsive: true, displayModeBar: false }}
-              style={{ width: '100%' }}
-            />
-          </Suspense>
+    <div className="flex flex-col gap-2">
+      <div className="grid grid-cols-1 gap-2 lg:grid-cols-3">
+        {ohlc.length > 0 && (
+          <div className="overflow-hidden rounded border border-border bg-card lg:col-span-1">
+            <ChartZoom title={`${ticker} price`} bodyClassName="min-h-0" expandedHeightClass="h-[min(88vh,900px)]">
+              <PlotlyFill
+                inlineHeight={140}
+                data={[{
+                  type: 'candlestick',
+                  x: ohlc.map((d) => d.date),
+                  open: ohlc.map((d) => d.open),
+                  high: ohlc.map((d) => d.high),
+                  low: ohlc.map((d) => d.low),
+                  close: ohlc.map((d) => d.close),
+                  increasing: { line: { color: CHART_HEX.up } },
+                  decreasing: { line: { color: CHART_HEX.down } },
+                  name: ticker,
+                } as never]}
+                layoutBase={{
+                  ...PLOTLY_LAYOUT_BASE,
+                  font: { ...PLOTLY_LAYOUT_BASE.font, size: 9 },
+                  margin: { l: 40, r: 12, t: 16, b: 28 },
+                  title: { text: `${ticker}`, font: { color: CHART_RESOLVED.foreground, size: 10 }, x: 0.02 },
+                  xaxis: { rangeslider: { visible: false }, gridcolor: PLOTLY_AXIS.gridcolor },
+                  yaxis: { title: { text: 'Px' }, gridcolor: PLOTLY_AXIS.gridcolor },
+                  showlegend: false,
+                }}
+              />
+            </ChartZoom>
+          </div>
+        )}
+        <div className={cn('grid grid-cols-1 gap-2 md:grid-cols-2', ohlc.length > 0 ? 'lg:col-span-2' : 'lg:col-span-3')}>
+          {hasGex && gexGrid && (
+            <div className="overflow-hidden rounded border border-border bg-card">
+              <ChartZoom title={`${ticker} GEX heatmap`} bodyClassName="min-h-0" expandedHeightClass="h-[min(90vh,960px)]">
+                <HeatmapPlot grid={gexGrid} colorscale={PLOTLY_CS_GEX} label="GEX" spot={spot} />
+              </ChartZoom>
+            </div>
+          )}
+          {hasCharm && charmGrid && (
+            <div className="overflow-hidden rounded border border-border bg-card">
+              <ChartZoom title={`${ticker} CHARM heatmap`} bodyClassName="min-h-0" expandedHeightClass="h-[min(90vh,960px)]">
+                <HeatmapPlot grid={charmGrid} colorscale={PLOTLY_CS_CHARM} label="CHARM" spot={spot} />
+              </ChartZoom>
+            </div>
+          )}
         </div>
-      )}
-      <div>
-        <h3 className="text-xs font-semibold text-foreground">GEX &amp; CHARM EXPOSURE HEAT MAPS</h3>
-        <p className="text-type-xs text-muted-foreground">
-          GEX = γ × OI × sign · Down = dealers short gamma · Up = long gamma · Dashed = spot
-        </p>
       </div>
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-        {makeHeatmap(gexGrid, PLOTLY_CS_GEX, 'GEX') && (
-          <div className="overflow-hidden rounded-xl border border-border bg-card">
-            {makeHeatmap(gexGrid, PLOTLY_CS_GEX, 'GEX')}
-          </div>
-        )}
-        {makeHeatmap(charmGrid, PLOTLY_CS_CHARM, 'CHARM EXPOSURE') && (
-          <div className="overflow-hidden rounded-xl border border-border bg-card">
-            {makeHeatmap(charmGrid, PLOTLY_CS_CHARM, 'CHARM EXPOSURE')}
-          </div>
-        )}
-      </div>
-      {!gexGrid?.T_vals?.length && (
-        <div className="rounded-xl border border-border bg-card py-6 text-center text-type-xs text-muted-foreground">
-          Insufficient option data for GEX heatmap (need ≥10 points with gamma × OI)
+      {!hasGex && (
+        <div className="rounded border border-border bg-card py-3 text-center text-type-2xs text-muted-foreground">
+          No GEX heatmap — need ≥10 γ×OI points
         </div>
       )}
     </div>
   );
 }
 
-function OiByStrike({ data }: { data: GreeksData }) {
+function GexBarsPanel({
+  gexChartData,
+  gexTotal,
+  flipStrike,
+  flipSide,
+  spot,
+  ticker,
+}: {
+  gexChartData: { strike: number; gex: number; isAtm: boolean }[];
+  gexTotal: number;
+  flipStrike: number | null;
+  flipSide: string | null;
+  spot: number;
+  ticker: string;
+}) {
+  return (
+    <div className="rounded border border-border bg-card/50">
+      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 border-b border-border/60 px-2 py-1">
+        <Explain term="gex">
+          <span className="text-type-2xs font-semibold tracking-wide text-foreground">GEX</span>
+        </Explain>
+        <span className={cn('font-mono text-type-xs tabular-nums font-bold', gexTotal > 0 ? 'text-up' : 'text-down')}>
+          ${(gexTotal / 1e6).toFixed(1)}M
+        </span>
+        <span className="text-type-2xs text-muted-foreground">net</span>
+        <span className="text-type-2xs text-muted-foreground">· flip</span>
+        <span className="font-mono text-type-xs tabular-nums text-foreground">
+          {flipStrike != null ? flipStrike.toFixed(0) : '—'}
+        </span>
+        <span className={cn(
+          'font-mono text-type-2xs uppercase',
+          flipSide === 'above' ? 'text-up' : flipSide === 'below' ? 'text-down' : 'text-muted-foreground',
+        )}>
+          {flipSide ? `spot ${flipSide}` : ''}
+        </span>
+        <span className="ml-auto text-type-2xs text-muted-foreground/70">OI-inferred · ±7%</span>
+      </div>
+      <div className="px-1 pb-1 pt-0.5">
+        <ChartZoom title={`${ticker} GEX by strike`} bodyClassName="min-h-0" expandedHeightClass="h-[min(88vh,900px)]">
+          <GexBarsChart data={gexChartData} spot={spot} />
+        </ChartZoom>
+      </div>
+    </div>
+  );
+}
+
+function GexBarsChart({
+  data,
+  spot,
+}: {
+  data: { strike: number; gex: number; isAtm: boolean }[];
+  spot: number;
+}) {
+  const { zoomed } = useChartZoom();
+  const h = zoomed ? '100%' : 148;
+  return (
+    <div className={cn('w-full', zoomed ? 'h-full min-h-0' : '')} style={zoomed ? { height: '100%' } : { height: 148 }}>
+      <ResponsiveContainer width="100%" height={h}>
+        <BarChart data={data} margin={{ top: 2, right: 6, left: 0, bottom: 2 }}>
+          <CartesianGrid {...chartGridProps} vertical={false} />
+          <XAxis
+            dataKey="strike"
+            tick={{ ...chartAxisTick, fontSize: 8 }}
+            interval="preserveStartEnd"
+            tickFormatter={(v) => String(Math.round(Number(v)))}
+            height={18}
+          />
+          <YAxis
+            tick={{ ...chartAxisTick, fontSize: 8 }}
+            width={36}
+            tickFormatter={(v) => `${v}M`}
+          />
+          <Tooltip
+            contentStyle={chartTooltipStyle}
+            formatter={(v: number) => [`$${v}M`, 'GEX']}
+            labelFormatter={(l) => `K ${l}`}
+          />
+          <ReferenceLine y={0} stroke={CHART.refLine} strokeWidth={1} />
+          <ReferenceLine
+            x={Math.round(spot)}
+            stroke={CHART.series.brand}
+            strokeDasharray="3 2"
+            strokeWidth={1}
+          />
+          <Bar dataKey="gex" isAnimationActive={false} maxBarSize={10}>
+            {data.map((entry, index) => (
+              <Cell
+                key={index}
+                fill={entry.isAtm ? CHART.series.brand : entry.gex >= 0 ? CHART.series.up : CHART.series.down}
+              />
+            ))}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+/** VS3D-style OI ladder: put OI left (amber), call OI right (info) — fixed height, nearest strikes. */
+function OiByStrike({ data, ticker }: { data: GreeksData; ticker: string }) {
   const oiByStrike: Record<number, { calls: number; puts: number }> = {};
   data.points.forEach((p) => {
     if (!oiByStrike[p.K]) oiByStrike[p.K] = { calls: 0, puts: 0 };
@@ -683,39 +788,92 @@ function OiByStrike({ data }: { data: GreeksData }) {
     else oiByStrike[p.K]!.puts += p.oi;
   });
   const strikeOIData = Object.entries(oiByStrike)
-    .map(([k, v]) => ({ strike: parseFloat(k), calls: v.calls, puts: -v.puts }))
-    .filter((d) => d.strike >= data.spot * 0.90 && d.strike <= data.spot * 1.10)
+    .map(([k, v]) => ({
+      strike: parseFloat(k),
+      calls: v.calls,
+      puts: -v.puts,
+      net: v.calls - v.puts,
+    }))
+    .filter((d) => d.strike >= data.spot * 0.92 && d.strike <= data.spot * 1.08)
+    .sort((a, b) => Math.abs(a.strike - data.spot) - Math.abs(b.strike - data.spot))
+    .slice(0, 22)
     .sort((a, b) => b.strike - a.strike);
 
   if (strikeOIData.length === 0) return null;
 
+  const maxAbs = Math.max(...strikeOIData.map((d) => Math.max(d.calls, -d.puts)), 1);
+
   return (
-    <div>
-      <h3 className="text-xs font-semibold text-foreground">POSITIONS BY STRIKE</h3>
-      <p className="text-type-xs text-muted-foreground">
-        Puts ← Left · Calls → Right · Open Interest · Spot ${data.spot?.toFixed(0)}
-      </p>
-      <div className="mt-2 rounded-xl border border-border bg-card p-3">
-        <ResponsiveContainer width="100%" height={Math.max(320, strikeOIData.length * 18)}>
-          <BarChart data={strikeOIData} layout="vertical" margin={{ top: 5, right: 16, left: 48, bottom: 5 }} barGap={0}>
-            <CartesianGrid {...chartGridProps} />
-            <XAxis type="number" tick={{ ...chartAxisTick, fontSize: 9 }} tickFormatter={(v) => Math.abs(v).toLocaleString()} />
-            <YAxis type="category" dataKey="strike" tick={{ ...chartAxisTick, fontSize: 9 }} width={48} />
-            <Tooltip
-              contentStyle={chartTooltipStyle}
-              formatter={(v: number, name: string) => [Math.abs(v).toLocaleString(), name === 'calls' ? 'Calls OI' : 'Puts OI']}
-            />
-            <ReferenceLine x={0} stroke={CHART.refLine} strokeWidth={2} />
-            <Bar dataKey="puts" fill={CHART.series.warn} name="puts" radius={[2, 0, 0, 2]} stackId="a" />
-            <Bar dataKey="calls" fill={CHART.series.info} name="calls" radius={[0, 2, 2, 0]} stackId="a" />
-          </BarChart>
-        </ResponsiveContainer>
+    <div className="rounded border border-border bg-card/50">
+      <div className="flex flex-wrap items-baseline gap-x-2 border-b border-border/60 px-2 py-1">
+        <span className="text-type-2xs font-semibold tracking-wide text-foreground">OI BY STRIKE</span>
+        <span className="text-type-2xs text-muted-foreground">
+          put ← · call → · spot {data.spot?.toFixed(0)}
+        </span>
+        <span className="ml-auto text-type-2xs text-muted-foreground/70">listed OI · not MM book</span>
+      </div>
+      <div className="px-1 pb-1 pt-0.5">
+        <ChartZoom title={`${ticker} OI by strike`} bodyClassName="min-h-0" expandedHeightClass="h-[min(88vh,900px)]">
+          <OiLadderChart data={strikeOIData} maxAbs={maxAbs} />
+        </ChartZoom>
       </div>
     </div>
   );
 }
 
-function GexCalendar({ data }: { data: GreeksData }) {
+function OiLadderChart({
+  data,
+  maxAbs,
+}: {
+  data: { strike: number; calls: number; puts: number }[];
+  maxAbs: number;
+}) {
+  const { zoomed } = useChartZoom();
+  const h = zoomed ? '100%' : 148;
+  return (
+    <div className={cn('w-full', zoomed ? 'h-full min-h-0' : '')} style={zoomed ? { height: '100%' } : { height: 148 }}>
+      <ResponsiveContainer width="100%" height={h}>
+        <BarChart
+          data={data}
+          layout="vertical"
+          margin={{ top: 0, right: 4, left: 0, bottom: 0 }}
+          barCategoryGap={1}
+          barGap={0}
+        >
+          <CartesianGrid {...chartGridProps} horizontal={false} />
+          <XAxis
+            type="number"
+            domain={[-maxAbs * 1.05, maxAbs * 1.05]}
+            tick={{ ...chartAxisTick, fontSize: 8 }}
+            tickFormatter={(v) => fmtCompact(Math.abs(v))}
+            height={16}
+          />
+          <YAxis
+            type="category"
+            dataKey="strike"
+            tick={{ ...chartAxisTick, fontSize: 8 }}
+            width={40}
+            tickFormatter={(v) => String(Math.round(Number(v)))}
+          />
+          <Tooltip
+            contentStyle={chartTooltipStyle}
+            formatter={(v: number, name: string) => [
+              Math.abs(v).toLocaleString(),
+              name === 'calls' ? 'Call OI' : 'Put OI',
+            ]}
+            labelFormatter={(l) => `K ${l}`}
+          />
+          <ReferenceLine x={0} stroke={CHART.refLine} strokeWidth={1} />
+          <Bar dataKey="puts" fill={CHART.series.warn} name="puts" isAnimationActive={false} maxBarSize={8} stackId="a" />
+          <Bar dataKey="calls" fill={CHART.series.info} name="calls" isAnimationActive={false} maxBarSize={8} stackId="a" />
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+/** Strike × DTE GEX heat table — dense position-grid language (VS3D Pack B4). */
+function GexCalendar({ data, ticker }: { data: GreeksData; ticker: string }) {
   const gexCalendar: Record<string, Record<number, number>> = {};
   const allExpiries = new Set<number>();
   const allStrikes = new Set<number>();
@@ -730,9 +888,12 @@ function GexCalendar({ data }: { data: GreeksData }) {
     allStrikes.add(p.K);
   });
 
-  const expiries = [...allExpiries].sort((a, b) => a - b).slice(0, 10);
-  const strikes = [...allStrikes].sort((a, b) => b - a)
-    .filter((k) => k >= data.spot * 0.93 && k <= data.spot * 1.07);
+  const expiries = [...allExpiries].sort((a, b) => a - b).slice(0, 8);
+  const strikes = [...allStrikes]
+    .filter((k) => k >= data.spot * 0.94 && k <= data.spot * 1.06)
+    .sort((a, b) => Math.abs(a - data.spot) - Math.abs(b - data.spot))
+    .slice(0, 18)
+    .sort((a, b) => b - a);
 
   if (expiries.length < 2 || strikes.length < 2) return null;
 
@@ -741,68 +902,201 @@ function GexCalendar({ data }: { data: GreeksData }) {
   ), 1);
 
   function gexColor(value: number): string {
-    if (value === 0) return CHART_HEX.ink;
+    if (value === 0) return 'transparent';
     const intensity = Math.min(Math.abs(value) / maxGex, 1);
-    // Anchor to up/down hex (terminal language, not Matrix/blue)
     if (value > 0) {
-      const r = Math.round(0x1a + intensity * (0x51 - 0x1a));
-      const g = Math.round(0x3a + intensity * (0xd7 - 0x3a));
-      const b = Math.round(0x20 + intensity * (0x5e - 0x20));
-      return `rgb(${r},${g},${b})`;
+      const a = 0.15 + intensity * 0.75;
+      return `color-mix(in srgb, ${CHART_HEX.up} ${Math.round(a * 100)}%, transparent)`;
     }
-    const r = Math.round(0x5a + intensity * (0xff - 0x5a));
-    const g = Math.round(0x14 + intensity * (0x2f - 0x14));
-    const b = Math.round(0x18 + intensity * (0x3a - 0x18));
-    return `rgb(${r},${g},${b})`;
+    const a = 0.15 + intensity * 0.75;
+    return `color-mix(in srgb, ${CHART_HEX.down} ${Math.round(a * 100)}%, transparent)`;
   }
 
   return (
-    <div>
-      <h3 className="text-xs font-semibold text-foreground">GAMMA EXPOSURE CALENDAR</h3>
-      <p className="text-type-xs text-muted-foreground">
-        Strike vs Expiry · Up = MM long gamma · Down = MM short gamma
-      </p>
-      <div className="mt-2 max-h-[400px] overflow-auto rounded-xl border border-border bg-card p-2">
-        <table className="w-full border-collapse text-type-xs">
-          <thead>
-            <tr>
-              <th className="w-14 p-1 text-right font-normal text-muted-foreground">Strike</th>
-              {expiries.map((T) => (
-                <th key={T} className="min-w-12 p-1 text-center font-normal text-muted-foreground">
-                  {Math.round(T * 365)}d
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {strikes.map((K) => {
-              const isSpot = Math.abs(K - data.spot) < data.spot * 0.003;
-              return (
-                <tr key={K}>
-                  <td className={`p-1 text-right ${isSpot ? 'font-bold text-foreground' : 'text-muted-foreground'}`}>
-                    {isSpot ? '▶' : ''}{K}
-                  </td>
-                  {expiries.map((T) => {
-                    const val = gexCalendar[T.toFixed(3)]?.[K] || 0;
-                    return (
-                      <td
-                        key={T}
-                        style={{ background: gexColor(val), padding: '3px 4px' }}
-                        className="text-center text-type-2xs"
-                        title={`K=${K} DTE=${Math.round(T * 365)} GEX=$${(val / 1000).toFixed(1)}K`}
-                      >
-                        {Math.abs(val) > maxGex * 0.1
-                          ? `${val > 0 ? '+' : ''}${(val / 1000).toFixed(0)}K`
-                          : ''}
-                      </td>
-                    );
-                  })}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+    <div className="rounded border border-border bg-card/50">
+      <div className="flex flex-wrap items-baseline gap-x-2 border-b border-border/60 px-2 py-1">
+        <span className="text-type-2xs font-semibold tracking-wide text-foreground">GEX CALENDAR</span>
+        <span className="text-type-2xs text-muted-foreground">K × DTE · +γ dampen · −γ free-to-move</span>
+        <span className="ml-auto text-type-2xs text-muted-foreground/70">naive dealer · OI×γ</span>
       </div>
+      <div className="px-1 pb-1 pt-0.5">
+        <ChartZoom title={`${ticker} GEX calendar`} bodyClassName="min-h-0" expandedHeightClass="h-[min(90vh,960px)]">
+          <GexCalendarTable
+            expiries={expiries}
+            strikes={strikes}
+            gexCalendar={gexCalendar}
+            maxGex={maxGex}
+            spot={data.spot}
+            gexColor={gexColor}
+          />
+        </ChartZoom>
+      </div>
+    </div>
+  );
+}
+
+function GexCalendarTable({
+  expiries,
+  strikes,
+  gexCalendar,
+  maxGex,
+  spot,
+  gexColor,
+}: {
+  expiries: number[];
+  strikes: number[];
+  gexCalendar: Record<string, Record<number, number>>;
+  maxGex: number;
+  spot: number;
+  gexColor: (v: number) => string;
+}) {
+  const { zoomed } = useChartZoom();
+  return (
+    <div
+      className={cn('overflow-auto', zoomed ? 'h-full min-h-0' : 'max-h-[200px]')}
+    >
+      <table className={cn(
+        'w-full border-collapse font-mono leading-none',
+        zoomed ? 'text-type-xs' : 'text-[10px]',
+      )}>
+        <thead className="sticky top-0 z-[1] bg-card">
+          <tr>
+            <th className="w-10 px-1 py-0.5 text-right font-normal text-muted-foreground">K</th>
+            {expiries.map((T) => (
+              <th key={T} className="min-w-[2.25rem] px-0.5 py-0.5 text-center font-normal text-muted-foreground">
+                {Math.round(T * 365)}d
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {strikes.map((K) => {
+            const isSpot = Math.abs(K - spot) < spot * 0.004;
+            return (
+              <tr key={K} className={isSpot ? 'bg-primary/10' : undefined}>
+                <td className={cn(
+                  'px-1 py-0.5 text-right tabular-nums',
+                  isSpot ? 'font-bold text-foreground' : 'text-muted-foreground',
+                )}>
+                  {Math.round(K)}
+                </td>
+                {expiries.map((T) => {
+                  const val = gexCalendar[T.toFixed(3)]?.[K] || 0;
+                  const show = Math.abs(val) > maxGex * 0.12;
+                  return (
+                    <td
+                      key={T}
+                      style={{ background: gexColor(val) }}
+                      className="px-0.5 py-0.5 text-center tabular-nums text-foreground/90"
+                      title={`K=${K} · ${Math.round(T * 365)}d · $${(val / 1e3).toFixed(1)}K`}
+                    >
+                      {show ? `${val > 0 ? '+' : ''}${(val / 1e6).toFixed(1)}` : ''}
+                    </td>
+                  );
+                })}
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/** Terminal-chain OI-weighted charm & vanna by strike (sister to MacroVol heatmaps). */
+function CharmVannaStrikeProfiles({ snapshot }: { snapshot: VolSnapshot }) {
+  const chartData = useMemo(() => {
+    const d = dealerExposure(snapshot, { weight: 'oi' });
+    const S = snapshot.spot;
+    return d.points
+      .filter((p) => Math.abs(p.strike - S) / S <= 0.12)
+      .map((p) => ({
+        strike: p.strike,
+        label: fmtPrice(p.strike, p.strike > 1000 ? 0 : 2),
+        charm: p.netCharm / 1e6,
+        vanna: p.netVEX / 1e6,
+      }));
+  }, [snapshot]);
+
+  if (chartData.length < 2) return null;
+
+  return (
+    <div className="rounded-lg border border-border/70 bg-card/40 p-2">
+      <div className="mb-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-type-2xs text-muted-foreground">
+        <Explain term="charmExposure">
+          <span className="font-semibold text-foreground">CHARM · VANNA STRIKE</span>
+        </Explain>
+        <span>OI-weighted $ exposure · terminal chain · ±12% spot</span>
+        <span className="text-muted-foreground/80">· not MacroVol grid (see heatmaps below)</span>
+      </div>
+      <ChartZoom title="Charm · Vanna by strike" bodyClassName="min-h-0" expandedHeightClass="h-[min(88vh,900px)]">
+        <CharmVannaChart data={chartData} />
+      </ChartZoom>
+    </div>
+  );
+}
+
+function CharmVannaChart({
+  data,
+}: {
+  data: { strike: number; label: string; charm: number; vanna: number }[];
+}) {
+  const { zoomed } = useChartZoom();
+  const h = zoomed ? '100%' : 144;
+  return (
+    <div className={cn('w-full', zoomed ? 'h-full min-h-0' : '')} style={zoomed ? { height: '100%' } : { height: 144 }}>
+      <ResponsiveContainer width="100%" height={h}>
+        <ComposedChart data={data} margin={{ top: 4, right: 8, bottom: 4, left: 4 }}>
+          <CartesianGrid {...chartGridProps} />
+          <XAxis
+            dataKey="label"
+            tick={chartAxisTick}
+            stroke={CHART.axisLine}
+            interval={Math.max(0, Math.floor(data.length / 10))}
+          />
+          <YAxis
+            yAxisId="charm"
+            tick={chartAxisTick}
+            stroke={CHART.axisLine}
+            width={44}
+            tickFormatter={(v) => fmtCompact(Number(v) * 1e6)}
+          />
+          <YAxis
+            yAxisId="vanna"
+            orientation="right"
+            tick={chartAxisTick}
+            stroke={CHART.axisLine}
+            width={44}
+            tickFormatter={(v) => fmtCompact(Number(v) * 1e6)}
+          />
+          <ReferenceLine yAxisId="charm" y={0} stroke={CHART.refLine} />
+          <Tooltip
+            contentStyle={chartTooltipStyle}
+            formatter={(v: number, name: string) => [
+              fmtCompact(v * 1e6),
+              name === 'charm' ? 'Charm $ / day' : 'VEX (vanna·S)',
+            ]}
+          />
+          <Bar
+            yAxisId="charm"
+            dataKey="charm"
+            name="charm"
+            fill={CHART_GREEK_EXT.charm}
+            fillOpacity={0.55}
+            isAnimationActive={false}
+          />
+          <Line
+            yAxisId="vanna"
+            type="monotone"
+            dataKey="vanna"
+            name="vanna"
+            stroke={CHART_GREEK_EXT.vanna}
+            strokeWidth={2}
+            dot={false}
+            isAnimationActive={false}
+          />
+        </ComposedChart>
+      </ResponsiveContainer>
     </div>
   );
 }

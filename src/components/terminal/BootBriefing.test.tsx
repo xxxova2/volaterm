@@ -57,6 +57,10 @@ describe('BootBriefing', () => {
       expect(screen.getByText(/3\.58%/)).toBeTruthy();
     });
 
+    // Founder credit + education strip on first paint
+    expect(screen.getByRole('img', { name: /vol surface/i })).toBeTruthy();
+    expect(screen.getByText(/while you wait/i)).toBeTruthy();
+
     fireEvent.click(screen.getByRole('button', { name: /enter terminal/i }));
     expect(onEnter).toHaveBeenCalled();
   });

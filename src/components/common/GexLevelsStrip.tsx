@@ -72,15 +72,22 @@ export function GexLevelsStrip({
   }, [snapshot, dealer]);
 
   useEffect(() => {
-    if (!levels || !snapshot) return;
+    if (!levels || !snapshot || !dealer) return;
+    const band = 0.12;
+    const S = snapshot.spot;
+    const profile = dealer.points
+      .filter((p) => Math.abs(p.strike - S) / S <= band)
+      .map((p) => ({ k: p.strike, g: p.netGEX }));
     const s = recordGexSession(
       symbol,
       snapshot.spot,
       levels.totalGEX,
       levels.gammaFlip,
+      25_000,
+      profile,
     );
     setSeries(s);
-  }, [levels?.totalGEX, levels?.gammaFlip, snapshot?.spot, symbol]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [levels?.totalGEX, levels?.gammaFlip, snapshot?.spot, symbol, dealer]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     setSeries(loadGexSession(symbol));
@@ -130,7 +137,7 @@ export function GexLevelsStrip({
         </span>
         <span>
           <span className="text-muted-foreground">
-            <Explain term="callWall">Call wall</Explain>{' '}
+            <Explain term="callWall">CR</Explain>{' '}
           </span>
           <span className="tabular-nums text-up">
             {levels.callWall != null ? fmtPrice(levels.callWall, 0) : '—'}
@@ -138,10 +145,18 @@ export function GexLevelsStrip({
         </span>
         <span>
           <span className="text-muted-foreground">
-            <Explain term="putWall">Put wall</Explain>{' '}
+            <Explain term="putWall">PS</Explain>{' '}
           </span>
           <span className="tabular-nums text-down">
             {levels.putWall != null ? fmtPrice(levels.putWall, 0) : '—'}
+          </span>
+        </span>
+        <span>
+          <span className="text-muted-foreground">
+            <Explain term="highVolLevel">HVL</Explain>{' '}
+          </span>
+          <span className="tabular-nums text-amber">
+            {levels.highVolLevel != null ? fmtPrice(levels.highVolLevel, 0) : '—'}
           </span>
         </span>
         <span>
@@ -150,6 +165,14 @@ export function GexLevelsStrip({
             {fmtCompact(levels.totalGEX)}
           </span>
         </span>
+        {dealer && (
+          <span title="Net DEX (OI-inferred)">
+            <span className="text-muted-foreground">DEX </span>
+            <span className={cn('tabular-nums', dealer.totalDEX >= 0 ? 'text-up' : 'text-down')}>
+              {fmtCompact(dealer.totalDEX)}
+            </span>
+          </span>
+        )}
 
         {showSpark && sparkVals.length >= 2 && (
           <span className="ml-auto flex items-center gap-1.5" title="Session net GEX path (this browser)">

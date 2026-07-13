@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine,
+  ComposedChart, Line, Cell,
 } from 'recharts';
 import { useTerminalStore } from '../../store/terminalStore';
 import { Panel } from '../terminal/Panel';
@@ -13,9 +14,17 @@ import { Explain } from '../common/Explain';
 import { EmptyState } from '../common/EmptyState';
 import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
 import { VirtualRows } from '../common/VirtualRows';
-import { fmtCompact, fmtPrice, fmtPct, fmtSigned } from '../../lib/format';
+import { fmtCompact, fmtPrice, fmtPct } from '../../lib/format';
+
+/** Compact signed notional for Δ columns. */
+function fmtDeltaCompact(n: number): string {
+  const c = fmtCompact(Math.abs(n));
+  return n >= 0 ? `+${c}` : `−${c}`;
+}
 import {
   dealerExposure,
+  dealerExposureByExpiry,
+  dealerProfiles,
   impliedMove,
   maxPainStrike,
   scanParityEdges,
@@ -34,6 +43,16 @@ import { PERF_BUDGET } from '../../config/perfBudget';
 import { GexLevelsStrip } from '../common/GexLevelsStrip';
 import { StrategyBuilderStrip } from '../common/StrategyBuilderStrip';
 import { consumeDeskJumpOnMount } from '../../lib/market/deskJump';
+import { DealerGradientPanel } from './DealerGradientPanel';
+import { DealerGreekProfiles } from './DealerGreekProfiles';
+import { SessionGexHeatmap } from './SessionGexHeatmap';
+import {
+  computeGexBookDeltas,
+  loadGexBook,
+  recordGexBook,
+  type GexBookDeltas,
+} from '../../lib/options/gexBookStore';
+import { buildBasisCurve } from '../../lib/options/basis';
 
 type Sub = 'chain' | 'dealer' | 'levels' | 'edge' | 'strategy';
 
@@ -62,6 +81,8 @@ function metricFields(m: DealerMetric) {
 }
 
 type StrikeZoom = 'all' | 'atm20' | 'atm10' | 'atm5';
+/** Book slice for MenthorQ-style net GEX chart. */
+type ExpMode = 'all' | '0dte' | 'front' | string; // string = exact expiry
 
 export function PositioningView() {
   const deskSectionId = useTerminalStore((s) => s.deskSectionId);
@@ -69,10 +90,16 @@ export function PositioningView() {
   const [metric, setMetric] = useState<DealerMetric>('gex');
   const [weight, setWeight] = useState<ExposureWeight>('oi');
   const [strikeZoom, setStrikeZoom] = useState<StrikeZoom>('atm20');
+  const [expMode, setExpMode] = useState<ExpMode>('all');
+  const [profileOn, setProfileOn] = useState(true);
   const snapshot = useTerminalStore((s) => s.snapshot);
+  const symbol = useTerminalStore((s) => s.symbol);
   const sviReadout = useTerminalStore((s) => s.sviReadout);
   const arbResult = useTerminalStore((s) => s.arbResult);
   const setDeskContext = useTerminalStore((s) => s.setDeskContext);
+  const [bookDeltas, setBookDeltas] = useState<GexBookDeltas>(() =>
+    computeGexBookDeltas(loadGexBook(symbol)),
+  );
 
   useEffect(() => consumeDeskJumpOnMount(), []);
 
@@ -82,9 +109,57 @@ export function PositioningView() {
     return () => setDeskContext({ id: null, label: null, apis: [] });
   }, [sub, setDeskContext]);
 
+  const dealerOpts = useMemo(() => {
+    const base: { weight: ExposureWeight; maxDte?: number; expiry?: string } = { weight };
+    if (expMode === '0dte') base.maxDte = 0;
+    else if (expMode === 'front' && snapshot?.expiries[0]) {
+      base.expiry = snapshot.expiries[0].expiry;
+    } else if (expMode !== 'all' && expMode !== '0dte' && expMode !== 'front') {
+      base.expiry = expMode;
+    }
+    return base;
+  }, [weight, expMode, snapshot]);
+
   const dealer = useMemo(
+    () => (snapshot ? dealerExposure(snapshot, dealerOpts) : null),
+    [snapshot, dealerOpts],
+  );
+  /** Full book for strip totals / matrix Tot row (unfiltered by expMode). */
+  const dealerAll = useMemo(
     () => (snapshot ? dealerExposure(snapshot, { weight }) : null),
     [snapshot, weight],
+  );
+  const expiryRows = useMemo(
+    () => (snapshot ? dealerExposureByExpiry(snapshot, { weight }) : []),
+    [snapshot, weight],
+  );
+
+  /** Sample book for 1D / session GEX·DEX Δ (browser localStorage). */
+  useEffect(() => {
+    if (!dealerAll || !snapshot) return;
+    const store = recordGexBook(
+      symbol,
+      dealerAll.totalGEX,
+      dealerAll.totalDEX,
+      expiryRows,
+    );
+    setBookDeltas(computeGexBookDeltas(store));
+  }, [
+    symbol,
+    dealerAll?.totalGEX,
+    dealerAll?.totalDEX,
+    expiryRows,
+    snapshot,
+  ]);
+
+  useEffect(() => {
+    setBookDeltas(computeGexBookDeltas(loadGexBook(symbol)));
+  }, [symbol]);
+
+  const profiles = useMemo(() => (dealer ? dealerProfiles(dealer) : []), [dealer]);
+  const equityBasis = useMemo(
+    () => (snapshot ? buildBasisCurve(snapshot) : null),
+    [snapshot],
   );
   const maxPain = useMemo(() => (snapshot ? maxPainStrike(snapshot) : null), [snapshot]);
   const move = useMemo(() => (snapshot ? impliedMove(snapshot) : null), [snapshot]);
@@ -121,16 +196,24 @@ export function PositioningView() {
   const chartData = useMemo(() => {
     if (!dealer || !snapshot) return [];
     const spot = snapshot.spot;
+    const profByStrike = new Map(profiles.map((p) => [p.strike, p]));
     return dealer.points
       .filter((p) => zoomThr === Infinity || Math.abs(p.strike - spot) / spot <= zoomThr)
-      .map((p) => ({
-        strike: p.strike,
-        label: fmtPrice(p.strike, p.strike > 1000 ? 0 : 2),
-        call: (p[fields.call] as number) / 1e6,
-        put: (p[fields.put] as number) / 1e6,
-        net: (p[fields.net] as number) / 1e6,
-      }));
-  }, [dealer, fields.call, fields.put, fields.net, snapshot, zoomThr]);
+      .map((p) => {
+        const prof = profByStrike.get(p.strike);
+        return {
+          strike: p.strike,
+          label: fmtPrice(p.strike, p.strike > 1000 ? 0 : 2),
+          call: (p[fields.call] as number) / 1e6,
+          put: (p[fields.put] as number) / 1e6,
+          net: (p[fields.net] as number) / 1e6,
+          netGex: p.netGEX / 1e6,
+          netDex: p.netDEX / 1e6,
+          gexCum: (prof?.gexCum ?? 0) / 1e6,
+          dexCum: (prof?.dexCum ?? 0) / 1e6,
+        };
+      });
+  }, [dealer, fields.call, fields.put, fields.net, snapshot, zoomThr, profiles]);
 
   /** Snap a price to nearest chart category label (Recharts categorical X needs exact match). */
   const nearestLabel = (price: number | null | undefined): string | null => {
@@ -150,6 +233,32 @@ export function PositioningView() {
   const flipLabel = metric === 'gex' ? nearestLabel(dealer?.gammaFlip) : null;
   const callWallLabel = metric === 'gex' ? nearestLabel(dealer?.callWall) : null;
   const putWallLabel = metric === 'gex' ? nearestLabel(dealer?.putWall) : null;
+  const hvlLabel = metric === 'gex' ? nearestLabel(dealer?.highVolLevel) : null;
+
+  /** Top GEX expiries for 2×2 small multiples (Phase 0.5). */
+  const multiExpPanels = useMemo(() => {
+    if (!snapshot || expiryRows.length === 0) return [];
+    const byAbs = [...expiryRows].sort((a, b) => Math.abs(b.totalGEX) - Math.abs(a.totalGEX));
+    const picks: typeof expiryRows = [];
+    if (expiryRows[0]) picks.push(expiryRows[0]); // front
+    if (expiryRows[1] && !picks.find((p) => p.expiry === expiryRows[1]!.expiry)) {
+      picks.push(expiryRows[1]!);
+    }
+    for (const r of byAbs) {
+      if (picks.length >= 4) break;
+      if (!picks.find((p) => p.expiry === r.expiry)) picks.push(r);
+    }
+    return picks.slice(0, 4).map((row) => {
+      const d = dealerExposure(snapshot, { expiry: row.expiry, weight });
+      const pts = d.points
+        .filter((p) => Math.abs(p.strike - snapshot.spot) / snapshot.spot <= 0.08)
+        .map((p) => ({
+          label: fmtPrice(p.strike, 0),
+          net: p.netGEX / 1e6,
+        }));
+      return { row, pts, spot: snapshot.spot };
+    });
+  }, [snapshot, expiryRows, weight]);
 
   const chartRef = useRef(chartData);
   chartRef.current = chartData;
@@ -236,8 +345,8 @@ export function PositioningView() {
         {sub === 'dealer' && (
           <SectionErrorBoundary name="Dealer">
           <Panel
-            title={<Explain term="dealerStack">Dealer Stack</Explain>}
-            subtitle="Customer long OI → dealers short · pick metric + weight"
+            title={<Explain term="dealerStack">Net GEX · DEX Profile</Explain>}
+            subtitle="OI-inferred · customer long → dealers short · not verified MM books"
             className="h-full"
           >
             {!dealer || dealer.points.length === 0 ? (
@@ -247,7 +356,7 @@ export function PositioningView() {
                 body="Chain has no open interest, volume, or γ to weight. Wait for a live chain or try another symbol."
               />
             ) : (
-              <div className="flex h-full min-h-0 flex-col">
+              <div className="flex h-full min-h-0 flex-col overflow-y-auto">
                 {dealer.weightFallback && (
                   <div
                     className="shrink-0 border-b border-warn/30 bg-warn/10 px-3 py-1 font-mono text-type-2xs text-warn"
@@ -274,13 +383,35 @@ export function PositioningView() {
                       </button>
                     ))}
                   </div>
-                  <div className="flex gap-0.5 ml-2">
+                  <div className="flex gap-0.5 ml-1" title="Expiry book slice">
+                    {(
+                      [
+                        ['all', 'All exp'],
+                        ['0dte', '0DTE'],
+                        ['front', 'Front'],
+                      ] as const
+                    ).map(([id, lab]) => (
+                      <button
+                        key={id}
+                        type="button"
+                        onClick={() => setExpMode(id)}
+                        className={cn(
+                          'rounded px-1.5 py-0.5 font-mono text-type-2xs border',
+                          expMode === id
+                            ? 'border-amber bg-amber/10 text-amber'
+                            : 'border-border text-muted-foreground hover:text-foreground',
+                        )}
+                      >
+                        {lab}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex gap-0.5 ml-1">
                     {([
                       ['oi', 'OI'],
                       ['volume', 'Vol'],
                       ['unit', 'Unit'],
                     ] as const).map(([w, lab]) => {
-                      // When feed has no OI, 'oi' request auto-falls to volume — highlight effective mode
                       const effective = dealer.weight;
                       const active =
                         weight === w || (w === effective && dealer.weightFallback && weight === 'oi');
@@ -309,7 +440,7 @@ export function PositioningView() {
                       );
                     })}
                   </div>
-                  <div className="ml-2 flex gap-0.5" title="Strike axis zoom around spot">
+                  <div className="ml-1 flex gap-0.5" title="Strike axis zoom around spot">
                     {([
                       ['atm5', '±5%'],
                       ['atm10', '±10%'],
@@ -331,19 +462,33 @@ export function PositioningView() {
                       </button>
                     ))}
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => setProfileOn((v) => !v)}
+                    className={cn(
+                      'rounded px-1.5 py-0.5 font-mono text-type-2xs border',
+                      profileOn
+                        ? 'border-primary bg-primary/10 text-foreground'
+                        : 'border-border text-muted-foreground',
+                    )}
+                    title="Toggle cumulative GEX/DEX profile lines"
+                  >
+                    <Explain term="gexProfile">Profiles</Explain>
+                  </button>
                   <div className="ml-auto flex flex-wrap gap-3 font-mono text-type-xs">
                     <StatMini label={`Σ ${metric.toUpperCase()}`} value={fmtCompact(totalVal)} color={totalVal >= 0 ? CHART.series.up : CHART.series.down} />
                     <StatMini label="DEX $" value={fmtCompact(dealer.totalDEX)} color={dealer.totalDEX >= 0 ? CHART.series.up : CHART.series.down} />
-                    <StatMini label="Charm/d" value={fmtCompact(dealer.totalCharm)} />
+                    <StatMini label="CR" value={dealer.callWall != null ? fmtPrice(dealer.callWall, 0) : '—'} color={CHART.series.up} />
+                    <StatMini label="PS" value={dealer.putWall != null ? fmtPrice(dealer.putWall, 0) : '—'} color={CHART.series.down} />
+                    <StatMini label="HVL" value={dealer.highVolLevel != null ? fmtPrice(dealer.highVolLevel, 0) : '—'} color={CHART.series.amber} />
                     <StatMini label="Flip" value={dealer.gammaFlip != null ? fmtPrice(dealer.gammaFlip, 0) : '—'} color={CHART.series.amber} />
                   </div>
                 </div>
-                <div className="flex min-h-[280px] flex-1 flex-col lg:flex-row">
-                  {/* Absolute fill so Recharts ResponsiveContainer gets a real height */}
-                  <div className="relative min-h-[240px] min-w-0 flex-1 basis-0 lg:min-h-0">
+                <div className="flex min-h-[220px] flex-1 flex-col lg:flex-row">
+                  <div className="relative min-h-[200px] min-w-0 flex-1 basis-0 lg:min-h-0">
                     <div className="absolute inset-0">
                       <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={chartData} margin={{ top: 14, right: 12, bottom: 8, left: 4 }}>
+                        <ComposedChart data={chartData} margin={{ top: 16, right: profileOn ? 44 : 12, bottom: 8, left: 4 }}>
                           <CartesianGrid {...chartGridProps} />
                           <XAxis
                             dataKey="label"
@@ -352,59 +497,112 @@ export function PositioningView() {
                             interval={Math.max(0, Math.floor(chartData.length / 14))}
                           />
                           <YAxis
+                            yAxisId="bar"
                             tick={chartAxisTick}
                             tickLine={false}
                             width={44}
                             tickFormatter={(v: number) => `${v.toFixed(0)}M`}
                           />
+                          {profileOn && metric === 'gex' && (
+                            <YAxis
+                              yAxisId="cum"
+                              orientation="right"
+                              tick={{ ...chartAxisTick, fontSize: 8 }}
+                              tickLine={false}
+                              width={40}
+                              tickFormatter={(v: number) => `${v.toFixed(0)}M`}
+                            />
+                          )}
                           <Tooltip contentStyle={chartTooltipStyle} />
-                          <ReferenceLine y={0} stroke={CHART.refLine} />
+                          <ReferenceLine yAxisId="bar" y={0} stroke={CHART.refLine} />
                           {spotLabel && (
                             <ReferenceLine
+                              yAxisId="bar"
                               x={spotLabel}
-                              stroke={CHART.series.amber}
+                              stroke={CHART.series.info}
                               strokeDasharray="4 4"
-                              label={{ value: 'Spot', position: 'top', fill: CHART.series.amber, fontSize: 9, fontFamily: 'JetBrains Mono' }}
+                              label={{ value: 'Spot', position: 'top', fill: CHART.series.info, fontSize: 9, fontFamily: 'JetBrains Mono' }}
                             />
                           )}
                           {flipLabel && flipLabel !== spotLabel && (
                             <ReferenceLine
+                              yAxisId="bar"
                               x={flipLabel}
                               stroke={CHART.series.down}
                               strokeDasharray="3 3"
-                              label={{ value: 'Flip', position: 'top', fill: CHART.series.down, fontSize: 9, fontFamily: 'JetBrains Mono' }}
+                              label={{ value: 'Flip', position: 'top', fill: CHART.series.down, fontSize: 8, fontFamily: 'JetBrains Mono' }}
                             />
                           )}
-                          {callWallLabel && callWallLabel !== flipLabel && (
+                          {callWallLabel && (
                             <ReferenceLine
+                              yAxisId="bar"
                               x={callWallLabel}
                               stroke={CHART.series.up}
                               strokeDasharray="2 4"
-                              label={{ value: 'C-wall', position: 'top', fill: CHART.series.up, fontSize: 8, fontFamily: 'JetBrains Mono' }}
+                              label={{ value: 'CR', position: 'top', fill: CHART.series.up, fontSize: 8, fontFamily: 'JetBrains Mono' }}
                             />
                           )}
-                          {putWallLabel && putWallLabel !== flipLabel && (
+                          {putWallLabel && putWallLabel !== callWallLabel && (
                             <ReferenceLine
+                              yAxisId="bar"
                               x={putWallLabel}
                               stroke={CHART.series.down}
-                              strokeOpacity={0.7}
+                              strokeOpacity={0.85}
                               strokeDasharray="2 4"
-                              label={{ value: 'P-wall', position: 'top', fill: CHART.series.down, fontSize: 8, fontFamily: 'JetBrains Mono' }}
+                              label={{ value: 'PS', position: 'top', fill: CHART.series.down, fontSize: 8, fontFamily: 'JetBrains Mono' }}
+                            />
+                          )}
+                          {hvlLabel && hvlLabel !== callWallLabel && hvlLabel !== putWallLabel && (
+                            <ReferenceLine
+                              yAxisId="bar"
+                              x={hvlLabel}
+                              stroke={CHART.series.amber}
+                              strokeDasharray="5 3"
+                              label={{ value: 'HVL', position: 'top', fill: CHART.series.amber, fontSize: 8, fontFamily: 'JetBrains Mono' }}
                             />
                           )}
                           {metric === 'gex' ? (
-                            <>
-                              <Bar dataKey="call" fill={CHART.series.up} stackId="m" opacity={0.85} name="Call" isAnimationActive={false} />
-                              <Bar dataKey="put" fill={CHART.series.down} stackId="m" opacity={0.85} name="Put" isAnimationActive={false} />
-                            </>
+                            <Bar yAxisId="bar" dataKey="netGex" name="Net GEX $M" isAnimationActive={false}>
+                              {chartData.map((row) => (
+                                <Cell
+                                  key={row.strike}
+                                  fill={row.netGex >= 0 ? CHART.series.up : CHART.series.down}
+                                  fillOpacity={0.88}
+                                />
+                              ))}
+                            </Bar>
                           ) : (
-                            <Bar dataKey="net" fill={CHART.series.cyan} opacity={0.9} name="Net" isAnimationActive={false} />
+                            <Bar yAxisId="bar" dataKey="net" fill={CHART.series.cyan} opacity={0.9} name="Net" isAnimationActive={false} />
                           )}
-                        </BarChart>
+                          {profileOn && metric === 'gex' && (
+                            <>
+                              <Line
+                                yAxisId="cum"
+                                type="monotone"
+                                dataKey="gexCum"
+                                name="GEX profile"
+                                stroke={CHART.series.amber}
+                                strokeWidth={1.75}
+                                dot={false}
+                                isAnimationActive={false}
+                              />
+                              <Line
+                                yAxisId="cum"
+                                type="monotone"
+                                dataKey="dexCum"
+                                name="DEX profile"
+                                stroke={CHART.series.down}
+                                strokeWidth={1.5}
+                                strokeDasharray="4 2"
+                                dot={false}
+                                isAnimationActive={false}
+                              />
+                            </>
+                          )}
+                        </ComposedChart>
                       </ResponsiveContainer>
                     </div>
                   </div>
-                  {/* Keyboard-focusable strike board (dealer-bars) */}
                   <div className="flex h-44 w-full shrink-0 flex-col border-t border-border lg:h-auto lg:min-h-0 lg:w-48 lg:border-l lg:border-t-0">
                     <div className="shrink-0 border-b border-border/60 px-1.5 py-0.5 font-mono text-type-2xs text-muted-foreground">
                       STRIKES · j/k · y copy
@@ -445,10 +643,246 @@ export function PositioningView() {
                     </div>
                   </div>
                 </div>
+
+                {/* Expiry matrix + 1D / session Δ */}
+                {expiryRows.length > 0 && (
+                  <div className="shrink-0 border-t border-border">
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 px-3 py-1 font-mono text-type-2xs text-muted-foreground">
+                      <span className="font-semibold text-foreground">
+                        EXPIRY MATRIX · GEX / DEX / Δ1D · CR / PS / HVL
+                      </span>
+                      <Explain term="gexChange1d">
+                        <span className="cursor-help underline decoration-dotted">
+                          {bookDeltas.hasPriorDay
+                            ? `Δ1D vs ${bookDeltas.priorDay}`
+                            : 'Δ1D after prior day sample'}
+                        </span>
+                      </Explain>
+                      {bookDeltas.gexSession != null && (
+                        <span title="Session change from first sample today">
+                          sess GEX{' '}
+                          <span className={bookDeltas.gexSession >= 0 ? 'text-up' : 'text-down'}>
+                            {fmtDeltaCompact(bookDeltas.gexSession)}
+                          </span>
+                        </span>
+                      )}
+                    </div>
+                    <div className="max-h-40 overflow-auto">
+                      <table className="w-full border-collapse font-mono text-type-2xs">
+                        <thead className="sticky top-0 bg-card">
+                          <tr className="text-muted-foreground">
+                            <th className="px-2 py-0.5 text-left font-normal">DTE</th>
+                            <th className="px-1 py-0.5 text-right font-normal">GEX</th>
+                            <th className="px-1 py-0.5 text-right font-normal">ΔG1D</th>
+                            <th className="px-1 py-0.5 text-right font-normal">%G</th>
+                            <th className="px-1 py-0.5 text-right font-normal">DEX</th>
+                            <th className="px-1 py-0.5 text-right font-normal">ΔD1D</th>
+                            <th className="px-1 py-0.5 text-right font-normal">CR</th>
+                            <th className="px-1 py-0.5 text-right font-normal">PS</th>
+                            <th className="px-1 py-0.5 text-right font-normal">HVL</th>
+                            <th className="px-1 py-0.5 text-right font-normal">EM</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {expiryRows.map((r) => {
+                            const d1 = bookDeltas.byExpiry1d.get(r.expiry);
+                            return (
+                              <tr
+                                key={r.expiry}
+                                className={cn(
+                                  'cursor-pointer border-t border-border/40 hover:bg-muted/20',
+                                  expMode === r.expiry && 'bg-primary/10',
+                                )}
+                                onClick={() => setExpMode(r.expiry)}
+                              >
+                                <td className="px-2 py-0.5 tabular-nums text-foreground">{r.dte}d</td>
+                                <td className={cn('px-1 py-0.5 text-right tabular-nums', r.totalGEX >= 0 ? 'text-up' : 'text-down')}>
+                                  {fmtCompact(r.totalGEX)}
+                                </td>
+                                <td
+                                  className={cn(
+                                    'px-1 py-0.5 text-right tabular-nums',
+                                    d1?.gex1d == null
+                                      ? 'text-muted-foreground'
+                                      : d1.gex1d >= 0
+                                        ? 'text-up'
+                                        : 'text-down',
+                                  )}
+                                >
+                                  {d1?.gex1d != null ? fmtDeltaCompact(d1.gex1d) : '—'}
+                                </td>
+                                <td className="px-1 py-0.5 text-right tabular-nums text-muted-foreground">
+                                  {(r.gexShare * 100).toFixed(0)}%
+                                </td>
+                                <td className={cn('px-1 py-0.5 text-right tabular-nums', r.totalDEX >= 0 ? 'text-up' : 'text-down')}>
+                                  {fmtCompact(r.totalDEX)}
+                                </td>
+                                <td
+                                  className={cn(
+                                    'px-1 py-0.5 text-right tabular-nums',
+                                    d1?.dex1d == null
+                                      ? 'text-muted-foreground'
+                                      : d1.dex1d >= 0
+                                        ? 'text-up'
+                                        : 'text-down',
+                                  )}
+                                >
+                                  {d1?.dex1d != null ? fmtDeltaCompact(d1.dex1d) : '—'}
+                                </td>
+                                <td className="px-1 py-0.5 text-right tabular-nums text-up">
+                                  {r.callWall != null ? fmtPrice(r.callWall, 0) : '—'}
+                                </td>
+                                <td className="px-1 py-0.5 text-right tabular-nums text-down">
+                                  {r.putWall != null ? fmtPrice(r.putWall, 0) : '—'}
+                                </td>
+                                <td className="px-1 py-0.5 text-right tabular-nums text-amber">
+                                  {r.highVolLevel != null ? fmtPrice(r.highVolLevel, 0) : '—'}
+                                </td>
+                                <td className="px-1 py-0.5 text-right tabular-nums text-muted-foreground">
+                                  {r.expMove != null ? `±${fmtPrice(r.expMove, 0)}` : '—'}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                          <tr className="border-t border-border bg-muted/10 font-semibold">
+                            <td className="px-2 py-0.5">Tot</td>
+                            <td className={cn('px-1 py-0.5 text-right', (dealerAll?.totalGEX ?? 0) >= 0 ? 'text-up' : 'text-down')}>
+                              {dealerAll ? fmtCompact(dealerAll.totalGEX) : '—'}
+                            </td>
+                            <td
+                              className={cn(
+                                'px-1 py-0.5 text-right',
+                                bookDeltas.gex1d == null
+                                  ? 'text-muted-foreground'
+                                  : bookDeltas.gex1d >= 0
+                                    ? 'text-up'
+                                    : 'text-down',
+                              )}
+                            >
+                              {bookDeltas.gex1d != null
+                                ? fmtDeltaCompact(bookDeltas.gex1d)
+                                : '—'}
+                            </td>
+                            <td className="px-1 py-0.5 text-right text-muted-foreground">100%</td>
+                            <td className={cn('px-1 py-0.5 text-right', (dealerAll?.totalDEX ?? 0) >= 0 ? 'text-up' : 'text-down')}>
+                              {dealerAll ? fmtCompact(dealerAll.totalDEX) : '—'}
+                            </td>
+                            <td
+                              className={cn(
+                                'px-1 py-0.5 text-right',
+                                bookDeltas.dex1d == null
+                                  ? 'text-muted-foreground'
+                                  : bookDeltas.dex1d >= 0
+                                    ? 'text-up'
+                                    : 'text-down',
+                              )}
+                            >
+                              {bookDeltas.dex1d != null
+                                ? fmtDeltaCompact(bookDeltas.dex1d)
+                                : '—'}
+                            </td>
+                            <td colSpan={4} className="px-1 py-0.5 text-right text-muted-foreground">
+                              all exp · browser sample
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* Gamma + Charm strike profiles (VS3D teaching cards) */}
+                {snapshot && (
+                  <div className="shrink-0 border-t border-border p-2">
+                    <DealerGreekProfiles
+                      snapshot={snapshot}
+                      weight={weight}
+                      expiry={
+                        expMode !== 'all' && expMode !== '0dte' && expMode !== 'front'
+                          ? expMode
+                          : expMode === 'front' && snapshot.expiries[0]
+                            ? snapshot.expiries[0].expiry
+                            : null
+                      }
+                      maxDte={expMode === '0dte' ? 0 : null}
+                    />
+                  </div>
+                )}
+
+                {/* Dual TRACE-style gradients: GEX + Charm calendar heat */}
+                {snapshot && (
+                  <DealerGradientPanel
+                    snapshot={snapshot}
+                    weight={weight}
+                    onExpiryPick={(exp) => setExpMode(exp)}
+                  />
+                )}
+
+                {/* SpotGamma-style session strike × time + GEX ladder */}
+                {snapshot && (
+                  <SessionGexHeatmap
+                    snapshot={snapshot}
+                    symbol={symbol}
+                    weight={weight}
+                  />
+                )}
+
+                {/* Multi-exp small multiples */}
+                {multiExpPanels.length >= 2 && (
+                  <div className="shrink-0 border-t border-border p-2">
+                    <div className="mb-1 font-mono text-type-2xs font-semibold text-muted-foreground">
+                      FOCUS EXPIRIES · net GEX ±8%
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+                      {multiExpPanels.map(({ row, pts }) => (
+                        <button
+                          key={row.expiry}
+                          type="button"
+                          onClick={() => setExpMode(row.expiry)}
+                          className={cn(
+                            'rounded border border-border bg-card/40 p-1 text-left hover:border-primary/50',
+                            expMode === row.expiry && 'border-primary/60 ring-1 ring-primary/30',
+                          )}
+                        >
+                          <div className="mb-0.5 flex justify-between font-mono text-type-2xs">
+                            <span className="text-foreground">{row.dte}d</span>
+                            <span className={row.totalGEX >= 0 ? 'text-up' : 'text-down'}>
+                              {fmtCompact(row.totalGEX)}
+                            </span>
+                          </div>
+                          <div className="h-16">
+                            {pts.length === 0 ? (
+                              <div className="flex h-full items-center justify-center text-type-2xs text-muted-foreground">—</div>
+                            ) : (
+                              <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={pts} margin={{ top: 2, right: 2, bottom: 0, left: 0 }}>
+                                  <ReferenceLine y={0} stroke={CHART.refLine} />
+                                  <Bar dataKey="net" isAnimationActive={false}>
+                                    {pts.map((p, i) => (
+                                      <Cell
+                                        key={i}
+                                        fill={p.net >= 0 ? CHART.series.up : CHART.series.down}
+                                        fillOpacity={0.85}
+                                      />
+                                    ))}
+                                  </Bar>
+                                </BarChart>
+                              </ResponsiveContainer>
+                            )}
+                          </div>
+                          <div className="mt-0.5 flex gap-1 font-mono text-type-2xs text-muted-foreground">
+                            <span className="text-up">CR {row.callWall != null ? fmtPrice(row.callWall, 0) : '—'}</span>
+                            <span className="text-down">PS {row.putWall != null ? fmtPrice(row.putWall, 0) : '—'}</span>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 <div className="border-t border-border px-3 py-1 font-mono text-type-2xs text-muted-foreground leading-snug">
-                  {METRICS.find((m) => m.id === metric)?.unit}. GEX: net+ ≈ dealers long γ (dampen); net− ≈ short γ (amplify).
-                  DEX = signed $ delta inventory of listed OI. VEX = vanna flow. Charm = overnight delta bleed.
-                  Not a free signal — assumes customer long OI / dealers short.
+                  Green/red bars = net GEX by strike. Yellow line = cum GEX profile; dashed orange = cum DEX profile.
+                  CR = Call Resistance · PS = Put Support · HVL = max |GEX| strike. OI-inferred · not a free signal.
                 </div>
               </div>
             )}
@@ -501,16 +935,22 @@ export function PositioningView() {
                     color="text-foreground"
                   />
                   <LevelStat
-                    label="Call Wall"
+                    label="Call Resistance"
                     term="callWall"
                     value={dealer?.callWall != null ? fmtPrice(dealer.callWall, 0) : '—'}
                     color="text-up"
                   />
                   <LevelStat
-                    label="Put Wall"
+                    label="Put Support"
                     term="putWall"
                     value={dealer?.putWall != null ? fmtPrice(dealer.putWall, 0) : '—'}
                     color="text-down"
+                  />
+                  <LevelStat
+                    label="High Vol Level"
+                    term="highVolLevel"
+                    value={dealer?.highVolLevel != null ? fmtPrice(dealer.highVolLevel, 0) : '—'}
+                    color="text-amber"
                   />
                   <LevelStat
                     label="Max Pain"
@@ -560,6 +1000,69 @@ export function PositioningView() {
                   Max pain = strike minimising aggregate option payoff at front expiry.
                 </p>
               </Panel>
+
+              {equityBasis && equityBasis.points.length > 0 && (
+                <Panel
+                  title={<Explain term="equityForwardBasis">Cash–forward / basis</Explain>}
+                  subtitle={
+                    equityBasis.hasMarketMarks
+                      ? 'Market futures marks + theo fills'
+                      : 'Theo F = S e^{(r−q)T} · no listed futures marks'
+                  }
+                >
+                  <div className="max-h-44 overflow-auto">
+                    <table className="w-full border-collapse font-mono text-type-2xs">
+                      <thead className="sticky top-0 bg-card">
+                        <tr className="text-muted-foreground">
+                          <th className="px-2 py-0.5 text-left font-normal">DTE</th>
+                          <th className="px-1 py-0.5 text-right font-normal">F</th>
+                          <th className="px-1 py-0.5 text-right font-normal">F−S</th>
+                          <th className="px-1 py-0.5 text-right font-normal">Ann %</th>
+                          <th className="px-1 py-0.5 text-left font-normal">Src</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {equityBasis.points.slice(0, 12).map((p) => (
+                          <tr key={p.expiry} className="border-t border-border/40">
+                            <td className="px-2 py-0.5 tabular-nums text-foreground">{p.dte}d</td>
+                            <td className="px-1 py-0.5 text-right tabular-nums">
+                              {fmtPrice(p.forward, p.forward > 1000 ? 1 : 2)}
+                            </td>
+                            <td
+                              className={cn(
+                                'px-1 py-0.5 text-right tabular-nums',
+                                p.basis >= 0 ? 'text-up' : 'text-down',
+                              )}
+                            >
+                              {p.basis >= 0 ? '+' : ''}
+                              {fmtPrice(p.basis, 2)}
+                            </td>
+                            <td className="px-1 py-0.5 text-right tabular-nums text-muted-foreground">
+                              {(p.annCarry * 100).toFixed(1)}%
+                            </td>
+                            <td className="px-1 py-0.5 text-muted-foreground">
+                              {p.source === 'market' ? p.instrument || 'mkt' : 'theo'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {equityBasis.perp && (
+                    <p className="border-t border-border px-3 py-1 font-mono text-type-2xs text-muted-foreground">
+                      Perp {equityBasis.perp.instrument}: mark {fmtPrice(equityBasis.perp.mark)} · basis{' '}
+                      <span className={equityBasis.perp.basis >= 0 ? 'text-up' : 'text-down'}>
+                        {equityBasis.perp.basis >= 0 ? '+' : ''}
+                        {fmtPrice(equityBasis.perp.basis, 2)}
+                      </span>
+                    </p>
+                  )}
+                  <p className="border-t border-border px-3 py-1.5 font-mono text-type-2xs text-muted-foreground leading-snug">
+                    Equity cash–forward curve (not UST CTD basis). Spot {fmtPrice(equityBasis.spot)} · r=
+                    {(equityBasis.r * 100).toFixed(2)}% · q={(equityBasis.q * 100).toFixed(2)}%.
+                  </p>
+                </Panel>
+              )}
 
               <Panel title={<Explain term="riskBudget">Risk Budget · stop vs option</Explain>}>
                 <div className="grid grid-cols-2 gap-3 p-3 font-mono">

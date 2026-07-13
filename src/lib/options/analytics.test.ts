@@ -10,6 +10,10 @@ import {
   gammaExposure,
   ivRank,
   dealerExposure,
+  dealerExposureByExpiry,
+  dealerProfiles,
+  dealerCalendarGrid,
+  greeksProfile,
   resolveExposureWeight,
   scanParityEdges,
   realizedVolCloseToClose,
@@ -566,6 +570,39 @@ describe('dealerExposure stack', () => {
     expect(d.totalDEX).not.toBe(0);
     expect(d.callWall).toBe(100);
     expect(d.putWall).toBe(100);
+    expect(d.highVolLevel).toBe(100);
+  });
+
+  it('highVolLevel is strike of max |netGEX|', () => {
+    const multi: VolSnapshot = {
+      ...snap,
+      expiries: [
+        {
+          ...snap.expiries[0]!,
+          calls: [
+            { ...snap.expiries[0]!.calls[0]!, strike: 100, openInterest: 100 },
+            {
+              ...snap.expiries[0]!.calls[0]!,
+              strike: 105,
+              openInterest: 5000,
+              gamma: 0.05,
+            },
+          ],
+          puts: [
+            { ...snap.expiries[0]!.puts[0]!, strike: 100, openInterest: 50 },
+            {
+              ...snap.expiries[0]!.puts[0]!,
+              strike: 95,
+              openInterest: 100,
+              gamma: 0.02,
+            },
+          ],
+        },
+      ],
+    };
+    const d = dealerExposure(multi);
+    expect(d.highVolLevel).toBe(105);
+    expect(d.callWall).toBe(105);
   });
 
   it('unit weight differs from OI weight magnitude', () => {
@@ -592,6 +629,46 @@ describe('dealerExposure stack', () => {
     expect(d.points.length).toBeGreaterThan(0);
     expect(d.totalGEX).not.toBe(0);
     expect(d.unitNote).toMatch(/volume/i);
+  });
+
+  it('dealerProfiles cumulates GEX/DEX/charm', () => {
+    const d = dealerExposure(snap);
+    const prof = dealerProfiles(d);
+    expect(prof).toHaveLength(d.points.length);
+    expect(prof[prof.length - 1]!.gexCum).toBeCloseTo(d.totalGEX, 6);
+    expect(prof[prof.length - 1]!.dexCum).toBeCloseTo(d.totalDEX, 6);
+    expect(prof[prof.length - 1]!.charmCum).toBeCloseTo(d.totalCharm, 6);
+    expect(prof.every((p) => typeof p.netCharm === 'number')).toBe(true);
+  });
+
+  it('dealerExposureByExpiry returns shares', () => {
+    const rows = dealerExposureByExpiry(snap);
+    expect(rows.length).toBe(1);
+    expect(rows[0]!.gexShare).toBe(1);
+    expect(rows[0]!.highVolLevel).toBe(100);
+  });
+
+  it('dealerCalendarGrid builds strike × expiry for gex and charm', () => {
+    const gex = dealerCalendarGrid(snap, 'gex');
+    expect(gex.rows).toHaveLength(1);
+    expect(gex.strikes).toContain(100);
+    expect(gex.values[0]?.[0]).not.toBeNull();
+    expect(gex.metric).toBe('gex');
+
+    const charm = dealerCalendarGrid(snap, 'charm');
+    expect(charm.metric).toBe('charm');
+    expect(charm.strikes.length).toBeGreaterThan(0);
+    // call charm −0.01 * scale + put charm 0.01 * scale → finite net
+    const v = charm.values[0]?.[0];
+    expect(v == null || Number.isFinite(v)).toBe(true);
+  });
+
+  it('greeksProfile supports charm and vanna', () => {
+    const charm = greeksProfile(snap, 0, 'charm');
+    expect(charm.strikes.length).toBe(2); // call + put at 100
+    expect(charm.values.some((v) => v !== 0)).toBe(true);
+    const vanna = greeksProfile(snap, 0, 'vanna');
+    expect(vanna.strikes.length).toBe(2);
   });
 
   it('volume weight uses session volume', () => {

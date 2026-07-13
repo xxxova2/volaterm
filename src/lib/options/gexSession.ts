@@ -22,15 +22,22 @@ export type GexLevels = {
   gammaFlip: number | null;
   callWall: number | null;
   putWall: number | null;
+  /** High Vol Level — max |net GEX| strike. */
+  highVolLevel: number | null;
   regime: GammaRegime;
   aboveFlip: boolean | null;
 };
+
+/** Compact net-GEX sample at a strike (for session strike×time heat). */
+export type GexProfileSample = { k: number; g: number };
 
 export type GexSessionPoint = {
   t: number;
   totalGEX: number;
   flip: number | null;
   spot: number;
+  /** Sparse OI-inferred net GEX by strike at sample time (optional). */
+  profile?: GexProfileSample[];
 };
 
 export type GexSessionSeries = {
@@ -94,7 +101,10 @@ export function classifyGammaRegime(
 export function buildGexLevels(
   symbol: string,
   spot: number,
-  dealer: Pick<DealerExposure, 'totalGEX' | 'gammaFlip' | 'callWall' | 'putWall'> | null,
+  dealer: Pick<
+    DealerExposure,
+    'totalGEX' | 'gammaFlip' | 'callWall' | 'putWall' | 'highVolLevel'
+  > | null,
 ): GexLevels | null {
   if (!dealer || !Number.isFinite(spot)) return null;
   const aboveFlip =
@@ -106,6 +116,7 @@ export function buildGexLevels(
     gammaFlip: dealer.gammaFlip,
     callWall: dealer.callWall,
     putWall: dealer.putWall,
+    highVolLevel: dealer.highVolLevel ?? null,
     regime: classifyGammaRegime(dealer.totalGEX, spot, dealer.gammaFlip),
     aboveFlip,
   };
@@ -138,6 +149,7 @@ function writeStore(series: GexSessionSeries): void {
 
 /**
  * Append a session sample (throttled ≥ 25s). Resets when symbol or calendar day changes.
+ * Optional sparse profile enables strike×time GEX heat as the book is resampled live.
  * Returns the full series for the active symbol/day.
  */
 export function recordGexSession(
@@ -146,6 +158,7 @@ export function recordGexSession(
   totalGEX: number,
   flip: number | null,
   minGapMs = 25_000,
+  profile?: GexProfileSample[],
 ): GexSessionSeries {
   const day = todayKey();
   let series = readStore();
@@ -155,7 +168,15 @@ export function recordGexSession(
   const now = Date.now();
   const last = series.points[series.points.length - 1];
   if (!last || now - last.t >= minGapMs) {
-    series.points.push({ t: now, totalGEX, flip, spot });
+    const pt: GexSessionPoint = { t: now, totalGEX, flip, spot };
+    if (profile && profile.length > 0) {
+      const capped = [...profile]
+        .sort((a, b) => Math.abs(b.g) - Math.abs(a.g))
+        .slice(0, 40)
+        .sort((a, b) => a.k - b.k);
+      pt.profile = capped;
+    }
+    series.points.push(pt);
     if (series.points.length > MAX_POINTS) {
       series.points = series.points.slice(-MAX_POINTS);
     }

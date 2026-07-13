@@ -31,8 +31,10 @@ describe('buildGexLevels', () => {
       gammaFlip: 495,
       callWall: 510,
       putWall: 480,
+      highVolLevel: 505,
     });
     expect(lv?.callWall).toBe(510);
+    expect(lv?.highVolLevel).toBe(505);
     expect(lv?.regime.short).toBe('GEX+');
     expect(lv?.aboveFlip).toBe(true);
   });

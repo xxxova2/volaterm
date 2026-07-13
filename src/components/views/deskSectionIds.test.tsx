@@ -91,10 +91,10 @@ describe('desk section ids are store-driven (no duplicate in-view bars)', () => 
     expect(useTerminalStore.getState().deskSectionId).toBe('vol-sub-surface');
   });
 
-  it('GreeksView registry is Desk + IV (G1.0 shell)', () => {
+  it('GreeksView registry is Desk only (IV surface is Vol Structure)', () => {
     useTerminalStore.setState({ activeTab: 'greeks', deskSectionId: 'greeks-desk' });
     render(<GreeksView />);
-    expect(GREEKS_SECTIONS.map((s) => s.id)).toEqual(['greeks-desk', 'greeks-iv']);
+    expect(GREEKS_SECTIONS.map((s) => s.id)).toEqual(['greeks-desk']);
     for (const s of GREEKS_SECTIONS) {
       expect(sectionsForTab('greeks').some((x) => x.id === s.id)).toBe(true);
     }
