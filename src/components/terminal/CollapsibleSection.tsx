@@ -55,41 +55,41 @@ export function CollapsibleSection({
       )}
       aria-labelledby={`${id}-title`}
     >
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className={cn(
-          'flex w-full items-center gap-1.5 px-2 py-1 text-left font-mono transition-colors',
-          'hover:bg-muted/40 focus-visible:outline-none',
-          open && 'border-b border-border/60',
-        )}
-        aria-expanded={open}
-        aria-controls={`${id}-body`}
-      >
-        <ChevronDown
+      <div className="flex w-full items-center gap-1.5 px-2 py-1">
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
           className={cn(
-            'h-3 w-3 shrink-0 text-muted-foreground transition-transform duration-150',
-            !open && '-rotate-90',
+            'flex min-w-0 flex-1 items-center gap-1.5 text-left font-mono transition-colors',
+            'hover:bg-muted/40 focus-visible:outline-none rounded',
+            open && 'border-b border-border/60',
           )}
-          aria-hidden
-        />
-        <h3 id={`${id}-title`} className="text-type-xs font-semibold text-foreground">
-          {title}
-        </h3>
+          aria-expanded={open}
+          aria-controls={`${id}-body`}
+        >
+          <ChevronDown
+            className={cn(
+              'h-3 w-3 shrink-0 text-muted-foreground transition-transform duration-150',
+              !open && '-rotate-90',
+            )}
+            aria-hidden
+          />
+          <h3 id={`${id}-title`} className="text-type-xs font-semibold text-foreground">
+            {title}
+          </h3>
+          <span className="ml-auto shrink-0 text-type-2xs uppercase tracking-wider text-muted-foreground/60">
+            {open ? 'hide' : 'show'}
+          </span>
+        </button>
         {apis && apis.length > 0 && (
-          <span className="hidden sm:inline" onClick={(e) => e.stopPropagation()}>
+          <span className="hidden shrink-0 sm:inline">
             <ApiSources apis={apis} />
           </span>
         )}
         {badge && (
-          <span className="flex min-w-0 flex-wrap items-center gap-1" onClick={(e) => e.stopPropagation()}>
-            {badge}
-          </span>
+          <span className="flex min-w-0 flex-wrap items-center gap-1 shrink-0">{badge}</span>
         )}
-        <span className="ml-auto shrink-0 text-type-2xs uppercase tracking-wider text-muted-foreground/60">
-          {open ? 'hide' : 'show'}
-        </span>
-      </button>
+      </div>
       {open && (
         <div id={`${id}-body`} className="px-2 pb-2 pt-1 font-mono">
           {subtitle && (

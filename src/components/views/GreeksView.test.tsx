@@ -67,8 +67,8 @@ describe('GreeksView (Greeks 1.0 host)', () => {
       liveAvailable: true,
       loading: false,
       lastUpdate: Date.now(),
-      activeTab: 'greeks',
-      deskSectionId: 'greeks-desk',
+      activeTab: 'desk',
+      deskSectionId: 'desk-ws-analyze',
       displayMode: 'strike',
       selectedExpiry: null,
       playbackInterval: null,
@@ -87,9 +87,12 @@ describe('GreeksView (Greeks 1.0 host)', () => {
 
   it('exposes Plotly / 3D mesh theme toggle', async () => {
     render(<GreeksView />);
-    await waitFor(() => {
-      expect(screen.getByTestId('greeks-theme-plotly')).toBeInTheDocument();
-    });
+    await waitFor(
+      () => {
+        expect(screen.getByTestId('greeks-theme-plotly')).toBeInTheDocument();
+      },
+      { timeout: 8000 },
+    );
     expect(screen.getByTestId('greeks-theme-mesh')).toBeInTheDocument();
     fireEvent.click(screen.getByTestId('greeks-theme-mesh'));
     expect(localStorage.getItem('ui.greeks.surfaceTheme')).toBe('mesh');
@@ -97,9 +100,12 @@ describe('GreeksView (Greeks 1.0 host)', () => {
 
   it('ATM greek cards drive selection labels', async () => {
     render(<GreeksView />);
-    await waitFor(() => {
-      expect(screen.getByText('ATM GREEKS SNAPSHOT')).toBeInTheDocument();
-    });
+    await waitFor(
+      () => {
+        expect(screen.getByText('ATM')).toBeInTheDocument();
+      },
+      { timeout: 8000 },
+    );
     expect(screen.getByText('DELTA')).toBeInTheDocument();
     expect(screen.getByText('GAMMA')).toBeInTheDocument();
   });

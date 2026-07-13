@@ -3,29 +3,50 @@ import { sectionsForTab, tabLabel, findSectionMeta } from './deskNav';
 
 describe('deskNav', () => {
   it('labels desks', () => {
-    expect(tabLabel('rates')).toBe('Macros & Rates');
-    expect(tabLabel('vol')).toBe('Vol Structure');
+    expect(tabLabel('rates')).toBe('Rates');
+    expect(tabLabel('vol')).toBe('Vol');
   });
 
-  it('returns rates sections with apis', () => {
+  it('returns rates modes (4) with apis', () => {
     const secs = sectionsForTab('rates');
-    expect(secs.length).toBeGreaterThan(5);
-    expect(secs.find((s) => s.id === 'sec-stir')?.apis).toContain('yfinance');
-    expect(secs.find((s) => s.id === 'sec-japan')?.label).toMatch(/Japan/i);
-    expect(secs.find((s) => s.id === 'sec-fx')?.apis).toContain('Frankfurter');
-    expect(secs.find((s) => s.id === 'sec-auctions')?.apis).toContain('FiscalData');
-    expect(secs.find((s) => s.id === 'sec-global')?.apis).toContain('FRED');
-    expect(secs.find((s) => s.id === 'sec-dv01')).toBeUndefined();
+    expect(secs.length).toBe(4);
+    expect(secs.find((s) => s.id === 'rates-mode-stir')?.apis).toContain('yfinance');
+    expect(secs.find((s) => s.id === 'rates-mode-world')?.label).toMatch(/World/i);
+    expect(secs.find((s) => s.id === 'rates-mode-funding')?.apis).toContain('FRED');
+    expect(secs.find((s) => s.id === 'rates-mode-ust')?.label).toMatch(/UST/i);
   });
 
-  it('positioning includes strategy section', () => {
+  it('positioning is Book + Tools only', () => {
     const secs = sectionsForTab('positioning');
-    expect(secs.find((s) => s.id === 'pos-sub-strategy')?.label).toMatch(/Strategy/i);
+    expect(secs.find((s) => s.id === 'pos-sub-chain')?.label).toMatch(/Book/i);
+    expect(secs.find((s) => s.id === 'pos-sub-tools')?.label).toMatch(/Tools/i);
+    expect(secs.find((s) => s.id === 'pos-sub-strategy')).toBeUndefined();
+  });
+
+  it('crypto is Thalex lab order (Lab first, then Market, then tools)', () => {
+    const secs = sectionsForTab('crypto');
+    expect(secs[0]?.id).toBe('crypto-sub-lab');
+    expect(secs[1]?.id).toBe('crypto-sub-market');
+    expect(secs.find((s) => s.id === 'desk-ws-sim')?.label).toMatch(/Simulator/i);
+    expect(secs.find((s) => s.id === 'desk-ws-backtest')?.label).toMatch(/Backtest/i);
+    expect(secs.find((s) => s.id === 'desk-ws-basis')?.label).toMatch(/Basis/i);
+    expect(secs.find((s) => s.id === 'desk-ws-sim')?.apis).toContain('Thalex');
+    // 2 chrome + 14 Thalex tools
+    expect(secs.length).toBe(16);
+  });
+
+  it('maps crypto tools to thalextech.github.io app slugs', async () => {
+    const { THALEX_APP_SLUG, thalexAppUrl } = await import('./deskSections');
+    expect(THALEX_APP_SLUG['desk-ws-sim']).toBe('simulator');
+    expect(THALEX_APP_SLUG['desk-ws-combopnl']).toBe('combo-pnl');
+    expect(THALEX_APP_SLUG['desk-ws-backtest']).toBe('backtest');
+    expect(thalexAppUrl('desk-ws-grid')).toBe('https://thalextech.github.io/grid/');
+    expect(Object.keys(THALEX_APP_SLUG).length).toBe(14);
   });
 
   it('finds section meta', () => {
-    expect(findSectionMeta('sec-macro', 'rates')?.label).toBe('US Macro');
-    expect(findSectionMeta('sec-mm-strip', 'rates')?.label).toMatch(/Money/i);
+    expect(findSectionMeta('rates-mode-funding', 'rates')?.label).toBe('Funding');
+    expect(findSectionMeta('rates-mode-stir', 'rates')?.label).toMatch(/STIR/i);
     expect(findSectionMeta('vol-sub-smile', 'vol')?.label).toBe('Smile');
   });
 });

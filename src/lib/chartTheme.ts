@@ -136,6 +136,31 @@ export function chartTooltipProps() {
   return { contentStyle: chartTooltipStyle };
 }
 
+/**
+ * Tight numeric Y domain so slow-moving series (reserves ~3T, rates ~3–5%)
+ * do not paint a useless 0→max axis that flattens the path.
+ * padFrac = fraction of range on each side (min floor when range is tiny).
+ */
+export function tightDomain(
+  values: Array<number | null | undefined>,
+  padFrac = 0.12,
+  opts?: { minPadAbs?: number; includeZero?: boolean },
+): [number, number] | ['auto', 'auto'] {
+  const nums = values.filter((v): v is number => v != null && Number.isFinite(v));
+  if (nums.length === 0) return ['auto', 'auto'];
+  let lo = Math.min(...nums);
+  let hi = Math.max(...nums);
+  if (opts?.includeZero) {
+    lo = Math.min(lo, 0);
+    hi = Math.max(hi, 0);
+  }
+  const span = hi - lo;
+  const pad = span > 0
+    ? span * padFrac
+    : Math.max(Math.abs(hi) * padFrac, opts?.minPadAbs ?? 0.05);
+  return [lo - pad, hi + pad];
+}
+
 // ── Canvas 2D / R3F / Plotly resolved colors (hex OK only here) ─────────────
 
 /**

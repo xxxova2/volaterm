@@ -5,7 +5,7 @@ import type { PlumbingData } from '../../../lib/macrovol/api';
 import { DataBadge } from '../DataBadge';
 import { CollapsibleSection } from '../../terminal/CollapsibleSection';
 import { Explain } from '../../common/Explain';
-import { CHART, chartAxisTick, chartGridProps, chartTooltipStyle } from '../../../lib/chartTheme';
+import { CHART, chartAxisTick, chartGridProps, chartTooltipStyle, tightDomain } from '../../../lib/chartTheme';
 
 export function PlumbingSection({ plumbing }: { plumbing: PlumbingData | null }) {
   const rateCards = plumbing
@@ -25,6 +25,8 @@ export function PlumbingSection({ plumbing }: { plumbing: PlumbingData | null })
     date: d.date.slice(5),
     reserves: d.reserves / 1000,
   }));
+  const rrpY = tightDomain(rrpHist.map((d) => d.volume), 0.1, { minPadAbs: 5 });
+  const resY = tightDomain(resHist.map((d) => d.reserves), 0.1, { minPadAbs: 0.05 });
 
   return (
     <CollapsibleSection
@@ -67,7 +69,12 @@ export function PlumbingSection({ plumbing }: { plumbing: PlumbingData | null })
                 <LineChart data={rrpHist}>
                   <CartesianGrid {...chartGridProps} />
                   <XAxis dataKey="date" tick={{ ...chartAxisTick, fontSize: 9 }} interval="preserveStartEnd" />
-                  <YAxis tick={{ ...chartAxisTick, fontSize: 9 }} width={40} />
+                  <YAxis
+                    tick={{ ...chartAxisTick, fontSize: 9 }}
+                    width={44}
+                    domain={rrpY}
+                    tickFormatter={(v) => (Math.abs(v) >= 100 ? `${Math.round(v)}` : Number(v).toFixed(0))}
+                  />
                   <Tooltip contentStyle={chartTooltipStyle} />
                   <Line type="monotone" dataKey="volume" stroke={CHART.series.info} strokeWidth={1.5} dot={false} />
                 </LineChart>
@@ -76,12 +83,17 @@ export function PlumbingSection({ plumbing }: { plumbing: PlumbingData | null })
           )}
           {resHist.length > 0 && (
             <div>
-              <div className="mb-1 text-type-xs text-muted-foreground">RESERVE BALANCES ($T)</div>
+              <div className="mb-1 text-type-xs text-muted-foreground">RESERVE BALANCES ($T) · tight scale (not 0→max)</div>
               <ResponsiveContainer width="100%" height={140}>
                 <LineChart data={resHist}>
                   <CartesianGrid {...chartGridProps} />
                   <XAxis dataKey="date" tick={{ ...chartAxisTick, fontSize: 9 }} interval="preserveStartEnd" />
-                  <YAxis tick={{ ...chartAxisTick, fontSize: 9 }} width={40} />
+                  <YAxis
+                    tick={{ ...chartAxisTick, fontSize: 9 }}
+                    width={44}
+                    domain={resY}
+                    tickFormatter={(v) => Number(v).toFixed(2)}
+                  />
                   <Tooltip contentStyle={chartTooltipStyle} />
                   <Line type="monotone" dataKey="reserves" stroke={CHART.series.up} strokeWidth={1.5} dot={false} />
                 </LineChart>

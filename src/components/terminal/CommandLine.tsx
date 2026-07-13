@@ -1,5 +1,6 @@
 /**
  * Always-on Bloomberg-style command line with categorized autocomplete.
+ * Default full-width row, or compact red-bar embed (far-right, GO play).
  * Categories: FUNCTIONS · SECURITIES (ticker) · SEARCH (keyword hits).
  * Enter / GO runs openFunction; Esc clears highlight / blurs.
  */
@@ -27,8 +28,15 @@ export type CmdRow = {
 interface CommandLineProps {
   onHelp?: () => void;
   onWatchlistFocus?: () => void;
+  /** Display / expiry strip toggle (was PanelToolbar — chrome cut) */
+  onOpenDisplay?: () => void;
   /** When true, focus input (e.g. after Ctrl+K) */
   focusToken?: number;
+  /**
+   * `redbar` — compact search docked far-right on the red function bar
+   * (yellow ▶ on black GO, logical width, saves a full chrome row).
+   */
+  variant?: 'full' | 'redbar';
 }
 
 function categorize(query: string, hits: FunctionDescriptor[]): CmdRow[] {
@@ -89,13 +97,16 @@ function categorize(query: string, hits: FunctionDescriptor[]): CmdRow[] {
 export function CommandLine({
   onHelp,
   onWatchlistFocus,
+  onOpenDisplay,
   focusToken = 0,
+  variant = 'full',
 }: CommandLineProps) {
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
   const [hi, setHi] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
+  const redbar = variant === 'redbar';
 
   const hits = useMemo(() => searchFunctions(query, 16), [query]);
   const rows = useMemo(() => categorize(query, hits), [query, hits]);
@@ -183,19 +194,29 @@ export function CommandLine({
   return (
     <div
       ref={wrapRef}
-      className="relative flex h-6 shrink-0 items-stretch border-b border-border bg-[#060a10]"
+      className={cn(
+        'relative flex shrink-0 items-stretch',
+        redbar
+          ? 'h-full w-[min(14rem,32vw)] min-w-[9.5rem] max-w-[16rem] border-l border-white/25 bg-black/50'
+          : 'h-6 border-b border-border bg-[#060a10]',
+      )}
       role="search"
       aria-label="Command line"
     >
-      {/* Amber GO chevron — BBG command line marker */}
+      {/* Yellow ▶ on black — BBG GO / play */}
       <button
         type="button"
-        className="flex w-7 shrink-0 items-center justify-center bg-primary text-primary-foreground"
+        className={cn(
+          'flex shrink-0 items-center justify-center font-bold leading-none',
+          redbar
+            ? 'w-5 bg-black text-amber-400 hover:bg-black/90 hover:text-amber-300'
+            : 'w-7 bg-primary text-primary-foreground',
+        )}
         title="GO — run command"
         aria-label="GO"
         onClick={() => run(open && rows[hi] ? rows[hi] : null)}
       >
-        <span className="text-sm font-bold leading-none">▶</span>
+        <span className={cn(redbar ? 'text-[10px]' : 'text-sm')}>▶</span>
       </button>
       <input
         ref={inputRef}
@@ -206,23 +227,55 @@ export function CommandLine({
         }}
         onFocus={() => setOpen(true)}
         onKeyDown={onKeyDown}
-        placeholder="<Search functions & securities — Enter GO>"
-        className="min-w-0 flex-1 bg-transparent px-2 font-mono text-type-sm text-foreground outline-none placeholder:text-muted-foreground/50"
+        placeholder={redbar ? 'Search…' : '<Search functions & securities — Enter GO>'}
+        className={cn(
+          'min-w-0 flex-1 bg-transparent font-mono outline-none',
+          redbar
+            ? 'px-1 text-type-2xs text-white placeholder:text-white/40'
+            : 'px-2 text-type-sm text-foreground placeholder:text-muted-foreground/50',
+        )}
         autoComplete="off"
         spellCheck={false}
         aria-autocomplete="list"
         aria-controls="cmd-line-list"
         aria-expanded={open && rows.length > 0}
       />
-      <kbd className="mr-1.5 hidden self-center border border-border/60 px-1 py-0.5 font-mono text-type-2xs text-muted-foreground sm:inline">
-        Enter
-      </kbd>
+      {!redbar && (
+        <>
+          <kbd className="mr-1 hidden self-center border border-border/60 px-1 py-0.5 font-mono text-type-2xs text-muted-foreground lg:inline">
+            Enter
+          </kbd>
+          {onOpenDisplay && (
+            <button
+              type="button"
+              title="Display / expiries strip"
+              onClick={onOpenDisplay}
+              className="shrink-0 border-l border-border/70 px-1.5 font-mono text-type-2xs text-muted-foreground hover:bg-muted/40 hover:text-foreground"
+            >
+              Disp
+            </button>
+          )}
+          <button
+            type="button"
+            title="Help (?)"
+            onClick={() => onHelp?.()}
+            className="shrink-0 border-l border-border/70 px-1.5 font-mono text-type-2xs text-muted-foreground hover:bg-muted/40 hover:text-foreground"
+          >
+            ?
+          </button>
+        </>
+      )}
 
       {open && rows.length > 0 && (
         <ul
           id="cmd-line-list"
           role="listbox"
-          className="absolute left-0 right-0 top-full z-50 max-h-80 overflow-y-auto border border-border bg-card shadow-2xl"
+          className={cn(
+            'absolute z-50 max-h-80 overflow-y-auto border border-border bg-card shadow-2xl',
+            redbar
+              ? 'right-0 top-full w-[min(22rem,90vw)]'
+              : 'left-0 right-0 top-full',
+          )}
         >
           {rows.map((row, i) => {
             const showHead = row.category !== lastCat;

@@ -180,7 +180,7 @@ export function computeAtmIV(
   calls: { strike: number; iv: number }[],
   puts: { strike: number; iv: number }[],
   spot: number,
-): number {
+): number | null {
   const points: { k: number; iv: number }[] = [];
   for (const c of calls) {
     if (c.strike >= spot * 0.999) points.push({ k: c.strike, iv: c.iv });
@@ -201,7 +201,7 @@ export function computeAtmIV(
     if (nc && np) return (nc.iv + np.iv) / 2;
     if (nc) return nc.iv;
     if (np) return np.iv;
-    return 0.2;
+    return null;
   }
 
   points.sort((a, b) => a.k - b.k);
@@ -287,6 +287,8 @@ export function buildYahooSnapshot(
   }
 
   if (!data.quotes || data.quotes.length < 5) return null;
+  // Fail-closed: never invent spot from an arbitrary strike (wrong IVs for entire surface).
+  if (!(data.spot > 0) || !Number.isFinite(data.spot)) return null;
 
   const expiryMap = new Map<string, { calls: YahooRawOption[]; puts: YahooRawOption[] }>();
   for (const quote of data.quotes) {
@@ -335,6 +337,8 @@ export function buildYahooSnapshot(
 
     if (calls.length > 0 || puts.length > 0) {
       const atmIV = computeAtmIV(callIVs, putIVs, data.spot);
+      // No silent 20% ATM — skip tenor if we cannot estimate from market IVs.
+      if (atmIV == null || !(atmIV > 0) || !Number.isFinite(atmIV)) continue;
       slices.push({
         expiry,
         dte: Math.max(dte, 1),
@@ -413,9 +417,10 @@ export async function fetchYahooSnapshot(
       yfChainCache = { key, value: null, expiry: now + 4_000, fetchedAt: now };
       return null;
     }
-    // Prefer chain-reported spot when present — critical for AAPL/QQQ IV solve.
-    if (!(data.spot > 0) && data.quotes[0]) {
-      data.spot = data.quotes[0].strike;
+    // Fail-closed: missing/zero spot → null snapshot (do not use a strike as spot).
+    if (!(data.spot > 0) || !Number.isFinite(data.spot)) {
+      yfChainCache = { key, value: null, expiry: now + 4_000, fetchedAt: now };
+      return null;
     }
     const snap = buildYahooSnapshot(data, r, q, {
       maxExpiries,

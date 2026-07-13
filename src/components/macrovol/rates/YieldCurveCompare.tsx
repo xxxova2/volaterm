@@ -7,7 +7,7 @@ import {
   CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
 import {
-  CHART, chartAxisTick, chartTooltipStyle,
+  CHART, chartAxisTick, chartTooltipStyle, tightDomain,
 } from '../../../lib/chartTheme';
 
 export type CurveComparePoint = {
@@ -53,6 +53,11 @@ export function YieldCurveCompare({
   const rows = points.filter((p) => p.today != null || p.historical != null);
   const liveLabel = `${legendLivePrefix} · ${fmtDate(todayAsOf)}`;
   const histLabel = `${legendHistPrefix} · ${fmtDate(compareAsOf)}`;
+  const yDomain = tightDomain(
+    rows.flatMap((p) => [p.today, p.historical]),
+    0.12,
+    { minPadAbs: 0.05 },
+  );
 
   if (rows.length < 2) {
     return (
@@ -89,7 +94,7 @@ export function YieldCurveCompare({
           <YAxis
             tick={chartAxisTick}
             width={42}
-            domain={['auto', 'auto']}
+            domain={yDomain}
             tickFormatter={(v) => Number(v).toFixed(2)}
             axisLine={{ stroke: CHART.axisLine }}
             tickLine={{ stroke: CHART.axisLine }}

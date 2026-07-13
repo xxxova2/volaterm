@@ -28,7 +28,7 @@ import {
 } from '../lib/data/freshness';
 import { perfMark, perfTimeSync } from '../config/perfBudget';
 import type { BoardFocusState } from '../hooks/useBoardFocus';
-import { findSectionMeta, sectionsForTab } from '../config/deskSections';
+import { findSectionMeta, sectionsForTab, RATES_SECTION_TO_MODE } from '../config/deskSections';
 
 function processSurface(surface: SurfaceGrid, spot: number) {
   const readout = sviReadout(surface, spot);
@@ -163,7 +163,7 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
   lastUpdate: Date.now(),
   lastSpotUpdate: 0,
   lastChainUpdate: 0,
-  activeTab: 'home',
+  activeTab: 'vol',
   displayMode: 'strike',
   selectedExpiry: null,
   fmpQuote: null,
@@ -230,7 +230,7 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
 
     // Bump gen so any in-flight live fetch for the previous symbol is dropped.
     liveFetchGen += 1;
-    liveWarned = false;
+    // Keep warnedSymbols: toast once per symbol per session (only clear on chain-mode change).
 
     set({
       symbol: trimmed,
@@ -274,8 +274,8 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
           chainAvailable: false,
           session: usEquitySession(),
         });
-        if (!liveWarned) {
-          liveWarned = true;
+        if (!hasWarned(symbol)) {
+          markWarned(symbol);
           toast.warning('Live chain unavailable', {
             description:
               'Equity chain: yfinance (delayed) or FMP if keyed failed/timeout. Crypto: Deribit. No synthetic chain shown.',
@@ -318,13 +318,26 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
     set({ cryptoDualCharts: on });
   },
 
-  setActiveTab: (tab) => set({
-    activeTab: tab,
-    deskSectionId: null,
-    deskSectionLabel: null,
-    deskSectionApis: [],
-    boardFocus: { boardId: null, rowIndex: 0, colKey: null },
-  }),
+  setActiveTab: (tab) => {
+    // Legacy `greeks` desk → Trade · Analyze
+    if ((tab as string) === 'greeks') {
+      set({
+        activeTab: 'desk',
+        deskSectionId: 'desk-ws-analyze',
+        deskSectionLabel: 'Analyze',
+        deskSectionApis: ['MacroVol', 'yfinance'],
+        boardFocus: { boardId: null, rowIndex: 0, colKey: null },
+      });
+      return;
+    }
+    set({
+      activeTab: tab,
+      deskSectionId: null,
+      deskSectionLabel: null,
+      deskSectionApis: [],
+      boardFocus: { boardId: null, rowIndex: 0, colKey: null },
+    });
+  },
   setDisplayMode: (mode) => set({ displayMode: mode }),
   setSelectedExpiry: (expiry) => set({ selectedExpiry: expiry }),
 
@@ -441,7 +454,7 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
     invalidateYfCache();
     invalidateYahooChainCache();
     invalidateDeribitCache();
-    liveWarned = false;
+    clearWarned();
     if (get().source === 'live') {
       set({ loading: true });
       liveFetchGen += 1;
@@ -494,13 +507,39 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
    */
   setDeskSection: (sectionId) => {
     const tab = get().activeTab;
-    if (!sectionId || !sectionsForTab(tab).some((s) => s.id === sectionId)) {
+    if (!sectionId) {
       set({ deskSectionId: null, deskSectionLabel: null, deskSectionApis: [] });
       return;
     }
-    const meta = findSectionMeta(sectionId, tab);
+    // Rates: map legacy sec-* / function codes → 4 mode ids in the red bar registry
+    let resolved = sectionId;
+    if (tab === 'rates') {
+      const mode = RATES_SECTION_TO_MODE[sectionId];
+      if (mode) resolved = `rates-mode-${mode}`;
+    }
+    // Flow: legacy dealer/levels/edge/strategy → Book | Tools
+    if (tab === 'positioning') {
+      if (
+        sectionId === 'pos-sub-dealer'
+        || sectionId === 'pos-sub-chain'
+      ) {
+        resolved = 'pos-sub-chain';
+      } else if (
+        sectionId === 'pos-sub-levels'
+        || sectionId === 'pos-sub-edge'
+        || sectionId === 'pos-sub-strategy'
+        || sectionId === 'pos-sub-tools'
+      ) {
+        resolved = 'pos-sub-tools';
+      }
+    }
+    if (!sectionsForTab(tab).some((s) => s.id === resolved)) {
+      set({ deskSectionId: null, deskSectionLabel: null, deskSectionApis: [] });
+      return;
+    }
+    const meta = findSectionMeta(resolved, tab);
     set({
-      deskSectionId: sectionId,
+      deskSectionId: resolved,
       deskSectionLabel: meta?.label ?? null,
       deskSectionApis: meta?.apis ?? [],
     });
@@ -527,8 +566,18 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
   },
 }));
 
-// One-time warning so we don't toast on every refresh cycle.
-let liveWarned = false;
+// One-time warning *per symbol* so we don't toast spam on every refresh cycle.
+// Reset on symbol/chain-mode change (see setSymbol / setChainMode).
+const warnedSymbols = new Set<string>();
+function hasWarned(symbol: string) {
+  return warnedSymbols.has(symbol.toUpperCase());
+}
+function markWarned(symbol: string) {
+  warnedSymbols.add(symbol.toUpperCase());
+}
+function clearWarned() {
+  warnedSymbols.clear();
+}
 /** Monotonic token so late async replies for a previous symbol cannot clobber state. */
 let liveFetchGen = 0;
 
@@ -561,15 +610,28 @@ async function fetchLiveSnapshot(symbol: string, force: boolean) {
     // Drop stale replies (user switched symbol / mode mid-flight).
     if (gen !== liveFetchGen || useTerminalStore.getState().symbol !== upper) return;
     if (!snap) {
-      // Fail-closed: clear any previous surface so we never keep stale/synth under LIVE.
+      // Fail-closed: clear sticky chain state so UI never paints old LIVE surface as current.
+      const prev = useTerminalStore.getState();
       set({
         loading: false,
         chainAvailable: false,
         chainUsed: 'none',
+        snapshot: null,
+        surface: null,
+        sviReadout: null,
+        arbResult: null,
         session: usEquitySession(Date.now()),
+        provenance: {
+          ...prev.provenance,
+          chain: makeProvenance('chain', 'none', null, {
+            down: true,
+            previousKind: prev.provenance.chain?.kind,
+            label: 'chain:none',
+          }),
+        },
       });
-      if (!liveWarned) {
-        liveWarned = true;
+      if (!hasWarned(upper)) {
+        markWarned(upper);
         toast.warning('Live chain unavailable', {
           description:
             'No live option chain for this symbol. Equities: yfinance (delayed) / FMP if keyed · Crypto: Deribit. Fail-closed.',
@@ -625,8 +687,8 @@ async function fetchLiveSnapshot(symbol: string, force: boolean) {
     });
     useTerminalStore.getState().storeFrames(snap);
 
-    if (!provider.lastChainAvailable && !liveWarned) {
-      liveWarned = true;
+    if (!provider.lastChainAvailable && !hasWarned(upper)) {
+      markWarned(upper);
       toast.warning('Live chain unavailable', {
         description:
           'Equity chain: yfinance (delayed) / FMP if keyed failed. Crypto: Deribit. No synthetic chain shown.',
@@ -638,7 +700,24 @@ async function fetchLiveSnapshot(symbol: string, force: boolean) {
     toast.error('Live fetch failed', {
       description: err instanceof Error ? err.message : 'Could not retrieve options data',
     });
-    set({ loading: false });
+    const prev = useTerminalStore.getState();
+    set({
+      loading: false,
+      chainAvailable: false,
+      chainUsed: 'none',
+      snapshot: null,
+      surface: null,
+      sviReadout: null,
+      arbResult: null,
+      provenance: {
+        ...prev.provenance,
+        chain: makeProvenance('chain', 'none', null, {
+          down: true,
+          previousKind: prev.provenance.chain?.kind,
+          label: 'chain:error',
+        }),
+      },
+    });
   }
 }
 

@@ -1,5 +1,5 @@
 import { useMemo, useRef } from 'react';
-import type { ImplyRead, StirStripData } from '../../../lib/macrovol/api';
+import type { ImplyRead, StirStripData, StirSpread } from '../../../lib/macrovol/api';
 import { VirtualRows } from '../../common/VirtualRows';
 import { ImplyChip } from '../../common/ImplyDrawer';
 import { PERF_BUDGET } from '../../../config/perfBudget';
@@ -8,8 +8,20 @@ import {
   useRegisterBoard,
   type FocusableBoardApi,
 } from '../../../hooks/useBoardFocus';
+import { StirSpreadCurve, toCurvePoints } from './StirSpreadCurve';
 
 type SpreadRow = NonNullable<NonNullable<StirStripData['spreads']>['spreads']>[number];
+
+/** SERFF pack: only badge when API says synth/ZQ offline — never invent "partial" as synth. */
+function serffSynthNote(kind: StirSpread['kind'], rows: SpreadRow[]): string | null {
+  if (kind !== 'serff') return null;
+  const note =
+    rows.find((r) => r.note)?.note
+    || rows.find((r) => r.imply?.text)?.imply?.text
+    || '';
+  if (/synth|ZQ|offline/i.test(note)) return 'ZQ offline';
+  return null;
+}
 
 const KIND_ORDER = ['cash', 'serff', 'calendar', 'fly', 'pack', 'inter'] as const;
 
@@ -167,6 +179,15 @@ export function CalendarPacksBoard({
           []
         ).slice(0, capFor(kind));
         if (!rows.length) return null;
+        const curvePoints = toCurvePoints(rows, {
+          x: (r) => r.name,
+          bps: (r) => (r.rate_bps != null
+            ? r.rate_bps
+            : r.implied_rate != null
+              ? r.implied_rate * 100
+              : null),
+          full: (r) => r.legs?.join(' / '),
+        });
         return (
           <div key={kind} className="overflow-hidden rounded border border-border">
             <div className="border-b border-border bg-background/40 px-2 py-1 text-type-xs font-semibold tracking-wide text-foreground">
@@ -175,6 +196,12 @@ export function CalendarPacksBoard({
                 {rows.length} legs · hover chip for full read
               </span>
             </div>
+            <StirSpreadCurve
+              title="TERM STRUCTURE (bps)"
+              points={curvePoints}
+              synthNote={serffSynthNote(kind, rows)}
+              height={140}
+            />
             <PackTable
               rows={rows}
               onOpenImply={onOpenImply}

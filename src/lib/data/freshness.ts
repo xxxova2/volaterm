@@ -156,9 +156,17 @@ export function worstFreshnessKind(...kinds: FreshnessKind[]): FreshnessKind {
   return worst;
 }
 
+/** YYYY-MM-DD only — FRED/NYFed observation dates, not fetch timestamps. */
+export function isObservationDateOnly(asOf: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(asOf.trim());
+}
+
 /**
  * Legacy ISO / minute-based classifier (DataBadge / macro widgets).
  * Defaults: delayed 15m, stale **30m** (aligned with DataBadge, not the old 60).
+ *
+ * Date-only stamps (YYYY-MM-DD) use **daily print** cadence so SOFR T−1/T−3
+ * is LIVE/DELAYED, not false EXPIRED (minute thresholds are for feeds).
  */
 export function classifyFreshnessFromIso(
   asOf: string | null | undefined,
@@ -167,13 +175,27 @@ export function classifyFreshnessFromIso(
     staleMin?: number;
     demo?: boolean;
     down?: boolean;
+    /** Force daily observation cadence even when asOf includes a time. */
+    daily?: boolean;
   },
 ): FreshnessKind {
   if (opts?.down) return 'down';
   if (opts?.demo) return 'demo';
   if (!asOf) return 'unknown';
-  const date = new Date(asOf);
+  const trimmed = asOf.trim();
+  const date = new Date(trimmed);
   if (isNaN(date.getTime())) return 'unknown';
+
+  const useDaily = opts?.daily || isObservationDateOnly(trimmed);
+  if (useDaily) {
+    // Calendar days since print (UTC date of stamp vs local today is fine for UI).
+    const ageDays = (Date.now() - date.getTime()) / 86_400_000;
+    if (ageDays < 2.5) return 'live'; // T+0 … weekend → Mon SOFR still LIVE
+    if (ageDays < 6) return 'delayed';
+    if (ageDays < 14) return 'stale';
+    return 'expired';
+  }
+
   const delayedMin = opts?.delayedMin ?? 15;
   const staleMin = opts?.staleMin ?? 30;
   const ageMin = (Date.now() - date.getTime()) / 60_000;

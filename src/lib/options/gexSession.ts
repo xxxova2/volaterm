@@ -34,10 +34,14 @@ export type GexProfileSample = { k: number; g: number };
 export type GexSessionPoint = {
   t: number;
   totalGEX: number;
+  /** Book total charm ($ Δ/day) at sample time when available. */
+  totalCharm?: number;
   flip: number | null;
   spot: number;
   /** Sparse OI-inferred net GEX by strike at sample time (optional). */
   profile?: GexProfileSample[];
+  /** Sparse OI-inferred net charm by strike (optional). */
+  charmProfile?: GexProfileSample[];
 };
 
 export type GexSessionSeries = {
@@ -46,7 +50,21 @@ export type GexSessionSeries = {
   points: GexSessionPoint[];
 };
 
-/** Classify dealer gamma regime from net GEX + spot vs flip. */
+export type RecordGexSessionOpts = {
+  minGapMs?: number;
+  profile?: GexProfileSample[];
+  charmProfile?: GexProfileSample[];
+  totalCharm?: number;
+};
+
+/**
+ * Classify dealer gamma regime from net GEX + spot vs flip.
+ *
+ * `totalGEX` uses SpotGamma-style **customer-long OI** (+call / −put).
+ * Dealers are assumed short that OI, so sign is inverted for regime labels:
+ *   customer GEX ≥ 0 (call-heavy) → dealers **short** γ → amplify
+ *   customer GEX < 0 (put-heavy)  → dealers **long** γ → dampen
+ */
 export function classifyGammaRegime(
   totalGEX: number | null | undefined,
   spot?: number | null,
@@ -61,40 +79,42 @@ export function classifyGammaRegime(
       note: 'No dealer GEX yet — wait for live chain OI/γ.',
     };
   }
-  const long = totalGEX >= 0;
+  /** Customer-long OI convention: positive = call-heavy book. */
+  const customerPositive = totalGEX >= 0;
   const above = flip != null && spot != null && Number.isFinite(spot) && Number.isFinite(flip)
     ? spot >= flip
     : null;
 
-  if (long && (above === true || above === null)) {
-    return {
-      id: 'long_gamma',
-      label: 'Long-γ dampening',
-      short: 'GEX+',
-      tone: 'up',
-      note: above === true
-        ? 'Net long dealer γ above flip — hedges buy dips / sell rips (mean-revert into walls).'
-        : 'Net long dealer γ — spot moves tend to be absorbed if OI holds.',
-    };
-  }
-  if (!long && (above === false || above === null)) {
+  // Dealer γ opposes customer-long OI: GEX+ → short-γ, GEX− → long-γ (labels inverted vs raw sign).
+  if (customerPositive && (above === true || above === null)) {
     return {
       id: 'short_gamma',
       label: 'Toxic short-γ',
-      short: 'GEX−',
+      short: 'GEX+',
       tone: 'down',
-      note: above === false
-        ? 'Toxic short-γ below flip — MM hedges amplify; expect wider range / traps, not a free direction.'
-        : 'Net short dealer γ — lack of liquidity in the underlier; moves can accelerate into walls.',
+      note: above === true
+        ? 'Customer call-heavy (GEX+) → dealers short γ above flip — MM hedges can amplify into walls.'
+        : 'Customer call-heavy (GEX+) → dealers short γ — moves can accelerate into walls.',
     };
   }
-  // Mixed: long GEX but below flip, or short GEX but above flip
+  if (!customerPositive && (above === false || above === null)) {
+    return {
+      id: 'long_gamma',
+      label: 'Long-γ dampening',
+      short: 'GEX−',
+      tone: 'up',
+      note: above === false
+        ? 'Customer put-heavy (GEX−) → dealers long γ below flip — hedges buy dips / sell rips.'
+        : 'Customer put-heavy (GEX−) → dealers long γ — spot moves tend to be absorbed if OI holds.',
+    };
+  }
+  // Mixed: GEX+ but below flip, or GEX− but above flip
   return {
     id: 'mixed',
     label: 'Mixed γ zone',
-    short: long ? 'GEX+·xf' : 'GEX−·xf',
+    short: customerPositive ? 'GEX+·xf' : 'GEX−·xf',
     tone: 'warn',
-    note: 'Net GEX sign and spot vs flip disagree — transition risk; weight walls and charm/vanna interactions.',
+    note: 'Customer-long GEX sign and spot vs flip disagree — transition risk; weight walls and charm/vanna.',
   };
 }
 
@@ -147,19 +167,39 @@ function writeStore(series: GexSessionSeries): void {
   }
 }
 
+function capProfile(profile: GexProfileSample[], max = 40): GexProfileSample[] {
+  return [...profile]
+    .sort((a, b) => Math.abs(b.g) - Math.abs(a.g))
+    .slice(0, max)
+    .sort((a, b) => a.k - b.k);
+}
+
 /**
  * Append a session sample (throttled ≥ 25s). Resets when symbol or calendar day changes.
- * Optional sparse profile enables strike×time GEX heat as the book is resampled live.
+ * Optional sparse GEX/charm profiles enable strike×time heat as the book is resampled live.
  * Returns the full series for the active symbol/day.
+ *
+ * Overloads keep older call sites (`minGapMs, profile`) working.
  */
 export function recordGexSession(
   symbol: string,
   spot: number,
   totalGEX: number,
   flip: number | null,
-  minGapMs = 25_000,
-  profile?: GexProfileSample[],
+  minGapMsOrOpts?: number | RecordGexSessionOpts,
+  profileLegacy?: GexProfileSample[],
 ): GexSessionSeries {
+  const opts: RecordGexSessionOpts =
+    typeof minGapMsOrOpts === 'object' && minGapMsOrOpts != null
+      ? minGapMsOrOpts
+      : {
+          minGapMs: typeof minGapMsOrOpts === 'number' ? minGapMsOrOpts : 25_000,
+          profile: profileLegacy,
+        };
+  const minGapMs = opts.minGapMs ?? 25_000;
+  const profile = opts.profile;
+  const charmProfile = opts.charmProfile;
+
   const day = todayKey();
   let series = readStore();
   if (!series || series.symbol !== symbol || series.day !== day) {
@@ -169,12 +209,14 @@ export function recordGexSession(
   const last = series.points[series.points.length - 1];
   if (!last || now - last.t >= minGapMs) {
     const pt: GexSessionPoint = { t: now, totalGEX, flip, spot };
+    if (opts.totalCharm != null && Number.isFinite(opts.totalCharm)) {
+      pt.totalCharm = opts.totalCharm;
+    }
     if (profile && profile.length > 0) {
-      const capped = [...profile]
-        .sort((a, b) => Math.abs(b.g) - Math.abs(a.g))
-        .slice(0, 40)
-        .sort((a, b) => a.k - b.k);
-      pt.profile = capped;
+      pt.profile = capProfile(profile);
+    }
+    if (charmProfile && charmProfile.length > 0) {
+      pt.charmProfile = capProfile(charmProfile);
     }
     series.points.push(pt);
     if (series.points.length > MAX_POINTS) {

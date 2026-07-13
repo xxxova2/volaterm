@@ -156,6 +156,7 @@ export function JapanCarryPanel() {
           asOf={state?.asOf}
           source="FRED · DEXJPUS · IRLTLT01JPM156N · DGS10"
           note="Carry premium ≈ yield differential; P&L often dominated by USDJPY path / vol, not the coupon. JGB curve above is MoF (daily), OECD 10Y is monthly."
+          daily
           className="mt-2"
         />
       </div>

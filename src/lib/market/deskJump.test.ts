@@ -16,13 +16,14 @@ describe('deskJump', () => {
   it('applyDeskJump sets store section for sub-mode buttons', () => {
     useTerminalStore.setState({ activeTab: 'positioning' });
     const btn = document.createElement('button');
-    btn.id = 'pos-sub-levels';
+    btn.id = 'pos-sub-tools';
     const click = vi.fn();
     btn.click = click;
     document.body.appendChild(btn);
+    // Legacy pos-sub-levels maps → pos-sub-tools (single Tools baby tab)
     expect(applyDeskJump('pos-sub-levels')).toBe(true);
     expect(click).not.toHaveBeenCalled();
-    expect(useTerminalStore.getState().deskSectionId).toBe('pos-sub-levels');
+    expect(useTerminalStore.getState().deskSectionId).toBe('pos-sub-tools');
   });
 
   it('applyDeskJump scrolls rates sections', () => {

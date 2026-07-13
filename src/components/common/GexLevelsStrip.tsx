@@ -75,17 +75,15 @@ export function GexLevelsStrip({
     if (!levels || !snapshot || !dealer) return;
     const band = 0.12;
     const S = snapshot.spot;
-    const profile = dealer.points
-      .filter((p) => Math.abs(p.strike - S) / S <= band)
-      .map((p) => ({ k: p.strike, g: p.netGEX }));
-    const s = recordGexSession(
-      symbol,
-      snapshot.spot,
-      levels.totalGEX,
-      levels.gammaFlip,
-      25_000,
+    const near = dealer.points.filter((p) => Math.abs(p.strike - S) / S <= band);
+    const profile = near.map((p) => ({ k: p.strike, g: p.netGEX }));
+    const charmProfile = near.map((p) => ({ k: p.strike, g: p.netCharm }));
+    const s = recordGexSession(symbol, snapshot.spot, levels.totalGEX, levels.gammaFlip, {
+      minGapMs: 25_000,
       profile,
-    );
+      charmProfile,
+      totalCharm: dealer.totalCharm,
+    });
     setSeries(s);
   }, [levels?.totalGEX, levels?.gammaFlip, snapshot?.spot, symbol, dealer]); // eslint-disable-line react-hooks/exhaustive-deps
 

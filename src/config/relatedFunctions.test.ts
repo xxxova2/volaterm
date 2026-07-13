@@ -23,9 +23,10 @@ describe('relatedFunctions', () => {
     expect(codes).toContain('RATES');
   });
 
-  it('functionMenuSections for rates has STIR/SOFR path', () => {
+  it('functionMenuSections for rates has STIR mode on red bar', () => {
     const secs = functionMenuSections('rates');
-    expect(secs.some((s) => s.id === 'sec-stir')).toBe(true);
+    // Red bar = 4 modes (Funding / UST / STIR / World), not 17 sec-* chips
+    expect(secs.some((s) => s.id === 'rates-mode-stir')).toBe(true);
   });
 
   it('currentFunctionLabel prefers section', () => {

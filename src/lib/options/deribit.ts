@@ -238,6 +238,8 @@ export function buildDeribitSnapshot(
       acc.puts.filter(p => p.iv != null).map(p => ({ strike: p.strike, iv: p.iv! })),
       index,
     );
+    // Fail-closed: skip expiries without a real ATM IV (never invent vol).
+    if (atmIV == null || !(atmIV > 0) || !Number.isFinite(atmIV)) continue;
 
     slices.push({
       expiry: exp,

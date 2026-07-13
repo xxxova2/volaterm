@@ -23,7 +23,7 @@ export function PremiumSection({
       belowFold
       className="order-9"
       title="BASIS / PREMIUM MAP (DESK)"
-      apis={['FRED', 'MacroVol', 'yfinance']}
+      apis={['FRED', 'yfinance']}
       defaultOpen={false}
       storageKey="rates.sec.premium"
       subtitle="Where market pricing often embeds a premium or discount vs fair — not automatic trades."

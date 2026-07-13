@@ -127,7 +127,7 @@ describe('DeskChrome', () => {
     render(<DeskChromeLabel>CRYPTO</DeskChromeLabel>);
     const el = screen.getByText('CRYPTO');
     expect(el.getAttribute('data-desk-chrome-label')).toBe('');
-    expect(el.className).toContain('text-muted-foreground');
+    expect(el.className).toContain('text-primary');
     expect(el.className).toContain('tracking-wider');
   });
 

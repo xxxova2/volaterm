@@ -21,6 +21,9 @@ import { CurvesBoard } from './rates/CurvesBoard';
 import { FxBoard } from './rates/FxBoard';
 import { GlobalYieldsBoard } from './rates/GlobalYieldsBoard';
 import { UstDataStrip } from './rates/UstDataStrip';
+import { YieldCurveCompare } from './rates/YieldCurveCompare';
+import { AuctionCard } from './rates/AuctionCard';
+import { CollapsibleSection } from '../terminal/CollapsibleSection';
 
 /**
  * US rates desk — information hierarchy:
@@ -31,9 +34,12 @@ import { UstDataStrip } from './rates/UstDataStrip';
  */
 export function RatesPanel({
   includeGlobalBlocks = false,
+  mode,
 }: {
   /** When true, also render Global 10Y / FX / Japan (standalone use). RatesView sets false. */
   includeGlobalBlocks?: boolean;
+  /** When set, only render the blocks for that Rates desk mode (4-mode IA). */
+  mode?: 'funding' | 'ust' | 'stir' | 'world';
 }) {
   const {
     summary, plumbing, basis, basisHist, stir, shape, curve, curveMeta,
@@ -71,6 +77,145 @@ export function RatesPanel({
     );
   }
 
+  const funding = (
+    <>
+      <PlumbingBarometer plumbing={plumbing} basis={basis} summary={summary} />
+      <div id="sec-mm-strip">
+        <MoneyMarketStrip
+          summary={summary}
+          basis={basis}
+          plumbing={plumbing}
+          basisHist={basisHist}
+          stir={stir}
+        />
+      </div>
+      {basis && (
+        <div id="sec-basis">
+          <BasisSection
+            basis={basis}
+            basisHist={basisHist}
+            plumbing={plumbing}
+            basisChart={basisChart}
+            compactData
+          />
+        </div>
+      )}
+      <div id="sec-cash-futures">
+        <CashFuturesMonitor
+          treasuryFutures={stir?.treasury_futures}
+          curve={curve}
+          sofr={summary?.sofr ?? stir?.sofr ?? plumbing?.sofr}
+          effr={summary?.effr ?? plumbing?.effr}
+        />
+      </div>
+      <div id="sec-plumbing">
+        <PlumbingSection plumbing={plumbing} />
+      </div>
+    </>
+  );
+
+  const ust = (
+    <>
+      {curveComparePoints.length >= 2 && (
+        <div id="sec-curves">
+          <CollapsibleSection
+            id="sec-ust-curve-early"
+            className="order-4"
+            title="UST YIELD CURVE"
+            apis={['FRED']}
+            defaultOpen
+            storageKey="rates.sec.ust-curve-early"
+            subtitle="Live vs ~1Y ago · tight yield scale · full charts + auction pack sit lower on the desk"
+          >
+            <YieldCurveCompare
+              points={curveComparePoints}
+              todayAsOf={curveCompare?.today_as_of ?? curveMeta?.as_of}
+              compareAsOf={curveCompare?.compare_as_of}
+              height={220}
+              source={curveMeta?.source || 'FRED'}
+            />
+          </CollapsibleSection>
+        </div>
+      )}
+      <div id="sec-ust-data">
+        <UstDataStrip
+          summary={summary}
+          curve={curve}
+          curveMeta={curveMeta}
+          shape={shape}
+        />
+      </div>
+      <CurvesBoard
+        curve={curve}
+        curveMeta={curveMeta}
+        curveComparePoints={curveComparePoints}
+        curveCompare={curveCompare}
+        stirChart={stirChart}
+        sofr={summary?.sofr ?? stir?.sofr}
+        shape={shape}
+        spreadHistory={shapeHistoryCharts}
+        onOpenImply={openImply}
+      />
+      {shape && (
+        <div id="sec-shape">
+          <ShapeSection
+            shape={shape}
+            shapeHistoryCharts={shapeHistoryCharts}
+            onOpenImply={openImply}
+          />
+        </div>
+      )}
+      <CurveSection curve={curve} curveMeta={curveMeta} />
+      <div id="sec-auctions">
+        <AuctionCard />
+      </div>
+    </>
+  );
+
+  const stirMode = (
+    <>
+      <div id="sec-stir">
+        <StirSection stir={stir} stirChart={stirChart} onOpenImply={openImply} />
+      </div>
+      {stir?.nyfed?.ref_print && stir.nyfed.ref_print.length > 0 && (
+        <div id="sec-nyfed">
+          <NyFedBoard nyfed={stir.nyfed} />
+        </div>
+      )}
+    </>
+  );
+
+  const world = (
+    <>
+      <div id="sec-global">
+        <GlobalYieldsBoard />
+      </div>
+      <div id="sec-fx">
+        <FxBoard />
+      </div>
+      <div id="sec-japan">
+        <JapanCarryPanel />
+      </div>
+      <div id="sec-premium">
+        <PremiumSection basis={basis} plumbing={plumbing} stir={stir} shape={shape} />
+      </div>
+      {corr && corr.matrix?.length > 0 && (
+        <div id="sec-asset-corr">
+          <CorrSection corr={corr} />
+        </div>
+      )}
+    </>
+  );
+
+  const renderMode = (m: NonNullable<typeof mode>) => {
+    switch (m) {
+      case 'funding': return funding;
+      case 'ust': return ust;
+      case 'stir': return stirMode;
+      case 'world': return world;
+    }
+  };
+
   return (
     <SectionErrorBoundary name="Rates panel">
       <div className="flex flex-col gap-1.5 p-1 font-mono [&>*]:min-w-0">
@@ -81,88 +226,17 @@ export function RatesPanel({
           onClose={() => setImplyDrawer(null)}
         />
 
-        {/* ── 1. MONEY MARKETS: barometer → data strip → basis → plumbing ─ */}
-        <PlumbingBarometer plumbing={plumbing} basis={basis} summary={summary} />
-
-        <MoneyMarketStrip
-          summary={summary}
-          basis={basis}
-          plumbing={plumbing}
-          basisHist={basisHist}
-          stir={stir}
-        />
-
-        {basis && (
-          <BasisSection
-            basis={basis}
-            basisHist={basisHist}
-            plumbing={plumbing}
-            basisChart={basisChart}
-            compactData
-          />
-        )}
-
-        <CashFuturesMonitor
-          treasuryFutures={stir?.treasury_futures}
-          curve={curve}
-          sofr={summary?.sofr ?? stir?.sofr ?? plumbing?.sofr}
-          effr={summary?.effr ?? plumbing?.effr}
-        />
-
-        <PlumbingSection plumbing={plumbing} />
-
-        {/* ── 2. UST CURVE: data strip → dual curve + spread history ── */}
-        <UstDataStrip
-          summary={summary}
-          curve={curve}
-          curveMeta={curveMeta}
-          shape={shape}
-        />
-
-        <CurvesBoard
-          curve={curve}
-          curveMeta={curveMeta}
-          curveComparePoints={curveComparePoints}
-          curveCompare={curveCompare}
-          stirChart={stirChart}
-          sofr={summary?.sofr ?? stir?.sofr}
-          shape={shape}
-          spreadHistory={shapeHistoryCharts}
-          onOpenImply={openImply}
-        />
-
-        {shape && (
-          <ShapeSection
-            shape={shape}
-            shapeHistoryCharts={shapeHistoryCharts}
-            onOpenImply={openImply}
-          />
-        )}
-
-        {/* Compact dual-source table (secondary to UstDataStrip + CurvesBoard) */}
-        <CurveSection curve={curve} curveMeta={curveMeta} />
-
-        {/* ── 3. STIR / NY Fed path ─────────────────────────────────── */}
-        <StirSection stir={stir} stirChart={stirChart} onOpenImply={openImply} />
-
-        {stir?.nyfed?.ref_print && stir.nyfed.ref_print.length > 0 && (
-          <NyFedBoard nyfed={stir.nyfed} />
-        )}
-
-        {/* Snapshot kept as foldable detail (primary prints are in MM + UST strips) */}
-        <SnapshotCards summary={summary} />
-
-        <PremiumSection basis={basis} plumbing={plumbing} stir={stir} shape={shape} />
-
-        {corr && corr.matrix?.length > 0 && <CorrSection corr={corr} />}
-
-        {includeGlobalBlocks && (
+        {mode ? renderMode(mode) : (
           <>
-            <GlobalYieldsBoard />
-            <FxBoard />
-            <JapanCarryPanel />
+            {funding}
+            {ust}
+            {stir}
+            {includeGlobalBlocks ? world : null}
           </>
         )}
+
+        {/* Snapshot only on Funding (or full panel) — avoid repeating on every mode */}
+        {(!mode || mode === 'funding') && <SnapshotCards summary={summary} />}
       </div>
     </SectionErrorBoundary>
   );

@@ -7,7 +7,7 @@
  * Equity chain: yfinance (auto) / FMP. BTC/ETH options: Deribit public.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import {
   Area, AreaChart, Bar, CartesianGrid, ComposedChart, Line, LineChart,
   ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
@@ -46,24 +46,126 @@ import {
 import { buildBasisCurve, rollPnlHeatmap } from '../../lib/options/basis';
 import { isCryptoSymbol } from '../../lib/options/basis';
 import { inventoryByExpiry, portfolioGreeks } from '../../lib/options/analytics';
+import { DeskLoading } from '../common/Skeleton';
+import { consumeDeskJumpOnMount } from '../../lib/market/deskJump';
+
+const GreeksView = lazy(() =>
+  import('./GreeksView').then((m) => ({ default: m.GreeksView })),
+);
 
 type ToolId =
-  | 'sim' | 'combopnl' | 'straddle' | 'combo' | 'greeks' | 'optionpnl'
-  | 'breakeven' | 'roll' | 'basis' | 'subjective' | 'dfollow' | 'hedge' | 'grid';
+  | 'sim' | 'combopnl' | 'straddle' | 'combo' | 'analyze' | 'optionpnl'
+  | 'breakeven' | 'roll' | 'basis' | 'subjective' | 'dfollow' | 'hedge' | 'grid'
+  | 'backtest';
 
-/** Quant workflow groups: structure → P&L → hedge → carry */
+/** ToolId → Thalex deploy path (crypto chrome embeds real lab, not thin replicas). */
+const TOOL_TO_THALEX_SLUG: Record<ToolId, string> = {
+  sim: 'simulator',
+  combopnl: 'combo-pnl',
+  straddle: 'straddle',
+  combo: 'combo-greeks',
+  analyze: 'greeks',
+  optionpnl: 'option-pnl',
+  breakeven: 'break-even',
+  roll: 'roll-pnl',
+  basis: 'futures-basis',
+  subjective: 'subjective',
+  backtest: 'backtest',
+  dfollow: 'dfollow',
+  hedge: 'hedging',
+  grid: 'grid',
+};
+
+function ThalexLabEmbed({ tool }: { tool: ToolId }) {
+  const slug = TOOL_TO_THALEX_SLUG[tool];
+  const url = `https://thalextech.github.io/${slug}/`;
+  return (
+    <div className="flex h-full min-h-0 flex-col gap-1">
+      <div className="flex shrink-0 flex-wrap items-center gap-2 rounded border border-border bg-card px-2 py-1 font-mono text-type-2xs text-muted-foreground">
+        <span className="font-bold uppercase tracking-wider text-foreground">Thalex lab</span>
+        <span className="hidden sm:inline">· live app from thalextech.github.io (not a VOLATERM replica)</span>
+        <a
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="ml-auto text-sky-400 hover:underline"
+        >
+          Open full screen ↗
+        </a>
+        <a
+          href="https://github.com/thalextech/thalextech.github.io"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-muted-foreground hover:text-foreground hover:underline"
+        >
+          source
+        </a>
+      </div>
+      <iframe
+        key={url}
+        title={`Thalex ${slug}`}
+        src={url}
+        className="min-h-0 w-full flex-1 rounded border border-border bg-background"
+        sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
+        referrerPolicy="no-referrer-when-downgrade"
+      />
+    </div>
+  );
+}
+
+/** desk-ws-* section id → tool (red bar / function codes). */
+const SECTION_TO_TOOL: Record<string, ToolId> = {
+  'desk-ws-sim': 'sim',
+  'desk-ws-combo': 'combo',
+  'desk-ws-grid': 'grid',
+  'desk-ws-combopnl': 'combopnl',
+  'desk-ws-optionpnl': 'optionpnl',
+  'desk-ws-straddle': 'straddle',
+  'desk-ws-breakeven': 'breakeven',
+  'desk-ws-subjective': 'subjective',
+  'desk-ws-hedge': 'hedge',
+  'desk-ws-dfollow': 'dfollow',
+  'desk-ws-basis': 'basis',
+  'desk-ws-roll': 'roll',
+  'desk-ws-analyze': 'analyze',
+  'desk-ws-backtest': 'backtest',
+  // legacy greeks deep-links
+  'greeks-desk': 'analyze',
+  'greeks-sub-surface3d': 'analyze',
+  'greeks-mesh': 'analyze',
+};
+
+const TOOL_TO_SECTION: Record<ToolId, string> = {
+  sim: 'desk-ws-sim',
+  combo: 'desk-ws-combo',
+  grid: 'desk-ws-grid',
+  combopnl: 'desk-ws-combopnl',
+  optionpnl: 'desk-ws-optionpnl',
+  straddle: 'desk-ws-straddle',
+  breakeven: 'desk-ws-breakeven',
+  subjective: 'desk-ws-subjective',
+  hedge: 'desk-ws-hedge',
+  dfollow: 'desk-ws-dfollow',
+  basis: 'desk-ws-basis',
+  roll: 'desk-ws-roll',
+  analyze: 'desk-ws-analyze',
+  backtest: 'desk-ws-backtest',
+};
+
+/** Quant workflow groups: structure → P&L → hedge → carry → analyze */
 const TOOLS: { id: ToolId; label: string; blurb: string; group: string }[] = [
   { id: 'sim', label: 'Simulator', blurb: 'GBM path cloud + multi-leg PnL bands', group: 'structure' },
   { id: 'combo', label: 'Combo Greeks', blurb: 'Multi-leg greeks vs spot', group: 'structure' },
   { id: 'grid', label: 'Option Grid', blurb: 'Ω leverage · 1/N(d2)', group: 'structure' },
-  { id: 'greeks', label: 'Greeks tab', blurb: 'Full greeks desk (Greeks 1.0)', group: 'structure' },
+  { id: 'analyze', label: 'Greeks', blurb: 'Greeks surfaces · GEX · OI (Thalex-class)', group: 'analyze' },
   { id: 'combopnl', label: 'Combo PnL', blurb: 'Historical multi-leg PnL by greek', group: 'pnl' },
   { id: 'optionpnl', label: 'Option PnL', blurb: 'Single-option historical mark PnL', group: 'pnl' },
   { id: 'straddle', label: 'Straddle', blurb: 'Break-even + historical straddle PnL', group: 'pnl' },
-  { id: 'breakeven', label: 'Break-even', blurb: 'BE prices + N(d2)', group: 'pnl' },
-  { id: 'subjective', label: 'Subjective', blurb: 'Drift + VRP fair value (BS)', group: 'pnl' },
+  { id: 'breakeven', label: 'Break Even', blurb: 'BE prices + N(d2)', group: 'pnl' },
+  { id: 'subjective', label: 'Subjective Valuation', blurb: 'Drift + VRP fair value (BS)', group: 'pnl' },
+  { id: 'backtest', label: 'Backtest', blurb: 'Weekly short-straddle Δ-hedged path', group: 'pnl' },
   { id: 'hedge', label: 'Hedging', blurb: 'Threshold / tolerance / period Δ-hedge', group: 'hedge' },
-  { id: 'dfollow', label: 'Δ Follower', blurb: 'Track option delta with hedge', group: 'hedge' },
+  { id: 'dfollow', label: 'Delta Follower', blurb: 'Track option delta with hedge', group: 'hedge' },
   { id: 'basis', label: 'Basis', blurb: 'Forward basis + ann. carry', group: 'carry' },
   { id: 'roll', label: 'Roll PnL', blurb: 'Funding/basis carry heatmap', group: 'carry' },
 ];
@@ -105,7 +207,12 @@ function ToolChrome({ children }: { children: React.ReactNode }) {
   return <div className="flex flex-col h-full min-h-0 gap-1">{children}</div>;
 }
 
-export function DeskView() {
+export function DeskView({
+  chrome = 'trade',
+}: {
+  /** trade = equity blotter chrome; thalex = crypto lab (Thalex-class) chrome */
+  chrome?: 'trade' | 'thalex';
+}) {
   const snapshot = useTerminalStore(s => s.snapshot);
   const source = useTerminalStore(s => s.source);
   const chainUsed = useTerminalStore(s => s.chainUsed);
@@ -113,9 +220,29 @@ export function DeskView() {
   const lastChainUpdate = useTerminalStore(s => s.lastChainUpdate);
   const provenance = useTerminalStore(s => s.provenance);
   const symbol = useTerminalStore(s => s.symbol);
-  const setActiveTab = useTerminalStore(s => s.setActiveTab);
-  // Blotter-first default: Combo PnL (mark risk) over abstract simulator
-  const [tool, setTool] = useState<ToolId>('combopnl');
+  const deskSectionId = useTerminalStore(s => s.deskSectionId);
+  const setDeskContext = useTerminalStore(s => s.setDeskContext);
+  // Lab-first default (Thalex surface); red bar / codes override via deskSectionId
+  const [tool, setTool] = useState<ToolId>(chrome === 'thalex' ? 'sim' : 'sim');
+
+  useEffect(() => consumeDeskJumpOnMount(), []);
+
+  // Red bar / function codes → tool workspace
+  useEffect(() => {
+    if (!deskSectionId) return;
+    const mapped = SECTION_TO_TOOL[deskSectionId];
+    if (!mapped) return;
+    setTool(mapped);
+    const meta = TOOLS.find((t) => t.id === mapped);
+    setDeskContext({
+      id: TOOL_TO_SECTION[mapped],
+      label: meta?.label ?? mapped,
+      apis:
+        mapped === 'analyze'
+          ? chrome === 'thalex' ? ['Deribit', 'MacroVol'] : ['MacroVol', 'yfinance']
+          : chrome === 'thalex' ? ['Deribit'] : ['yfinance', 'FMP', 'Deribit'],
+    });
+  }, [deskSectionId, setDeskContext, chrome]);
 
   // Fail-closed: domain classification — never optimistic live without asOf age; re-ticks every 5s
   const chainMissing = !chainAvailable || chainUsed === 'none';
@@ -128,26 +255,39 @@ export function DeskView() {
   );
   const topBuckets = inv.slice(0, 5);
 
-  if (!snapshot) {
+  const badge = snapshot ? apiBadge(source, chainUsed, symbol) : null;
+  const deskLabel = chrome === 'thalex' ? 'THALEX LAB' : 'TRADE';
+  const deskApis = chrome === 'thalex' ? ['Thalex'] : ['yfinance', 'FMP', 'Deribit'];
+
+  // Crypto chrome: embed the real Thalex second-screen apps (full depth).
+  // Trade chrome: VOLATERM-native BS tools on our surface/snapshot.
+  if (chrome === 'thalex') {
     return (
-      <Panel title="MM Desk" apis={['yfinance', 'FMP', 'Deribit']} className="h-full">
+      <div className="flex h-full min-h-0 flex-col gap-1 overflow-hidden">
+        <SectionErrorBoundary key={tool} name={`${deskLabel} ${tool}`}>
+          <ThalexLabEmbed tool={tool} />
+        </SectionErrorBoundary>
+      </div>
+    );
+  }
+
+  if (!snapshot && tool !== 'analyze') {
+    return (
+      <Panel title={deskLabel} apis={deskApis} className="h-full">
         <EmptyState
           kind="no-data"
           title="No surface data"
-          body={`${UI_COPY.empty.chain} Inventory blotter needs a snapshot.`}
+          body={`${UI_COPY.empty.chain} Inventory blotter needs a snapshot. Open Greeks for MacroVol without a full chain.`}
         />
       </Panel>
     );
   }
 
-  const badge = apiBadge(source, chainUsed, symbol);
-
   return (
     <div className="h-full flex flex-col gap-1 overflow-hidden">
-      {/* Blotter-first strip (Phase F) — light DeskChrome for label + freshness only */}
-      <div className="flex flex-col gap-1 rounded border border-border bg-card px-2 py-1.5">
+      <div className="flex flex-col gap-1 rounded border border-border bg-card px-2 py-1">
         <DeskChrome
-          label="MM DESK"
+          label={deskLabel}
           labelClassName="mr-0 px-1"
           sticky={false}
           className="border-0 bg-transparent p-0"
@@ -160,97 +300,76 @@ export function DeskView() {
             />
           }
         >
-          <span className="font-mono text-type-xs text-muted-foreground">
-            {snapshot.symbol} @ {fmtPrice(snapshot.spot, snapshot.spot > 1000 ? 1 : 2)}
-          </span>
-          <span
-            className="rounded border border-border px-1.5 py-0.5 font-mono text-type-2xs text-muted-foreground"
-            title={badge.detail}
-          >
-            {badge.label}
+          {snapshot && (
+            <span className="font-mono text-type-xs text-muted-foreground">
+              {snapshot.symbol} @ {fmtPrice(snapshot.spot, snapshot.spot > 1000 ? 1 : 2)}
+            </span>
+          )}
+          {badge && (
+            <span
+              className="rounded border border-border px-1.5 py-0.5 font-mono text-type-2xs text-muted-foreground"
+              title={badge.detail}
+            >
+              {badge.label}
+            </span>
+          )}
+          <span className="font-mono text-type-2xs text-foreground">
+            {TOOLS.find((t) => t.id === tool)?.label ?? tool}
           </span>
           <span className="hidden font-mono text-type-2xs text-muted-foreground md:inline">
-            Blotter first · tools secondary · BS-Merton
-            {chainUsed === 'deribit' ? ' · Deribit mark IV' : ''}
+            {`Blotter · BS-Merton${chainUsed === 'deribit' ? ' · Deribit mark IV' : ''}`}
           </span>
         </DeskChrome>
-        {/* Inventory blotter — primary risk tape */}
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 rounded border border-border bg-muted/40 px-2 py-1 font-mono text-type-xs">
-          <span className="font-bold uppercase tracking-wider text-foreground">Blotter Σ</span>
-          <span>
-            <span className="text-muted-foreground">Δ </span>
-            <span className={cn('font-bold tabular-nums', port.delta >= 0 ? 'text-up' : 'text-down')}>{port.delta.toFixed(1)}</span>
-          </span>
-          <span>
-            <span className="text-muted-foreground">Γ </span>
-            <span className="font-bold tabular-nums text-foreground">{port.gamma.toFixed(3)}</span>
-          </span>
-          <span>
-            <span className="text-muted-foreground">ν </span>
-            <span className="font-bold tabular-nums text-foreground">{port.vega.toFixed(1)}</span>
-          </span>
-          <span>
-            <span className="text-muted-foreground">Θ </span>
-            <span className={cn('font-bold tabular-nums', port.theta >= 0 ? 'text-up' : 'text-down')}>{port.theta.toFixed(1)}</span>
-          </span>
-          <span className="text-muted-foreground">|</span>
-          {topBuckets.map((b) => (
-            <span key={b.expiry} className="text-muted-foreground">
-              {b.dte}d Δ<span className="text-foreground">{b.delta.toFixed(0)}</span>
-              {' '}ν<span className="text-foreground">{b.vega.toFixed(0)}</span>
+        {snapshot && (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 rounded border border-border bg-muted/40 px-2 py-1 font-mono text-type-xs">
+            <span className="font-bold uppercase tracking-wider text-foreground">Blotter Σ</span>
+            <span>
+              <span className="text-muted-foreground">Δ </span>
+              <span className={cn('font-bold tabular-nums', port.delta >= 0 ? 'text-up' : 'text-down')}>{port.delta.toFixed(1)}</span>
             </span>
-          ))}
-          <span className="ml-auto hidden text-type-2xs text-muted-foreground sm:inline">
-            listed OI scan — not your fills · Combo for real book
-          </span>
-        </div>
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-          {(['structure', 'pnl', 'hedge', 'carry'] as const).map((group) => (
-            <div key={group} className="flex flex-wrap items-center gap-0.5">
-              <span className="mr-0.5 font-mono text-type-2xs uppercase tracking-wider text-muted-foreground/70">
-                {group}
+            <span>
+              <span className="text-muted-foreground">Γ </span>
+              <span className="font-bold tabular-nums text-foreground">{port.gamma.toFixed(3)}</span>
+            </span>
+            <span>
+              <span className="text-muted-foreground">ν </span>
+              <span className="font-bold tabular-nums text-foreground">{port.vega.toFixed(1)}</span>
+            </span>
+            <span>
+              <span className="text-muted-foreground">Θ </span>
+              <span className={cn('font-bold tabular-nums', port.theta >= 0 ? 'text-up' : 'text-down')}>{port.theta.toFixed(1)}</span>
+            </span>
+            <span className="text-muted-foreground">|</span>
+            {topBuckets.map((b) => (
+              <span key={b.expiry} className="text-muted-foreground">
+                {b.dte}d Δ<span className="text-foreground">{b.delta.toFixed(0)}</span>
+                {' '}ν<span className="text-foreground">{b.vega.toFixed(0)}</span>
               </span>
-              {TOOLS.filter((t) => t.group === group).map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  title={t.blurb}
-                  onClick={() => {
-                    if (t.id === 'greeks') {
-                      setActiveTab('greeks');
-                      return;
-                    }
-                    setTool(t.id);
-                  }}
-                  className={cn(
-                    'px-1.5 py-0.5 text-type-xs font-mono rounded border transition-colors',
-                    tool === t.id
-                      ? 'border-border text-foreground bg-secondary'
-                      : 'border-border text-muted-foreground hover:text-foreground',
-                  )}
-                >
-                  {t.label}
-                </button>
-              ))}
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="flex-1 min-h-0">
-        <SectionErrorBoundary key={tool} name={`MM ${tool}`}>
-          {tool === 'sim' && <SimTool />}
-          {tool === 'combopnl' && <ComboPnlTool />}
-          {tool === 'straddle' && <StraddleTool />}
-          {tool === 'combo' && <ComboTool />}
-          {tool === 'optionpnl' && <OptionPnlTool />}
-          {tool === 'breakeven' && <BreakEvenTool />}
-          {tool === 'roll' && <RollTool />}
-          {tool === 'basis' && <BasisTool />}
-          {tool === 'subjective' && <SubjectiveTool />}
-          {tool === 'dfollow' && <DFollowTool />}
-          {tool === 'hedge' && <HedgeTool />}
-          {tool === 'grid' && <GridTool />}
+        <SectionErrorBoundary key={tool} name={`${deskLabel} ${tool}`}>
+          {tool === 'analyze' && (
+            <Suspense fallback={<DeskLoading message={UI_COPY.load.greeks} />}>
+              <GreeksView />
+            </Suspense>
+          )}
+          {tool === 'sim' && snapshot && <SimTool />}
+          {tool === 'combopnl' && snapshot && <ComboPnlTool />}
+          {tool === 'straddle' && snapshot && <StraddleTool />}
+          {tool === 'combo' && snapshot && <ComboTool />}
+          {tool === 'optionpnl' && snapshot && <OptionPnlTool />}
+          {tool === 'breakeven' && snapshot && <BreakEvenTool />}
+          {tool === 'roll' && snapshot && <RollTool />}
+          {tool === 'basis' && snapshot && <BasisTool />}
+          {tool === 'subjective' && snapshot && <SubjectiveTool />}
+          {tool === 'dfollow' && snapshot && <DFollowTool />}
+          {tool === 'hedge' && snapshot && <HedgeTool />}
+          {tool === 'grid' && snapshot && <GridTool />}
+          {tool === 'backtest' && snapshot && <BacktestTool />}
         </SectionErrorBoundary>
       </div>
     </div>
@@ -456,6 +575,113 @@ function ComboTool() {
           </ResponsiveContainer>
         </Panel>
       </div>
+    </ToolChrome>
+  );
+}
+
+/* ─── Backtest (Thalex: weekly short straddle Δ-hedged) ─────── */
+
+function BacktestTool() {
+  const snapshot = useTerminalStore((s) => s.snapshot)!;
+  const [weeks, setWeeks] = useState(8);
+  const [rv, setRv] = useState(snapshot.expiries[0]?.atmIV ?? 0.35);
+  const legs = useMemo(() => templateLegs('short_straddle', snapshot, 0), [snapshot]);
+  const days = Math.max(5, weeks * 7);
+
+  const pathSim = useMemo(
+    () => simulatePaths(legs, snapshot, {
+      drift: 0,
+      vol: rv,
+      days,
+      steps: Math.min(80, days),
+      paths: 120,
+      seed: 42,
+    }),
+    [legs, snapshot, rv, days],
+  );
+
+  const hedge = useMemo(() => {
+    const d = defaultHedgeFromSnapshot(snapshot);
+    if (!d.strike || !d.T || !d.vol) return null;
+    return simulateDeltaHedge({
+      mode: 'period',
+      threshold: 0.1,
+      tolerance: 0.05,
+      periodSteps: 5,
+      type: d.type ?? 'call',
+      strike: d.strike,
+      T: d.T,
+      vol: d.vol,
+      realizedVol: rv,
+      drift: 0,
+      days,
+      steps: Math.min(60, days),
+      optionQty: -1,
+      hedgeInstrument: 'spot',
+      r: snapshot.riskFreeRate,
+      q: snapshot.dividendYield,
+      seed: 7,
+    }, snapshot.spot);
+  }, [snapshot, rv, days]);
+
+  const chart = pathSim.t.map((t, i) => ({
+    t: t.toFixed(1),
+    p50: pathSim.pnlBands.p50[i],
+    p5: pathSim.pnlBands.p5[i],
+    p95: pathSim.pnlBands.p95[i],
+  }));
+
+  return (
+    <ToolChrome>
+      <div className="flex flex-wrap items-end gap-3 rounded border border-border bg-card/50 px-2 py-1">
+        <span className="font-mono text-type-xs text-muted-foreground">
+          Thalex-style weekly BTC short straddle · Δ-hedged (local path — not Thalex parquet)
+        </span>
+        <label className="flex flex-col gap-0.5 font-mono text-type-xs text-muted-foreground">
+          Weeks
+          <input
+            type="number"
+            min={1}
+            max={26}
+            value={weeks}
+            onChange={(e) => setWeeks(+e.target.value)}
+            className="w-14 rounded border border-border bg-background px-1 py-0.5 font-mono text-xs"
+          />
+        </label>
+        <label className="flex flex-col gap-0.5 font-mono text-type-xs text-muted-foreground">
+          Realized σ
+          <input
+            type="number"
+            step={0.01}
+            value={rv}
+            onChange={(e) => setRv(+e.target.value)}
+            className="w-16 rounded border border-border bg-background px-1 py-0.5 font-mono text-xs"
+          />
+        </label>
+        <Stat label="E[PnL]" value={fmtSigned(pathSim.meanTerminalPnl)} color={pathSim.meanTerminalPnl >= 0 ? 'var(--up)' : 'var(--down)'} />
+        <Stat label="Win" value={fmtPct(pathSim.winRate)} />
+        {hedge && (
+          <Stat
+            label="Hedge PnL"
+            value={fmtSigned(hedge.terminalPnl)}
+            color={hedge.terminalPnl >= 0 ? 'var(--up)' : 'var(--down)'}
+          />
+        )}
+      </div>
+      <Panel title="Short-straddle path bands" subtitle={`${weeks}w · ${pathSim.t.length} steps · 120 paths`} className="min-h-0 flex-1">
+        <ResponsiveContainer width="100%" height="100%">
+          <ComposedChart data={chart} margin={{ top: 8, right: 12, bottom: 4, left: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--grid)" />
+            <XAxis dataKey="t" tick={{ fontSize: 9, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }} />
+            <YAxis tick={{ fontSize: 9, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }} width={48} />
+            <Tooltip contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', fontSize: 11, fontFamily: 'JetBrains Mono' }} />
+            <ReferenceLine y={0} stroke="var(--muted-foreground)" strokeOpacity={0.4} />
+            <Area type="monotone" dataKey="p95" stroke="none" fill="var(--up)" fillOpacity={0.08} />
+            <Area type="monotone" dataKey="p5" stroke="none" fill="var(--down)" fillOpacity={0.08} />
+            <Line type="monotone" dataKey="p50" stroke="var(--cyan)" strokeWidth={1.5} dot={false} />
+          </ComposedChart>
+        </ResponsiveContainer>
+      </Panel>
     </ToolChrome>
   );
 }

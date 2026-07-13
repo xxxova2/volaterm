@@ -9,7 +9,7 @@ import {
   CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
 import {
-  CHART, chartAxisTick, chartTooltipStyle,
+  CHART, chartAxisTick, chartTooltipStyle, tightDomain,
 } from '../../../lib/chartTheme';
 
 export type SofrCurvePoint = {
@@ -35,6 +35,11 @@ export function SofrFuturesCurve({
   const priorLabel = asOf
     ? `3M SOFR Future · Yield · ${asOf}`
     : '3M SOFR Future · Yield · prior settle';
+  const yDomain = tightDomain(
+    rows.flatMap((d) => [d.rate, d.prior ?? null]),
+    0.12,
+    { minPadAbs: 0.05 },
+  );
 
   if (rows.length < 2) {
     return (
@@ -74,7 +79,7 @@ export function SofrFuturesCurve({
           <YAxis
             tick={chartAxisTick}
             width={42}
-            domain={['auto', 'auto']}
+            domain={yDomain}
             tickFormatter={(v) => Number(v).toFixed(2)}
             axisLine={{ stroke: CHART.axisLine }}
             tickLine={{ stroke: CHART.axisLine }}

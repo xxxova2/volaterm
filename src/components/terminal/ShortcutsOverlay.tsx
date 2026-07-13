@@ -2,15 +2,14 @@ import { useEffect } from 'react';
 import { listFunctions } from '../../config/functionRegistry';
 
 const SHORTCUTS = [
-  { key: '1', action: 'Home desk' },
-  { key: '2', action: 'Vol Structure' },
-  { key: '3', action: 'Positioning' },
-  { key: '4', action: 'Greeks' },
-  { key: '5', action: 'MM Desk' },
-  { key: '6 / B', action: 'Crypto (BTC·ETH)' },
-  { key: '7', action: 'Macros & Rates' },
-  { key: 'M', action: 'MM desk' },
-  { key: 'V', action: 'Vol Structure' },
+  { key: '1', action: 'Vol desk' },
+  { key: '2', action: 'Flow desk' },
+  { key: '3', action: 'Trade desk' },
+  { key: '4', action: 'Crypto (BTC·ETH)' },
+  { key: '5', action: 'Rates desk' },
+  { key: 'M', action: 'Trade desk' },
+  { key: 'V', action: 'Vol desk' },
+  { key: 'GRK', action: 'Trade · Analyze (Greeks 1.0)' },
   { key: '[ ]', action: 'Prev / next section' },
   { key: 'D', action: 'Toggle dense / readable' },
   { key: 'R', action: 'Refresh data' },

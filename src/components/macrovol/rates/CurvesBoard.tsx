@@ -162,7 +162,7 @@ export function CurvesBoard({
       id="sec-curves"
       className="order-2"
       title="CURVES & SPREADS · CHARTS"
-      apis={['FRED', 'yfinance', 'MacroVol', 'FiscalData']}
+      apis={['FRED', 'yfinance', 'FiscalData']}
       defaultOpen
       storageKey="rates.sec.curves"
       subtitle="Visual layer for UST data strip above · same tenors / same SOFR path · auction calendar"

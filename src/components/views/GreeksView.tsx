@@ -14,24 +14,26 @@ const Greeks10View = lazy(() =>
   import('./Greeks10View').then((m) => ({ default: m.Greeks10View })),
 );
 
-/** Map legacy deep-links (heatmap / 3D / old IV tab) onto Desk + mesh theme. */
+/** Map legacy deep-links (heatmap / 3D / old IV tab) onto Trade Analyze + mesh theme. */
 function applyLegacyGreeksJump(sectionId: string | null) {
   if (!sectionId) return;
+  // Hosted under Vol · Greeks — leave section alone.
+  if (sectionId === 'vol-sub-greeks') return;
   if (sectionId === 'greeks-sub-surface3d' || sectionId === 'greeks-mesh') {
     try {
       localStorage.setItem('ui.greeks.surfaceTheme', 'mesh');
     } catch { /* ignore */ }
-    useTerminalStore.getState().setDeskSection('greeks-desk');
+    useTerminalStore.getState().setDeskSection('desk-ws-analyze');
     return;
   }
-  // greeks-iv retired — IV is Vol Structure; all other greeks-* → desk
+  // greeks-iv retired — IV is Vol; other legacy greeks-* → Trade Analyze
   if (
     sectionId.startsWith('greeks-sub-')
     || sectionId === 'greeks-desk'
     || sectionId === 'greeks-iv'
     || sectionId === 'iv'
   ) {
-    useTerminalStore.getState().setDeskSection('greeks-desk');
+    useTerminalStore.getState().setDeskSection('desk-ws-analyze');
   }
 }
 

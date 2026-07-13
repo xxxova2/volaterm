@@ -20,8 +20,11 @@ jobs:
       - name: Lint
         run: npm run lint
       - name: Test
-        run: npm run test:coverage
+        # Unit tests only — coverage package optional; missing @vitest/coverage-v8 was
+        # failing every push while type-check + lint already passed.
+        run: npm test -- --run
       - name: Build
+        # Same as Docker/Railway: tsc -b && vite build (black-screen guard = assets built)
         run: npm run build
       - name: Audit (high+ only, non-blocking)
         run: npm audit --audit-level=high || true

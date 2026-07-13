@@ -14,17 +14,16 @@ Default ports: Vite `3000` (or `VITE_PORT`), API `3001` (or `PORT`), MacroVol `8
 
 ## Features
 
-**Core desks (7 tabs)**
+**Core desks (6 tabs)**
 
 | Hotkey | Desk | Contents |
 |--------|------|----------|
 | **1** | **Home** | Dashboard, portfolio strip, deep-links into desks |
-| **2** | **Vol Structure** | 3D IV surface, smile/skew, term structure, quality |
-| **3** | **Positioning** | Option chain, dealer GEX / γ-flip, key levels, parity edge |
-| **4** | **Greeks** | Greeks 1.0 desk (ATM cards, Plotly surface, GEX/OI) · 3D mesh as surface theme · IV section |
-| **5** | **MM Desk** | Blotter-first MM tools, scenarios, hedging |
-| **6** | **Crypto** | Dual BTC/ETH Deribit tape; optional 2× thin charts; full book for active underlier |
-| **7** | **Macros & Rates** | FRED/NYFed macro strip, STIR path, SERFF, UST curve, DV01 |
+| **2** | **Vol** | 3D IV surface + smile/term (split), surface fit |
+| **3** | **Flow** | Option chain + dealer GEX / γ-flip, key levels, parity edge |
+| **4** | **Trade** | MM blotter tools, scenarios, hedging · **Analyze** = Greeks 1.0 |
+| **5** | **Crypto** | Dual BTC/ETH Deribit tape; optional 2× thin charts |
+| **6** | **Rates** | FRED/NYFed macro strip, STIR path, SERFF, UST curve |
 
 **Analytics & risk**
 - Portfolio Greeks, scenario analysis, breakeven, expected move, max pain
@@ -77,7 +76,7 @@ Product & frontend architecture design: **[`DESIGN.md`](DESIGN.md)**.
 
 | Key | Action |
 |-----|--------|
-| `1`–`7` | Switch desks |
+| `1`–`6` | Switch desks |
 | `Tab` | Next desk |
 | `[` `]` | Previous / next desk section |
 | `D` | Toggle dense / readable density |
@@ -103,16 +102,32 @@ Useful: `FMP_API_KEY`, `MACROVOL_API_URL`, `PORT`, `VITE_PORT`, `API_TARGET`.
 
 Optional OPRA skeleton (server only, off by default): `OPRA_ENABLED`, `OPRA_VENDOR` — see `DESIGN.md` PR-10.
 
-## Deployment
+## Live app
 
-Two targets share API logic (`api/_shared.js`):
+**Production (Railway):** [https://volaterm-production-f082.up.railway.app](https://volaterm-production-f082.up.railway.app)
+
+Open that URL for the full stack (SPA + Node API + MacroVol rates). After each deploy, `/api/health` should return `{"status":"ok",...}` and the shell should show the boot briefing then the Vol desk — not a black screen.
+
+## Deployment
 
 | Target | How | What works |
 |--------|-----|------------|
-| **Vercel** | SPA + serverless `api/` | FMP enrichment; no Python chain (surface may fall back synthetic). |
-| **Docker / Node** | `Dockerfile` → `node server.js` | Full stack incl. Yahoo chain + MacroVol proxy |
+| **Railway** | Docker (`Dockerfile` → `scripts/start-production.sh`) | Full stack: SPA + Yahoo chain + MacroVol. **Preferred live target.** |
+| **Docker / Node** | `Dockerfile` → `node server.js` / `npm run start:prod` | Same image as Railway |
+| **Vercel** | SPA + serverless `api/` | FMP enrichment only; no Python chain |
 
-> Live Yahoo chain needs Python (`yfinance`). On Vercel, prefer Docker/Node for full chain fidelity.
+> Live Yahoo chain needs Python (`yfinance`). Prefer Railway/Docker for full chain fidelity.
+
+### Black-screen checklist (post-deploy)
+
+1. Build must succeed: `tsc -b && vite build` (assets under `dist/`).
+2. Server must serve SPA: `fastify-static` + SPA fallback for non-`/api` routes.
+3. CORS must allow the Railway origin (`.up.railway.app` is allow-listed in `server.js`).
+4. `GET /api/health` → 200 JSON before trusting the UI.
+
+## Credits
+
+**Thalex Lab tools** (Crypto desk · Lab chrome) — real apps from [thalextech.github.io](https://thalextech.github.io) / [github.com/thalextech/thalextech.github.io](https://github.com/thalextech/thalextech.github.io). Embedded live via iframe so depth (simulator, combo PnL, backtest parquet, …) is Thalex’s, not a thin replica. Thank you **Thalex** for open tooling used by options traders. Their simple-quoter blog is a separate private-API perp bot and is not part of the lab suite.
 
 ## Merged From
 
@@ -121,3 +136,4 @@ Two targets share API logic (`api/_shared.js`):
 | iv surface (uivi) | Full Greeks, SVI, react-window chain |
 | newiv | Shell, shortcuts, playback, Three.js surface |
 | trader-terminal-app | Design predecessor |
+| Thalex open tools | Crypto Lab depth (iframe embeds) |

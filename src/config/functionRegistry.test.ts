@@ -29,30 +29,35 @@ describe('functionRegistry', () => {
   });
 
   it('maps GEX and SOFR codes to exact functionIds', () => {
-    expect(resolveFunctionId('GEX')?.functionId).toBe('positioning:pos-sub-dealer');
+    expect(resolveFunctionId('GEX')?.functionId).toBe('positioning:pos-sub-chain');
     expect(resolveFunctionId('SOFR')?.functionId).toBe('rates:sec-stir');
     expect(resolveFunctionId('SMILE')?.functionId).toBe('vol:vol-sub-smile');
     // 3D is mesh theme on Greeks desk (legacy id remapped in openFunction)
-    expect(resolveFunctionId('3D')?.functionId).toBe('greeks:greeks-sub-surface3d');
+    expect(resolveFunctionId('3D')?.functionId).toBe('desk:desk-ws-analyze');
+    // Thalex-class Trade lab codes
+    expect(resolveFunctionId('SIM')?.functionId).toBe('desk:desk-ws-sim');
+    expect(resolveFunctionId('COMBO')?.functionId).toBe('desk:desk-ws-combo');
+    expect(resolveFunctionId('HDG')?.functionId).toBe('desk:desk-ws-hedge');
+    expect(resolveFunctionId('DESK')?.functionId).toBe('desk:desk-ws-sim');
   });
 
   it('openFunction writes desk.jump and setActiveTab', async () => {
     const { useTerminalStore } = await import('../store/terminalStore');
     const r = openFunction('GEX');
     expect(r.ok).toBe(true);
-    expect(sessionStorage.getItem(DESK_JUMP_KEY)).toBe('pos-sub-dealer');
+    expect(sessionStorage.getItem(DESK_JUMP_KEY)).toBe('pos-sub-chain');
     expect(useTerminalStore.getState().setActiveTab).toHaveBeenCalledWith('positioning');
-    expect(useTerminalStore.getState().setDeskSection).toHaveBeenCalledWith('pos-sub-dealer');
+    expect(useTerminalStore.getState().setDeskSection).toHaveBeenCalledWith('pos-sub-chain');
   });
 
-  it('openFunction 3D sets mesh theme and greeks-desk', async () => {
+  it('openFunction 3D sets mesh theme and Trade Analyze', async () => {
     const { useTerminalStore } = await import('../store/terminalStore');
     const r = openFunction('3D');
     expect(r.ok).toBe(true);
     expect(localStorage.getItem('ui.greeks.surfaceTheme')).toBe('mesh');
-    expect(sessionStorage.getItem(DESK_JUMP_KEY)).toBe('greeks-desk');
-    expect(useTerminalStore.getState().setActiveTab).toHaveBeenCalledWith('greeks');
-    expect(useTerminalStore.getState().setDeskSection).toHaveBeenCalledWith('greeks-desk');
+    expect(sessionStorage.getItem(DESK_JUMP_KEY)).toBe('desk-ws-analyze');
+    expect(useTerminalStore.getState().setActiveTab).toHaveBeenCalledWith('desk');
+    expect(useTerminalStore.getState().setDeskSection).toHaveBeenCalledWith('desk-ws-analyze');
   });
 
   it('searchFunctions finds SOFR', () => {
@@ -62,9 +67,9 @@ describe('functionRegistry', () => {
 
   it('listFunctions includes all tabs', () => {
     const ids = listFunctions().map((f) => f.functionId);
-    expect(ids).toContain('home');
+    expect(ids).toContain('vol');
     expect(ids).toContain('rates');
-    expect(ids).toContain('positioning:pos-sub-levels');
+    expect(ids).toContain('positioning:pos-sub-tools');
   });
 
   it('resolves study aliases to the same functionId as primaries', () => {
@@ -74,8 +79,8 @@ describe('functionRegistry', () => {
     expect(resolveFunctionId('OVDV')?.functionId).toBe('vol:vol-sub-surface');
     expect(resolveFunctionId('SKEW')?.functionId).toBe(resolveFunctionId('SMILE')?.functionId);
     expect(resolveFunctionId('SKEW')?.functionId).toBe('vol:vol-sub-smile');
-    expect(resolveFunctionId('OVME')?.functionId).toBe('positioning:pos-sub-strategy');
-    expect(resolveFunctionId('DES')?.functionId).toBe('home');
+    expect(resolveFunctionId('OVME')?.functionId).toBe('positioning:pos-sub-tools');
+    expect(resolveFunctionId('DES')?.functionId).toBe('vol');
     expect(resolveFunctionId('HIVG')?.functionId).toBe('vol:vol-sub-term');
     expect(resolveFunctionId('HVT')?.functionId).toBe('vol');
     // Primaries stay authoritative (first code)
@@ -100,10 +105,10 @@ describe('functionRegistry', () => {
 
     openFunction('OVME');
     expect(useTerminalStore.getState().setActiveTab).toHaveBeenCalledWith('positioning');
-    expect(sessionStorage.getItem(DESK_JUMP_KEY)).toBe('pos-sub-strategy');
+    expect(sessionStorage.getItem(DESK_JUMP_KEY)).toBe('pos-sub-tools');
 
     openFunction('DES');
-    expect(useTerminalStore.getState().setActiveTab).toHaveBeenCalledWith('home');
+    expect(useTerminalStore.getState().setActiveTab).toHaveBeenCalledWith('vol');
   });
 
   it('searchFunctions finds OVDV/OMON study-alias queries', () => {

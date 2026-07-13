@@ -9,7 +9,7 @@ import type { SVIFit } from './types';
  * 2. Temporal: for rows that couldn't be fit (<5 valid points), interpolate
  *    from neighboring fitted expiries using log-linear term-structure
  *    interpolation weighted by DTE.
- * 3. Safety: any remaining nulls get a fallback IV so no cell is ever 0.
+ * 3. Safety: remaining nulls inherit a real grid IV when one exists; never invent a constant (e.g. 20%).
  */
 export function interpolateSurface(
   strikes: number[],
@@ -76,7 +76,8 @@ export function interpolateSurface(
     }
   }
 
-  // Stage 3: final safety — any remaining nulls get a fallback IV.
+  // Stage 3: fill remaining holes only from real grid IVs (never invent 20% vol).
+  // If the surface has zero valid cells, leave nulls — callers treat holes as incomplete.
   let globalFallback: number | null = null;
   for (let e = 0; e < nExp && globalFallback === null; e++) {
     for (let x = 0; x < nStrike; x++) {
@@ -84,13 +85,14 @@ export function interpolateSurface(
       if (v != null && v > 0) { globalFallback = v; break; }
     }
   }
-  const fb = globalFallback ?? 0.2;
 
-  for (let e = 0; e < nExp; e++) {
-    for (let x = 0; x < nStrike; x++) {
-      const v = filled[e]![x];
-      if (v == null || v <= 0) {
-        filled[e]![x] = fb;
+  if (globalFallback != null) {
+    for (let e = 0; e < nExp; e++) {
+      for (let x = 0; x < nStrike; x++) {
+        const v = filled[e]![x];
+        if (v == null || v <= 0) {
+          filled[e]![x] = globalFallback;
+        }
       }
     }
   }

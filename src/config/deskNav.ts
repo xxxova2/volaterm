@@ -3,9 +3,13 @@ import { useTerminalStore } from '../store/terminalStore';
 import {
   type DeskNavItem,
   RATES_SECTIONS,
+  RATES_SECTION_TO_MODE,
   VOL_SECTIONS,
   GREEKS_SECTIONS,
   POSITIONING_SECTIONS,
+  CRYPTO_SECTIONS,
+  TRADE_SECTIONS,
+  THALEX_LAB_TOOLS,
   TAB_LABELS,
   tabLabel,
   sectionsForTab,
@@ -15,9 +19,13 @@ import {
 export type { DeskNavItem };
 export {
   RATES_SECTIONS,
+  RATES_SECTION_TO_MODE,
   VOL_SECTIONS,
   GREEKS_SECTIONS,
   POSITIONING_SECTIONS,
+  CRYPTO_SECTIONS,
+  TRADE_SECTIONS,
+  THALEX_LAB_TOOLS,
   TAB_LABELS,
   tabLabel,
   sectionsForTab,
@@ -44,10 +52,11 @@ export function jumpDeskSection(tab: ActiveTab | string, direction: 1 | -1): str
   if (idx < 0) idx = 0;
   const next = ids[(idx + direction + ids.length) % ids.length]!;
   setDeskSection(next);
-  // Mode desks (vol/pos/greeks) switch via store only — no DOM section anchors.
+  // Mode desks (vol/pos/trade workspaces) switch via store only — no DOM section anchors.
   if (
     !next.startsWith('vol-sub-')
     && !next.startsWith('greeks-')
+    && !next.startsWith('desk-ws-')
     && !next.startsWith('pos-sub-')
   ) {
     document.getElementById(next)?.scrollIntoView({ behavior: 'smooth', block: 'start' });

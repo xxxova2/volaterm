@@ -9,6 +9,7 @@ import {
   useRegisterBoard,
   type FocusableBoardApi,
 } from '../../../hooks/useBoardFocus';
+import { StirSpreadCurve, toCurvePoints } from './StirSpreadCurve';
 
 type SerffRow = NonNullable<StirStripData['serff_board']>[number];
 
@@ -43,8 +44,25 @@ export function SerffBoard({
 
   if (!data.length) return null;
 
+  const curvePoints = toCurvePoints(data, {
+    x: (r) => r.cc && r.name ? `${r.cc} ${r.name}` : (r.name || r.cc),
+    bps: (r) => r.last_bps,
+    full: (r) => r.description,
+  });
+  const synthNote = data.some((r) =>
+    /synth|ZQ|offline/i.test(`${r.description || ''} ${r.name || ''} ${r.cc || ''}`),
+  )
+    ? 'ZQ offline'
+    : null;
+
   return (
     <div className="mt-3 overflow-hidden rounded border border-border">
+      <StirSpreadCurve
+        title="SERFF TERM STRUCTURE (bps)"
+        points={curvePoints}
+        synthNote={synthNote}
+        height={140}
+      />
       <div className="flex items-center justify-between border-b border-border bg-background/50 px-2 py-1 text-type-xs font-semibold text-foreground">
         <span>
           SERFF / SOFR−EFFR INTERMARKET · CME ICS style

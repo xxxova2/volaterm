@@ -34,7 +34,7 @@ export function CashFuturesMonitor({
       id="sec-cash-futures"
       className="order-6"
       title="CASH–FUTURES · TSY"
-      apis={['yfinance', 'FRED', 'MacroVol']}
+      apis={['yfinance', 'FRED']}
       defaultOpen
       storageKey="rates.sec.cash-futures"
       subtitle="Futures marks × cash yields × SOFR financing context · not CTD basis"

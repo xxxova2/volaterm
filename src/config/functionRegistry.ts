@@ -32,37 +32,52 @@ export type FunctionDescriptor = {
 
 /** Exact code → functionId (v1). */
 const CODE_MAP: Record<string, FunctionId> = {
-  HOME: 'home',
-  DES: 'home',
   VOL: 'vol',
+  HOME: 'vol',
+  DES: 'vol',
   SURF: 'vol:vol-sub-surface',
   OVDV: 'vol:vol-sub-surface',
   SMILE: 'vol:vol-sub-smile',
   SKEW: 'vol:vol-sub-smile',
   TERM: 'vol:vol-sub-term',
   FIT: 'vol:vol-sub-quality',
+  VGRK: 'vol:vol-sub-greeks',
   HIVG: 'vol:vol-sub-term',
   HVT: 'vol',
   POS: 'positioning',
   CHAIN: 'positioning:pos-sub-chain',
   OMON: 'positioning:pos-sub-chain',
-  DEAL: 'positioning:pos-sub-dealer',
-  GEX: 'positioning:pos-sub-dealer',
-  LVL: 'positioning:pos-sub-levels',
-  EDGE: 'positioning:pos-sub-edge',
-  STRAT: 'positioning:pos-sub-strategy',
-  OVME: 'positioning:pos-sub-strategy',
-  GRK: 'greeks',
-  DESK: 'greeks:greeks-desk',
-  /** IV surface lives on Vol Structure (legacy Greeks IV tab removed). */
+  BOOK: 'positioning:pos-sub-chain',
+  DEAL: 'positioning:pos-sub-chain', // Book = chain + dealer together
+  GEX: 'positioning:pos-sub-chain',
+  LVL: 'positioning:pos-sub-tools',
+  EDGE: 'positioning:pos-sub-tools',
+  STRAT: 'positioning:pos-sub-tools',
+  TOOLS: 'positioning:pos-sub-tools',
+  OVME: 'positioning:pos-sub-tools',
+  GRK: 'desk:desk-ws-analyze',
+  DESK: 'desk:desk-ws-sim',
+  /** Thalex-class Trade lab */
+  SIM: 'desk:desk-ws-sim',
+  COMBO: 'desk:desk-ws-combo',
+  GRID: 'desk:desk-ws-grid',
+  CPNL: 'desk:desk-ws-combopnl',
+  OPNL: 'desk:desk-ws-optionpnl',
+  STRD: 'desk:desk-ws-straddle',
+  BE: 'desk:desk-ws-breakeven',
+  SUBJ: 'desk:desk-ws-subjective',
+  HDG: 'desk:desk-ws-hedge',
+  DFOL: 'desk:desk-ws-dfollow',
+  ROLL: 'desk:desk-ws-roll',
+  /** IV surface lives on Vol (legacy Greeks IV tab removed). */
   IVG: 'vol:vol-sub-surface',
-  /** Legacy codes → desk (HEAT/PROF/…) or mesh theme (3D). */
-  HEAT: 'greeks:greeks-desk',
-  PROF: 'greeks:greeks-desk',
-  SENS: 'greeks:greeks-desk',
-  EXP: 'greeks:greeks-desk',
-  '3D': 'greeks:greeks-sub-surface3d',
-  MM: 'desk',
+  /** Legacy codes → Trade Analyze (HEAT/PROF/…) or mesh theme (3D). */
+  HEAT: 'desk:desk-ws-analyze',
+  PROF: 'desk:desk-ws-analyze',
+  SENS: 'desk:desk-ws-analyze',
+  EXP: 'desk:desk-ws-analyze',
+  '3D': 'desk:desk-ws-analyze',
+  MM: 'desk:desk-ws-sim',
   BTC: 'crypto',
   ETH: 'crypto',
   RATES: 'rates',
@@ -91,9 +106,12 @@ const STUDY_ALIAS_KEYWORDS: Record<string, string[]> = {
   'vol:vol-sub-smile': ['skew', 'vol smile', 'risk reversal'],
   'positioning:pos-sub-chain': ['omon', 'option monitor', 'chain monitor'],
   'vol:vol-sub-term': ['hivg', 'historical implied vol', 'term structure'],
-  vol: ['hvt', 'historical vol', 'hist vol', 'realized vol'],
-  'positioning:pos-sub-strategy': ['ovme', 'option payoff', 'scenario', 'strategy builder'],
-  home: ['des', 'description', 'security description'],
+  'vol:vol-sub-greeks': ['greeks', 'delta gamma', 'vol risk', 'vgrk'],
+  vol: [
+    'hvt', 'historical vol', 'hist vol', 'realized vol',
+    'des', 'description', 'security description', 'home',
+  ],
+  'positioning:pos-sub-tools': ['ovme', 'option payoff', 'scenario', 'strategy builder', 'levels', 'parity'],
 };
 
 function buildRegistry(): FunctionDescriptor[] {
@@ -153,7 +171,7 @@ function buildRegistry(): FunctionDescriptor[] {
         functionId: fid,
         codes: [code],
         label: shell === 'help' ? 'Keyboard shortcuts' : 'Watchlist strip',
-        tab: 'home',
+        tab: 'vol',
         shell,
         keywords: [code, shell],
       });
@@ -168,7 +186,7 @@ function buildRegistry(): FunctionDescriptor[] {
         functionId: fid,
         codes: [code],
         label: fid,
-        tab: (fid.split(':')[0] as ActiveTab) ?? 'home',
+        tab: (fid.split(':')[0] as ActiveTab) ?? 'vol',
         sectionId: fid.includes(':') ? fid.split(':').slice(1).join(':') : undefined,
       });
     }
@@ -291,13 +309,26 @@ export function openFunction(
   }
 
   if (d) {
-    // Legacy 3D code → mesh theme + Greeks desk
+    // Legacy 3D / greeks-* → mesh theme + Trade Analyze
     let sectionId = d.sectionId;
-    if (sectionId === 'greeks-sub-surface3d' || sectionId === 'greeks-mesh') {
+    if (
+      sectionId === 'greeks-sub-surface3d'
+      || sectionId === 'greeks-mesh'
+      || sectionId === 'greeks-desk'
+      || sectionId === 'greeks-iv'
+    ) {
+      if (sectionId === 'greeks-sub-surface3d' || sectionId === 'greeks-mesh') {
+        try {
+          localStorage.setItem('ui.greeks.surfaceTheme', 'mesh');
+        } catch { /* ignore */ }
+      }
+      sectionId = 'desk-ws-analyze';
+    }
+    // 3D mnemonic still sets mesh even when CODE_MAP already points at analyze
+    if (input.trim().toUpperCase() === '3D') {
       try {
         localStorage.setItem('ui.greeks.surfaceTheme', 'mesh');
       } catch { /* ignore */ }
-      sectionId = 'greeks-desk';
     }
     if (sectionId) setDeskJump(sectionId);
     useTerminalStore.getState().setActiveTab(d.tab);

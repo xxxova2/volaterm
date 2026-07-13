@@ -31,6 +31,8 @@ import {
 } from '../../hooks/useCryptoDualBooks';
 import { classifyDomainFreshness } from '../../lib/data/freshness';
 import { PerpBasisBoard } from './PerpBasisBoard';
+import { DeskView } from './DeskView';
+import { THALEX_LAB_TOOLS } from '../../config/deskSections';
 
 function Stat({
   label, value, color, term, sub,
@@ -238,6 +240,7 @@ export function BtcView() {
   const symbol = useTerminalStore(s => s.symbol);
   const setSymbol = useTerminalStore(s => s.setSymbol);
   const setActiveTab = useTerminalStore(s => s.setActiveTab);
+  const deskSectionId = useTerminalStore(s => s.deskSectionId);
   const chainAvailable = useTerminalStore(s => s.chainAvailable);
   const chainUsed = useTerminalStore(s => s.chainUsed);
   const source = useTerminalStore(s => s.source);
@@ -252,6 +255,8 @@ export function BtcView() {
     symbol === 'ETH' || symbol === 'IBIT' || symbol === 'BITO' || symbol === 'MSTR' ? symbol : 'BTC',
   );
   const { tape: dual, books, gecko } = useCryptoDualBooks({ dualCharts: cryptoDualCharts });
+  const showThalexTool = Boolean(deskSectionId?.startsWith('desk-ws-'));
+  const showLabHome = !deskSectionId || deskSectionId === 'crypto-sub-lab';
 
   // Auto-switch to a crypto underlier when entering this tab
   useEffect(() => {
@@ -353,6 +358,87 @@ export function BtcView() {
     setProxy(ccy);
     setSymbol(ccy);
   };
+
+  // Thalex lab tools — crypto chrome (not Trade blotter)
+  if (showThalexTool) {
+    return <DeskView chrome="thalex" />;
+  }
+
+  // Lab home = Thalex-style tool card grid (thalextech.github.io)
+  if (showLabHome) {
+    const openTool = (id: string) => {
+      useTerminalStore.getState().setDeskSection(id);
+    };
+    return (
+      <div className="flex h-full flex-col gap-1 overflow-hidden p-1">
+        <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border px-1 py-1">
+          <DeskChromeLabel className="mr-0">THALEX LAB</DeskChromeLabel>
+          <span className="font-mono text-type-2xs text-muted-foreground">
+            Click a card → full Thalex second-screen app (not a shallow replica) ·{' '}
+            <a
+              href="https://thalextech.github.io/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sky-400 hover:underline"
+            >
+              thalextech.github.io
+            </a>
+            {' '}· data: Thalex public API / parquet · Market baby = Deribit tape
+          </span>
+          <div className="ml-auto flex gap-1">
+            {(['BTC', 'ETH'] as const).map((c) => (
+              <button
+                key={c}
+                type="button"
+                onClick={() => { setProxy(c); setSymbol(c); }}
+                className={cn(
+                  'rounded border px-1.5 py-0.5 font-mono text-type-2xs',
+                  symbol === c
+                    ? 'border-primary bg-secondary text-foreground'
+                    : 'border-border text-muted-foreground hover:text-foreground',
+                )}
+              >
+                {c}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="grid grid-cols-1 gap-2 p-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {THALEX_LAB_TOOLS.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => openTool(t.id)}
+                className="group flex flex-col overflow-hidden rounded border border-border bg-card text-left transition-colors hover:border-primary/50 hover:bg-secondary/40"
+              >
+                <div className="aspect-[16/10] w-full overflow-hidden bg-muted/40">
+                  <img
+                    src={t.preview}
+                    alt=""
+                    loading="lazy"
+                    decoding="async"
+                    className="h-full w-full object-cover object-top opacity-90 transition-opacity group-hover:opacity-100"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).style.display = 'none';
+                    }}
+                  />
+                </div>
+                <div className="flex flex-1 flex-col gap-1 p-2">
+                  <span className="font-mono text-type-xs font-bold uppercase tracking-wide text-foreground">
+                    {t.label}
+                  </span>
+                  <span className="font-mono text-type-2xs leading-snug text-muted-foreground">
+                    {t.blurb}
+                  </span>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const hasTape = dual.btc != null || dual.eth != null;
   // Independent desk: paint dual tape / dual charts without waiting on store chain snapshot

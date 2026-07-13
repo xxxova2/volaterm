@@ -24,8 +24,6 @@ import { VolStructureView } from './VolStructureView';
 import { GreeksView } from './GreeksView';
 import { PositioningView } from './PositioningView';
 import { RatesView } from './RatesView';
-import { DeskContextBar } from '../terminal/DeskContextBar';
-
 class ResizeObserverStub {
   observe() {}
   unobserve() {}
@@ -45,7 +43,7 @@ class IntersectionObserverStub {
 (globalThis as unknown as { IntersectionObserver: typeof IntersectionObserverStub }).IntersectionObserver =
   IntersectionObserverStub as unknown as typeof IntersectionObserver;
 
-function seedSnapshot(tab: 'vol' | 'greeks' | 'positioning' | 'rates' = 'vol') {
+function seedSnapshot(tab: 'vol' | 'desk' | 'positioning' | 'rates' = 'vol') {
   const snapshot = buildSnapshot('SPY', Date.now(), 100, 0, 0);
   const surface = buildSurfaceGrid(snapshot);
   useTerminalStore.setState({
@@ -91,40 +89,37 @@ describe('desk section ids are store-driven (no duplicate in-view bars)', () => 
     expect(useTerminalStore.getState().deskSectionId).toBe('vol-sub-surface');
   });
 
-  it('GreeksView registry is Desk only (IV surface is Vol Structure)', () => {
-    useTerminalStore.setState({ activeTab: 'greeks', deskSectionId: 'greeks-desk' });
+  it('Trade Analyze registry hosts former Greeks desk', () => {
+    useTerminalStore.setState({ activeTab: 'desk', deskSectionId: 'desk-ws-analyze' });
     render(<GreeksView />);
-    expect(GREEKS_SECTIONS.map((s) => s.id)).toEqual(['greeks-desk']);
+    expect(GREEKS_SECTIONS.map((s) => s.id)).toEqual(['desk-ws-analyze']);
     for (const s of GREEKS_SECTIONS) {
-      expect(sectionsForTab('greeks').some((x) => x.id === s.id)).toBe(true);
+      expect(sectionsForTab('desk').some((x) => x.id === s.id)).toBe(true);
     }
-    expect(useTerminalStore.getState().deskSectionId).toBe('greeks-desk');
+    expect(useTerminalStore.getState().deskSectionId).toBe('desk-ws-analyze');
   });
 
-  it('PositioningView registry + store section (dealer default)', () => {
-    useTerminalStore.setState({ activeTab: 'positioning', deskSectionId: 'pos-sub-dealer' });
+  it('PositioningView registry + store section (Book default)', () => {
+    useTerminalStore.setState({ activeTab: 'positioning', deskSectionId: 'pos-sub-chain' });
     render(<PositioningView />);
     for (const s of POSITIONING_SECTIONS) {
       expect(sectionsForTab('positioning').some((x) => x.id === s.id)).toBe(true);
     }
-    expect(useTerminalStore.getState().deskSectionId).toBe('pos-sub-dealer');
+    expect(POSITIONING_SECTIONS.map((s) => s.id)).toEqual(['pos-sub-chain', 'pos-sub-tools']);
+    expect(useTerminalStore.getState().deskSectionId).toBe('pos-sub-chain');
   });
 
-  it('RatesView sections stay in registry; no DeskSubNav duplicate bar', () => {
-    useTerminalStore.setState({ activeTab: 'rates' });
+  it('RatesView modes in registry; no DeskSubNav / chrome duplicate bar', () => {
+    useTerminalStore.setState({ activeTab: 'rates', deskSectionId: 'rates-mode-funding' });
     vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('offline'));
     render(<RatesView />);
-    // Section anchors still render as scroll targets
+    // Funding mode mounts macro
     expect(document.getElementById('sec-macro')).toBeTruthy();
-    // No in-view DeskModeBar/DeskSubNav duplicate of the red bar
     expect(screen.queryByRole('tab')).toBeNull();
+    expect(RATES_SECTIONS.length).toBe(4);
     expect(RATES_SECTIONS.length).toBe(sectionsForTab('rates').length);
-    // Desk chrome label present; non-sticky Rates strip is not frosted
-    expect(document.querySelector('[data-desk-chrome-label]')?.textContent).toMatch(/RATES/i);
-    const chrome = document.querySelector('[data-desk-chrome]');
-    expect(chrome?.getAttribute('data-desk-chrome-frosted')).toBeNull();
-    expect(chrome?.className).toContain('bg-card/40');
-    expect(chrome?.className).not.toContain('supports-[backdrop-filter]:bg-background/80');
+    // Red bar owns modes — no in-view RATES chrome strip
+    expect(document.querySelector('[data-desk-chrome]')).toBeNull();
   });
 
   it('jumpDeskSection sets store section (vol)', () => {
@@ -138,23 +133,24 @@ describe('desk section ids are store-driven (no duplicate in-view bars)', () => 
     expect(useTerminalStore.getState().deskSectionId).toBe('vol-sub-smile');
   });
 
-  it('DeskContextBar hides [ ] section when tab has no section registry', () => {
-    useTerminalStore.setState({ activeTab: 'home' });
-    const { rerender } = render(<DeskContextBar />);
-    expect(document.body.textContent).not.toMatch(/\[\s*\] section/);
-
-    act(() => {
-      useTerminalStore.setState({ activeTab: 'rates' });
-    });
-    rerender(<DeskContextBar />);
-    expect(document.body.textContent).toMatch(/\[\s*\] section/);
-  });
-
   it('setDeskSection clears when id not in current tab registry', () => {
     useTerminalStore.setState({ activeTab: 'vol', deskSectionId: 'vol-sub-surface' });
     act(() => {
       useTerminalStore.getState().setDeskSection('sec-macro');
     });
     expect(useTerminalStore.getState().deskSectionId).toBeNull();
+  });
+
+  it('Vol · Greeks stays on vol-sub-greeks (does not fall back to Surface)', async () => {
+    useTerminalStore.setState({ activeTab: 'vol', deskSectionId: 'vol-sub-surface' });
+    render(<VolStructureView />);
+    await act(async () => {
+      useTerminalStore.getState().setDeskSection('vol-sub-greeks');
+    });
+    // Lazy Greeks10View mount + host effect must not rewrite to invalid greeks-desk
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 50));
+    });
+    expect(useTerminalStore.getState().deskSectionId).toBe('vol-sub-greeks');
   });
 });

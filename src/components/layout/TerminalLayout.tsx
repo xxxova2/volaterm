@@ -10,13 +10,9 @@ import { useSpotStream } from '../../hooks/useSpotStream';
 import { toast } from 'sonner';
 import { perfMark } from '../../config/perfBudget';
 import { TerminalHeader } from '../terminal/TerminalHeader';
-import { PanelToolbar } from '../terminal/PanelToolbar';
-import { CommandLine } from '../terminal/CommandLine';
 import { FunctionMenuBar } from '../terminal/FunctionMenuBar';
-import { StatusBar } from '../terminal/StatusBar';
 import { ShortcutsOverlay } from '../terminal/ShortcutsOverlay';
 import { CommandPalette } from '../terminal/CommandPalette';
-import { DeskContextBar } from '../terminal/DeskContextBar';
 import { BootBriefing } from '../terminal/BootBriefing';
 import { PlaybackBar } from '../terminal/PlaybackBar';
 import { SymbolDialog } from '../terminal/SymbolDialog';
@@ -24,7 +20,7 @@ import { SidePanel } from './SidePanel';
 import { WatchlistStrip } from '../common/WatchlistStrip';
 import { sanitizeSymbol } from '../../lib/validation';
 import { TABS } from '../terminal/tabs';
-import { findSectionMeta, jumpDeskSection } from '../../config/deskNav';
+import { findSectionMeta, jumpDeskSection, sectionsForTab } from '../../config/deskNav';
 import type { ActiveTab } from '../../lib/options/types';
 import { cn } from '../../lib/utils';
 import {
@@ -35,9 +31,9 @@ import {
 import { renderDeskView } from './renderDeskView';
 
 /**
- * Classic Bloomberg-style panel shell (v1):
- * Header → [quote] → Toolbar → Command line → Red function menu → Function area → Status
- * TabNav demoted (hotkeys 1–7 kept). SidePanel collapsed by default (Display toggle).
+ * Space-efficient shell:
+ * Top status header → Red bar (desks + babies + search far-right) → Function area
+ * (footer StatusBar removed — feeds live in the top bar)
  */
 export function TerminalLayout() {
   const {
@@ -74,6 +70,14 @@ export function TerminalLayout() {
     });
   }, []);
 
+  // Seed default baby section when a desk has none (rail / hotkeys / cold start).
+  useEffect(() => {
+    const s = useTerminalStore.getState();
+    if (s.deskSectionId) return;
+    const first = sectionsForTab(activeTab)[0]?.id;
+    if (first) s.setDeskSection(first);
+  }, [activeTab]);
+
   // SSE spot ticks in live mode (Node/Docker server). No-ops if stream unavailable.
   useSpotStream(symbol, source === 'live');
 
@@ -86,11 +90,17 @@ export function TerminalLayout() {
     setSymbol('SPY');
   }, [setSymbol]);
 
-  // Migrate stale tab ids (e.g. old "macro" tab merged into rates)
+  // Preload heavy Vol chunks during boot so Greeks is not a cold lazy hit after Enter.
+  useEffect(() => {
+    void import('../views/GreeksView');
+    void import('../views/surface/SurfaceView');
+  }, []);
+
+  // Migrate stale tab ids (e.g. old "home"/"macro" → Vol, the default desk)
   useEffect(() => {
     const id = activeTab as string;
-    if (id === 'macro' || !TABS.some((t) => t.id === activeTab)) {
-      setActiveTab('rates');
+    if (id === 'home' || id === 'macro' || !TABS.some((t) => t.id === activeTab)) {
+      setActiveTab('vol');
     }
   }, [activeTab, setActiveTab]);
 
@@ -128,13 +138,11 @@ export function TerminalLayout() {
     },
     tab: nextTab,
     '?': () => setShortcutsOpen((o) => !o),
-    tab1: () => setActiveTab('home'),
-    tab2: () => setActiveTab('vol'),
-    tab3: () => setActiveTab('positioning'),
-    tab4: () => setActiveTab('greeks'),
-    tab5: () => setActiveTab('desk'),
-    tab6: () => setActiveTab('crypto'),
-    tab7: () => setActiveTab('rates'),
+    tab1: () => setActiveTab('vol'),
+    tab2: () => setActiveTab('positioning'),
+    tab3: () => setActiveTab('desk'),
+    tab4: () => setActiveTab('crypto'),
+    tab5: () => setActiveTab('rates'),
     b: () => setActiveTab('crypto'),
     m: () => setActiveTab('desk'),
     v: () => setActiveTab('vol'),
@@ -198,26 +206,16 @@ export function TerminalLayout() {
       )}
       {!quoteStripOn && <div id="shell-quote-strip" className="sr-only" aria-hidden />}
 
-      {/* Classic BBG: toolbar → command → red desk menu (7 desks + sections) */}
-      <PanelToolbar
+      <FunctionMenuBar
+        focusToken={cmdFocusToken}
         onHelp={() => setShortcutsOpen(true)}
         onWatchlistFocus={() => {
           document.getElementById('shell-quote-strip')?.scrollIntoView({ block: 'nearest' });
         }}
         onOpenDisplay={toggleDisplayStrip}
       />
-      <CommandLine
-        focusToken={cmdFocusToken}
-        onHelp={() => setShortcutsOpen(true)}
-        onWatchlistFocus={() => {
-          document.getElementById('shell-quote-strip')?.scrollIntoView({ block: 'nearest' });
-        }}
-      />
-      <FunctionMenuBar />
-      {activeTab !== 'home' && <DeskContextBar />}
-
       <main
-        className="min-h-0 flex-1 overflow-hidden p-0.5 sm:p-1"
+        className="min-h-0 flex-1 overflow-hidden p-0"
         role="main"
         aria-label="Function area"
         id={`panel-${activeTab}`}
@@ -225,11 +223,8 @@ export function TerminalLayout() {
         {renderDeskView(activeTab, loading)}
       </main>
 
-      {/* Display / expiries — collapsed by default; open via toolbar Display */}
       {displayStripOn && <SidePanel />}
-      {/* Playback only on Vol Structure when multi-frame history exists (not global chrome). */}
       {activeTab === 'vol' && historicalFrames.length >= 2 && <PlaybackBar />}
-      <StatusBar />
       {paletteOpen && (
         <CommandPalette
           onClose={() => setPaletteOpen(false)}
@@ -249,7 +244,12 @@ export function TerminalLayout() {
       {bootOpen && (
         <BootBriefing
           heavyReady={heavyReady}
-          onEnter={() => setBootOpen(false)}
+          onEnter={() => {
+            if (useTerminalStore.getState().activeTab !== 'vol') {
+              setActiveTab('vol');
+            }
+            setBootOpen(false);
+          }}
         />
       )}
     </div>

@@ -142,10 +142,8 @@ export interface HistoricalFrame {
 export type DisplayMode = 'strike' | 'moneyness' | 'delta';
 /** Top-level desk tabs — keep in sync with components/terminal/tabs.ts */
 export type ActiveTab =
-  | 'home'
   | 'vol'
   | 'positioning'
-  | 'greeks'
   | 'desk'
   | 'crypto'
   | 'rates';

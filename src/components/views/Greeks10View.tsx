@@ -100,14 +100,38 @@ export function Greeks10View() {
   /** Expand ticker chips only when user wants a desk-local override. */
   const [symbolPickerOpen, setSymbolPickerOpen] = useState(false);
 
+  // Context chrome only — never rewrite section to legacy `greeks-desk`
+  // (not in VOL_SECTIONS / TRADE_SECTIONS → setDeskSection clears → Vol falls back to Surface).
   useEffect(() => {
-    setDeskSection('greeks-desk');
-    setDeskContext({
-      id: 'greeks-desk',
-      label: 'Greeks Desk',
-      apis: ['MacroVol', 'yfinance'],
-    });
-    return () => setDeskContext({ id: null, label: null, apis: [] });
+    const tab = useTerminalStore.getState().activeTab;
+    const hostId =
+      tab === 'vol' || useTerminalStore.getState().deskSectionId === 'vol-sub-greeks'
+        ? 'vol-sub-greeks'
+        : 'desk-ws-analyze';
+
+    if (tab === 'desk') {
+      setDeskSection('desk-ws-analyze');
+      setDeskContext({
+        id: 'desk-ws-analyze',
+        label: 'Analyze',
+        apis: ['MacroVol', 'yfinance'],
+      });
+    } else if (tab === 'vol') {
+      // Keep vol-sub-greeks (parent already set it).
+      setDeskContext({
+        id: 'vol-sub-greeks',
+        label: 'Greeks',
+        apis: ['MacroVol', 'yfinance'],
+      });
+    }
+
+    return () => {
+      const cur = useTerminalStore.getState().deskSectionId;
+      // Do not stomp sibling Vol tabs (Smile/Term) on unmount.
+      if (cur === hostId || cur === 'greeks-desk') {
+        setDeskContext({ id: null, label: null, apis: [] });
+      }
+    };
   }, [setDeskSection, setDeskContext]);
 
   // Re-read theme when landing from 3D deep-link

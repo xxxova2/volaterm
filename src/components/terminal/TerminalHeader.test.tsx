@@ -23,17 +23,17 @@ describe('TerminalHeader', () => {
     });
     render(<TerminalHeader />);
     expect(screen.getByText('SPY')).toBeTruthy();
-    const modeChip = screen.getByText('LIVE');
+    const modeChip = screen.getByLabelText(
+      'LIVE-only terminal — market feeds only; no demo mode.',
+    );
     expect(modeChip).toBeTruthy();
-    expect(
-      screen.getByLabelText('LIVE-only terminal — market feeds only; no demo mode.'),
-    ).toBeTruthy();
+    expect(modeChip.textContent).toMatch(/LIVE/);
     // Product mode is muted — not an up/green freshness pill
     expect(modeChip.className).toMatch(/text-muted-foreground/);
     expect(modeChip.className).not.toMatch(/text-up|bg-up/);
     // Missing feeds → down (fail-closed); chip label is API DOWN
     expect(screen.getByLabelText('Data freshness: down')).toBeTruthy();
-    expect(screen.getByText('API DOWN')).toBeTruthy();
+    expect(screen.getAllByText('API DOWN').length).toBeGreaterThan(0);
     // Rich title on the data chip itself (not swallowed by nested default title)
     expect(screen.getByTitle(/Spot: down · Chain: down/)).toBeTruthy();
     // No DEMO
@@ -66,7 +66,9 @@ describe('TerminalHeader', () => {
       },
     });
     render(<TerminalHeader />);
-    expect(screen.getByText('LIVE')).toBeTruthy();
+    expect(
+      screen.getByLabelText('LIVE-only terminal — market feeds only; no demo mode.'),
+    ).toBeTruthy();
     // chain missing → down; worst(live, down) = down
     expect(screen.getByLabelText('Data freshness: down')).toBeTruthy();
   });
@@ -134,7 +136,7 @@ describe('TerminalHeader', () => {
       provenance: { ...EMPTY_PROVENANCE },
     });
     const { container } = render(<TerminalHeader />);
-    // Compact form: "r 3.98" (hidden below lg via class, still in DOM)
-    expect(container.textContent).toMatch(/r\s*3\.98/);
+    // Top-bar RFR from former StatusBar (fmtPct)
+    expect(container.textContent).toMatch(/RFR:3\.98%/);
   });
 });

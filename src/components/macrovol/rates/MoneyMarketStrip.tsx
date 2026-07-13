@@ -2,6 +2,9 @@
  * Bloomberg-style money-market quote strip — primary data layer for Rates.
  * SOFR / EFFR / IORB / OBFR + overnight spreads. Charts live below this strip.
  */
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
+} from 'recharts';
 import type {
   RatesSummary,
   BasisData,
@@ -12,6 +15,7 @@ import type {
 import { DataBadge } from '../DataBadge';
 import { CollapsibleSection } from '../../terminal/CollapsibleSection';
 import { cn } from '../../../lib/utils';
+import { CHART, chartAxisTick, chartGridProps, chartTooltipStyle, tightDomain } from '../../../lib/chartTheme';
 
 type QuoteCell = {
   label: string;
@@ -145,12 +149,15 @@ export function MoneyMarketStrip({
     },
   ];
 
-  const asOf =
-    basis?.obs_dates?.SOFR
-    || ny?.as_of
-    || summary?.obs_dates?.SOFR
-    || basis?.as_of
-    || summary?.as_of;
+  // Feed timestamp for LIVE chip; observation dates go in the note (daily prints).
+  const feedAsOf = basis?.as_of || plumbing?.as_of || summary?.as_of || ny?.as_of;
+  const printSofr = basis?.obs_dates?.SOFR || summary?.obs_dates?.SOFR;
+  const printEffr = basis?.obs_dates?.DFF || basis?.obs_dates?.EFFR;
+  const printNote = [
+    printSofr ? `SOFR print ${printSofr}` : null,
+    printEffr ? `EFFR/DFF print ${printEffr}` : null,
+    'Rates in % · spreads in bp. No synthetic levels.',
+  ].filter(Boolean).join(' · ');
 
   const sourceBits = [
     basis?.source,
@@ -159,6 +166,18 @@ export function MoneyMarketStrip({
   ].filter(Boolean);
   const source = sourceBits[0] || 'FRED · NYFed';
 
+  const levelHist = (basisHist?.history || []).slice(-60).map((h) => ({
+    date: h.date.slice(5),
+    sofr: h.sofr,
+    effr: h.effr,
+    iorb: h.iorb,
+  }));
+  const levelY = tightDomain(
+    levelHist.flatMap((r) => [r.sofr, r.effr, r.iorb]),
+    0.15,
+    { minPadAbs: 0.02 },
+  );
+
   return (
     <CollapsibleSection
       id="sec-mm-strip"
@@ -166,7 +185,7 @@ export function MoneyMarketStrip({
       apis={['FRED', 'NYFed']}
       defaultOpen
       storageKey="rates.sec.mm-strip"
-      subtitle="Primary prints · data first — charts for the same series sit directly below"
+      subtitle="Primary prints · SOFR/EFFR/IORB path + spreads chart below · UST curve is next"
       badge={
         basis?.regime ? (
           <span
@@ -266,11 +285,36 @@ export function MoneyMarketStrip({
         <p className="mt-1.5 text-type-xs text-muted-foreground">{basis.regime_note}</p>
       )}
 
+      {levelHist.length > 5 && (
+        <div className="mt-2">
+          <div className="mb-1 text-type-xs text-muted-foreground">
+            SOFR · EFFR · IORB (% · tight scale)
+          </div>
+          <ResponsiveContainer width="100%" height={150}>
+            <LineChart data={levelHist} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+              <CartesianGrid {...chartGridProps} />
+              <XAxis dataKey="date" tick={{ ...chartAxisTick, fontSize: 9 }} interval="preserveStartEnd" />
+              <YAxis
+                tick={{ ...chartAxisTick, fontSize: 9 }}
+                width={36}
+                domain={levelY}
+                tickFormatter={(v) => Number(v).toFixed(2)}
+              />
+              <Tooltip contentStyle={chartTooltipStyle} />
+              <Legend wrapperStyle={{ fontSize: 10 }} />
+              <Line type="monotone" dataKey="sofr" name="SOFR" stroke={CHART.series.info} strokeWidth={1.5} dot={false} />
+              <Line type="monotone" dataKey="effr" name="EFFR" stroke={CHART.series.warn} strokeWidth={1.5} dot={false} />
+              <Line type="monotone" dataKey="iorb" name="IORB" stroke={CHART.series.up} strokeWidth={1.5} dot={false} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
       <DataBadge
-        asOf={asOf}
+        asOf={feedAsOf}
         source={source}
-        note="Rates in % · spreads in bp (×100 on % prints). No synthetic levels."
-        staleThresholdMin={60}
+        note={printNote}
+        staleThresholdMin={120}
         className="mt-1"
       />
     </CollapsibleSection>

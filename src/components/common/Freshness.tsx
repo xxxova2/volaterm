@@ -18,6 +18,7 @@ export function classifyFreshness(
     delayedMin?: number;
     demo?: boolean;
     down?: boolean;
+    daily?: boolean;
   },
 ): FreshnessKind {
   return classifyFreshnessFromIso(asOf, opts);
@@ -80,6 +81,7 @@ export function FreshnessFromAsOf({
   delayedMin = 15,
   demo,
   down,
+  daily,
   className,
 }: {
   asOf?: string | null;
@@ -87,6 +89,7 @@ export function FreshnessFromAsOf({
   delayedMin?: number;
   demo?: boolean;
   down?: boolean;
+  daily?: boolean;
   className?: string;
 }) {
   const [, setTick] = useState(0);
@@ -94,7 +97,7 @@ export function FreshnessFromAsOf({
     const t = setInterval(() => setTick((n) => n + 1), 15_000);
     return () => clearInterval(t);
   }, []);
-  const kind = classifyFreshnessFromIso(asOf, { staleMin, delayedMin, demo, down });
+  const kind = classifyFreshnessFromIso(asOf, { staleMin, delayedMin, demo, down, daily });
   return <FreshnessChip kind={kind} className={className} />;
 }
 

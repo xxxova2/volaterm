@@ -1,21 +1,14 @@
 import type { LucideIcon } from 'lucide-react';
 import {
-  LayoutDashboard, Activity, Layers, Calculator, Shield,
+  Activity, Layers, Shield,
   Bitcoin, Landmark,
 } from 'lucide-react';
 
 /**
- * Pro desk IA — 7 top-level tabs.
- * Macro tools live under Macros & Rates (not a separate nav item).
+ * Pro desk IA — 5 top-level desks. Vol is the default landing desk.
+ * Greeks 1.0 lives under Trade · Analyze (not a peer desk).
  */
-export type TabId =
-  | 'home'
-  | 'vol'
-  | 'positioning'
-  | 'greeks'
-  | 'desk'
-  | 'crypto'
-  | 'rates';
+export type TabId = 'vol' | 'positioning' | 'desk' | 'crypto' | 'rates';
 
 export interface TabDef {
   id: TabId;
@@ -25,11 +18,9 @@ export interface TabDef {
 }
 
 export const TABS: TabDef[] = [
-  { id: 'home', label: 'Home', hotkey: '1', icon: LayoutDashboard },
-  { id: 'vol', label: 'Vol Structure', hotkey: '2', icon: Activity },
-  { id: 'positioning', label: 'Positioning', hotkey: '3', icon: Layers },
-  { id: 'greeks', label: 'Greeks', hotkey: '4', icon: Calculator },
-  { id: 'desk', label: 'MM Desk', hotkey: '5', icon: Shield },
-  { id: 'crypto', label: 'Crypto', hotkey: '6', icon: Bitcoin },
-  { id: 'rates', label: 'Macros & Rates', hotkey: '7', icon: Landmark },
+  { id: 'vol', label: 'Vol', hotkey: '1', icon: Activity },
+  { id: 'positioning', label: 'Flow', hotkey: '2', icon: Layers },
+  { id: 'desk', label: 'Trade', hotkey: '3', icon: Shield },
+  { id: 'crypto', label: 'Crypto', hotkey: '4', icon: Bitcoin },
+  { id: 'rates', label: 'Rates', hotkey: '5', icon: Landmark },
 ];

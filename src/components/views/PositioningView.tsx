@@ -54,15 +54,21 @@ import {
 } from '../../lib/options/gexBookStore';
 import { buildBasisCurve } from '../../lib/options/basis';
 
-type Sub = 'chain' | 'dealer' | 'levels' | 'edge' | 'strategy';
+/** Book = chain+dealer side-by-side; Tools = levels + edge + strategy stacked. */
+type Sub = 'book' | 'tools';
 
-const SUBS: { id: Sub; label: string; blurb: string; domId: string }[] = [
-  { id: 'chain', label: 'Option Chain', blurb: 'Bid/ask · IV · OI', domId: 'pos-sub-chain' },
-  { id: 'dealer', label: 'Dealer Stack', blurb: 'GEX · DEX · VEX · Charm', domId: 'pos-sub-dealer' },
-  { id: 'levels', label: 'Key Levels', blurb: 'Walls · flip · max pain · move', domId: 'pos-sub-levels' },
-  { id: 'edge', label: 'Parity Edge', blurb: 'Put–call residual vs costs', domId: 'pos-sub-edge' },
-  { id: 'strategy', label: 'Strategy', blurb: 'Multi-leg mid + net greeks', domId: 'pos-sub-strategy' },
-];
+function resolveFlowSub(deskSectionId: string | null): Sub {
+  if (
+    deskSectionId === 'pos-sub-tools'
+    || deskSectionId === 'pos-sub-levels'
+    || deskSectionId === 'pos-sub-edge'
+    || deskSectionId === 'pos-sub-strategy'
+  ) {
+    return 'tools';
+  }
+  // chain, dealer, or default → one Book workspace (not two separate desks)
+  return 'book';
+}
 
 const METRICS: { id: DealerMetric; label: string; term: string; unit: string }[] = [
   { id: 'gex', label: 'GEX', term: 'gex', unit: '$ γ·S exposure' },
@@ -86,7 +92,9 @@ type ExpMode = 'all' | '0dte' | 'front' | string; // string = exact expiry
 
 export function PositioningView() {
   const deskSectionId = useTerminalStore((s) => s.deskSectionId);
-  const sub: Sub = (SUBS.find((s) => s.domId === deskSectionId)?.id ?? 'dealer') as Sub;
+  // Book = chain + dealer together; Tools = Lvl+Edge+Strat stacked.
+  const sub: Sub = resolveFlowSub(deskSectionId);
+  const flowSplit = sub === 'book';
   const [metric, setMetric] = useState<DealerMetric>('gex');
   const [weight, setWeight] = useState<ExposureWeight>('oi');
   const [strikeZoom, setStrikeZoom] = useState<StrikeZoom>('atm20');
@@ -104,8 +112,11 @@ export function PositioningView() {
   useEffect(() => consumeDeskJumpOnMount(), []);
 
   useEffect(() => {
-    const meta = SUBS.find((s) => s.id === sub);
-    setDeskContext({ id: meta?.domId ?? null, label: meta?.label ?? 'Dealer', apis: [] });
+    if (sub === 'tools') {
+      setDeskContext({ id: 'pos-sub-tools', label: 'Tools', apis: [] });
+    } else {
+      setDeskContext({ id: 'pos-sub-chain', label: 'Book', apis: [] });
+    }
     return () => setDeskContext({ id: null, label: null, apis: [] });
   }, [sub, setDeskContext]);
 
@@ -277,7 +288,7 @@ export function PositioningView() {
     }),
     [],
   );
-  useRegisterBoard('dealer-bars', sub === 'dealer' && chartData.length ? dealerApi : null);
+  useRegisterBoard('dealer-bars', flowSplit && chartData.length ? dealerApi : null);
 
   const oiByExpiry = useMemo(() => {
     if (!snapshot) return [];
@@ -329,8 +340,10 @@ export function PositioningView() {
       )}
 
       <div className="min-h-0 flex-1">
-        {sub === 'chain' && (
-          <SectionErrorBoundary name="Chain">
+        {flowSplit && (
+          <div className="flex h-full min-h-0 flex-col lg:flex-row">
+            <div className="min-h-0 min-w-0 flex-1 border-b border-border lg:border-b-0 lg:border-r">
+        <SectionErrorBoundary name="Chain">
             <Panel title="Option Chain" className="h-full">
               <div className="flex h-full flex-col">
                 <DiagnosticsStrip sviReadout={sviReadout} arbResult={arbResult} />
@@ -340,13 +353,12 @@ export function PositioningView() {
               </div>
             </Panel>
           </SectionErrorBoundary>
-        )}
-
-        {sub === 'dealer' && (
+            </div>
+            <div className="min-h-0 min-w-0 flex-[1.15]">
           <SectionErrorBoundary name="Dealer">
           <Panel
             title={<Explain term="dealerStack">Net GEX · DEX Profile</Explain>}
-            subtitle="OI-inferred · customer long → dealers short · not verified MM books"
+            subtitle="OI-inferred · customer-long OI · dealers short that book · not verified MM books"
             className="h-full"
           >
             {!dealer || dealer.points.length === 0 ? (
@@ -809,21 +821,21 @@ export function PositioningView() {
                   </div>
                 )}
 
-                {/* Dual TRACE-style gradients: GEX + Charm calendar heat */}
-                {snapshot && (
-                  <DealerGradientPanel
-                    snapshot={snapshot}
-                    weight={weight}
-                    onExpiryPick={(exp) => setExpMode(exp)}
-                  />
-                )}
-
-                {/* SpotGamma-style session strike × time + GEX ladder */}
+                {/* VS3D/TRACE session 3-pane: pos ‖ γ ‖ charm (K × time) */}
                 {snapshot && (
                   <SessionGexHeatmap
                     snapshot={snapshot}
                     symbol={symbol}
                     weight={weight}
+                  />
+                )}
+
+                {/* Calendar K×DTE gradients (structure across expiries) */}
+                {snapshot && (
+                  <DealerGradientPanel
+                    snapshot={snapshot}
+                    weight={weight}
+                    onExpiryPick={(exp) => setExpMode(exp)}
                   />
                 )}
 
@@ -888,11 +900,14 @@ export function PositioningView() {
             )}
           </Panel>
           </SectionErrorBoundary>
+            </div>
+          </div>
         )}
 
-        {sub === 'levels' && (
-          <SectionErrorBoundary name="Levels">
-          <div className="h-full overflow-y-auto p-2">
+        {sub === 'tools' && (
+          <SectionErrorBoundary name="Flow tools">
+          <div className="h-full overflow-y-auto p-2 space-y-2">
+            {/* Levels · Edge · Strat stacked — one red-bar "Tools" entry */}
             {flowBrief && (
               <Panel
                 title={<Explain term="hedgeFlow">Hedge Flow Brief</Explain>}
@@ -1165,16 +1180,10 @@ export function PositioningView() {
                 </Panel>
               )}
             </div>
-          </div>
-          </SectionErrorBoundary>
-        )}
-
-        {sub === 'edge' && (
-          <SectionErrorBoundary name="Edge">
           <Panel
             title={<Explain term="parityEdge">Put–Call Parity Edge</Explain>}
             subtitle="European residual · tradeable only if |res| > half-spreads"
-            className="h-full"
+            className="min-h-[280px]"
           >
             <div className="flex h-full flex-col">
               <div className="flex flex-wrap gap-4 border-b border-border px-3 py-2 font-mono text-type-xs">
@@ -1255,18 +1264,14 @@ export function PositioningView() {
               </div>
             </div>
           </Panel>
-          </SectionErrorBoundary>
-        )}
-
-        {sub === 'strategy' && (
-          <SectionErrorBoundary name="Strategy">
-            <div id="pos-sub-strategy" data-desk-section="1" className="flex h-full flex-col gap-2 p-1">
+            <div id="pos-sub-strategy" data-desk-section="1" className="flex flex-col gap-2 p-1">
               <StrategyBuilderStrip />
               <p className="px-1 font-mono text-type-2xs text-muted-foreground">
                 Same units as chain greeks (per contract). Source may differ from MacroVol Greeks 1.0 —
                 use MM Desk for path sim / hedge tools.
               </p>
             </div>
+          </div>
           </SectionErrorBoundary>
         )}
       </div>

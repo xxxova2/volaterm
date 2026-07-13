@@ -4,7 +4,7 @@ import {
 import type { BasisData, BasisHistoryData, PlumbingData } from '../../../lib/macrovol/api';
 import { DataBadge } from '../DataBadge';
 import { CollapsibleSection } from '../../terminal/CollapsibleSection';
-import { CHART, chartAxisTick, chartGridProps, chartTooltipStyle } from '../../../lib/chartTheme';
+import { CHART, chartAxisTick, chartGridProps, chartTooltipStyle, tightDomain } from '../../../lib/chartTheme';
 
 export function BasisSection({
   basis,
@@ -48,7 +48,7 @@ export function BasisSection({
       id="sec-basis"
       className="order-5"
       title="OVERNIGHT BASIS · HISTORY"
-      apis={['FRED', 'MacroVol']}
+      apis={['FRED']}
       defaultOpen
       storageKey="rates.sec.basis"
       subtitle={
@@ -111,12 +111,20 @@ export function BasisSection({
       )}
       {basisChart.length > 5 && (
         <div className="mt-3">
-          <div className="mb-1 text-type-xs text-muted-foreground">SPREAD HISTORY (bps)</div>
+          <div className="mb-1 text-type-xs text-muted-foreground">SPREAD HISTORY (bps · tight scale)</div>
           <ResponsiveContainer width="100%" height={160}>
             <LineChart data={basisChart} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
               <CartesianGrid {...chartGridProps} />
               <XAxis dataKey="date" tick={{ ...chartAxisTick, fontSize: 9 }} interval="preserveStartEnd" />
-              <YAxis tick={{ ...chartAxisTick, fontSize: 9 }} width={36} />
+              <YAxis
+                tick={{ ...chartAxisTick, fontSize: 9 }}
+                width={36}
+                domain={tightDomain(
+                  basisChart.flatMap((r) => [r.sofr_effr, r.sofr_iorb, r.effr_iorb]),
+                  0.15,
+                  { includeZero: true, minPadAbs: 1 },
+                )}
+              />
               <Tooltip contentStyle={chartTooltipStyle} />
               <ReferenceLine y={0} stroke={CHART.refLine} />
               <Line type="monotone" dataKey="sofr_effr" name="SOFR−EFFR" stroke={CHART.series.info} strokeWidth={1.5} dot={false} />
@@ -130,6 +138,7 @@ export function BasisSection({
         asOf={basisHist?.as_of || basis.as_of}
         source={basisHist?.source || basis.source || 'FRED'}
         note={basisHist?.note}
+        staleThresholdMin={120}
         className="mt-2"
       />
     </CollapsibleSection>

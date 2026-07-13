@@ -12,6 +12,7 @@ import {
 } from '../../../hooks/useBoardFocus';
 import { SerffBoard } from './SerffBoard';
 import { CalendarPacksBoard } from './CalendarPacksBoard';
+import { SofrFuturesCurve } from './SofrFuturesCurve';
 
 /** Dense CME-style header cells — fill full width (no fixed-width dead gutter). */
 const SR3_COLS =
@@ -108,11 +109,11 @@ function DenseRow({
 
 export function StirSection({
   stir,
-  stirChart: _stirChart,
+  stirChart,
   onOpenImply,
 }: {
   stir: StirStripData | null;
-  /** Kept for call-site compat; full dual-path chart lives on CurvesBoard. */
+  /** Dual SOFR futures path (live + prior settle). Rendered above SR3 board. */
   stirChart: {
     x: string;
     rate: number | null;
@@ -160,7 +161,7 @@ export function StirSection({
       id="sec-stir"
       className="order-4"
       title="STIR PATH (SOFR FUTURES)"
-      apis={['yfinance', 'NYFed', 'FRED', 'MacroVol']}
+      apis={['yfinance', 'NYFed', 'FRED']}
       defaultOpen
       storageKey="rates.sec.stir"
       subtitle="Implied = 100 − price · dual path on CURVES · boards fill the desk"
@@ -244,7 +245,16 @@ export function StirSection({
         No duplicate path chart (CurvesBoard owns the dual SOFR path).
       */}
       {liveSr3.length > 0 ? (
-        <div className="mt-1.5 grid grid-cols-1 items-stretch gap-1.5 xl:grid-cols-12">
+        <>
+          {/* PR-S2: dual SOFR futures path (live + prior settle) for the active strip. */}
+          <div className="mt-1.5">
+            <SofrFuturesCurve
+              data={stirChart}
+              asOf={stir?.as_of}
+              height={260}
+            />
+          </div>
+          <div className="mt-1.5 grid grid-cols-1 items-stretch gap-1.5 xl:grid-cols-12">
           {/* ── 3M SOFR (SR3) — primary strip, takes most width ── */}
           <BoardShell
             className="xl:col-span-7 2xl:col-span-8"
@@ -500,7 +510,8 @@ export function StirSection({
               )}
             </BoardShell>
           </div>
-        </div>
+          </div>
+        </>
       ) : (
         <div className="mt-1.5 rounded border border-border bg-background/40 p-2 text-type-xs text-muted-foreground">
           No live SOFR futures quotes — strip left empty rather than inventing rates.

@@ -132,8 +132,8 @@ export function TermView() {
                   `${Number(value).toFixed(2)}%`,
                   name === 'hv' ? 'HV (realized)' : 'ATM IV',
                 ]}
-                labelFormatter={(_label: string, payload) => {
-                  const row = payload?.[0]?.payload as { label?: string } | undefined;
+                labelFormatter={(_label: string, payload: readonly { payload?: { label?: string } }[] | undefined) => {
+                  const row = payload?.[0]?.payload;
                   return row?.label ?? '';
                 }}
               />

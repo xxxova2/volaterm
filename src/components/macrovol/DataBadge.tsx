@@ -6,6 +6,8 @@ interface DataBadgeProps {
   note?: string | null;
   staleThresholdMin?: number;
   delayedThresholdMin?: number;
+  /** Daily FRED/NYFed print cadence (also auto for YYYY-MM-DD asOf). */
+  daily?: boolean;
   demo?: boolean;
   down?: boolean;
   className?: string;
@@ -21,6 +23,7 @@ export function DataBadge({
   note,
   staleThresholdMin = 30,
   delayedThresholdMin = 15,
+  daily,
   demo,
   down,
   className = '',
@@ -32,6 +35,7 @@ export function DataBadge({
     delayedMin: delayedThresholdMin,
     demo,
     down,
+    daily,
   });
 
   return (
@@ -44,6 +48,7 @@ export function DataBadge({
         asOf={asOf}
         staleMin={staleThresholdMin}
         delayedMin={delayedThresholdMin}
+        daily={daily}
         demo={demo}
         down={down}
       />

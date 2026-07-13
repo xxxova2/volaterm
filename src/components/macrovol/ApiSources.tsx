@@ -6,7 +6,7 @@ const API_LEGEND: Record<string, string> = {
   MoF: 'Ministry of Finance Japan — free public CSV · JGB constant-maturity yields (real, not demo)',
   NYFed: 'NY Fed Markets API — free, no key · SOFR/EFFR ref prints + volume',
   yfinance: 'Yahoo Finance via local proxy — delayed futures/equity · free',
-  MacroVol: 'Local MacroVol service (:8765) — STIR path, DV01, plumbing glue',
+  MacroVol: 'Local aggregator pipe (:8765) — not a market vendor; pulls FRED/NYFed/yfinance',
   FMP: 'Financial Modeling Prep — spot/profile/news · free tier + paid chain',
   Deribit: 'Deribit public REST — BTC/ETH options mark IV + futures',
   synthetic: 'Demo SVI surface — offline, not market',

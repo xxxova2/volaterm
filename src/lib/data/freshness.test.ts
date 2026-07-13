@@ -51,6 +51,18 @@ describe('classifyFreshnessFromIso', () => {
     const older = new Date(Date.now() - 45 * 60_000).toISOString();
     expect(classifyFreshnessFromIso(older)).toBe('stale');
   });
+
+  it('treats YYYY-MM-DD observation dates as daily prints (not false EXPIRED at T+3)', () => {
+    const d = new Date();
+    d.setUTCDate(d.getUTCDate() - 3);
+    const yyyy = d.getUTCFullYear();
+    const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(d.getUTCDate()).padStart(2, '0');
+    const obs = `${yyyy}-${mm}-${dd}`;
+    const kind = classifyFreshnessFromIso(obs);
+    expect(kind === 'live' || kind === 'delayed').toBe(true);
+    expect(kind).not.toBe('expired');
+  });
 });
 
 describe('makeProvenance', () => {

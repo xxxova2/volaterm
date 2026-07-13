@@ -1,18 +1,30 @@
 import { useCallback, useState, useEffect } from 'react';
 import { useTerminalStore } from '../../store/terminalStore';
-import { fmtPrice, fmtClock } from '../../lib/format';
+import { fmtPrice, fmtClock, fmtTime, fmtPct } from '../../lib/format';
 import { SymbolDialog } from './SymbolDialog';
 import { FreshnessChip } from '../common/Freshness';
 import {
   kindFromProvenance,
   worstFreshnessKind,
+  type FreshnessKind,
 } from '../../lib/data/freshness';
+
+function ageLabel(ms: number): string {
+  if (ms < 1000) return 'now';
+  if (ms < 60_000) return `${Math.round(ms / 1000)}s`;
+  return `${Math.round(ms / 60_000)}m`;
+}
 
 interface TerminalHeaderProps {
   /** Open keyboard shortcuts overlay (same as ?). */
   onOpenShortcuts?: () => void;
 }
 
+/**
+ * Single top chrome row: symbol + quote + former bottom StatusBar
+ * (spot/chain STALE, session, SSE, contracts, dens, hotkeys).
+ * Saves the full footer strip.
+ */
 export function TerminalHeader({ onOpenShortcuts }: TerminalHeaderProps) {
   const {
     symbol,
@@ -24,9 +36,16 @@ export function TerminalHeader({ onOpenShortcuts }: TerminalHeaderProps) {
     chainUsed,
     chainAvailable,
     spotSource,
+    lastUpdate,
     lastSpotUpdate,
     lastChainUpdate,
     provenance,
+    session,
+    streamConnected,
+    historyMode,
+    historicalFrames,
+    uiDensity,
+    toggleUiDensity,
   } = useTerminalStore();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [clock, setClock] = useState(Date.now());
@@ -39,16 +58,12 @@ export function TerminalHeader({ onOpenShortcuts }: TerminalHeaderProps) {
   // Real prints only — never seed a demo/preset spot into the header.
   const spot = fmpQuote?.price ?? (snapshot?.spot && snapshot.spot > 0 ? snapshot.spot : null);
   const atmIV = snapshot?.expiries[0]?.atmIV;
-  const termSlope = snapshot && snapshot.expiries.length > 2
-    ? ((snapshot.expiries[1]?.atmIV ?? 0) - (snapshot.expiries[0]?.atmIV ?? 0)) * 100
-    : null;
 
   const handleSymbolSelect = useCallback((sym: string) => {
     setSymbol(sym);
     setDialogOpen(false);
   }, [setSymbol]);
 
-  // Product mode is static MODE LIVE; data trust uses same missing→down as StatusBar.
   const spotMissing = spotSource === 'none';
   const chainMissing = !chainAvailable || chainUsed === 'none';
   const spotKind = kindFromProvenance(
@@ -64,6 +79,29 @@ export function TerminalHeader({ onOpenShortcuts }: TerminalHeaderProps) {
     { demo: false, down: chainMissing },
   );
   const summaryKind = worstFreshnessKind(spotKind, chainKind);
+  const streamKind: FreshnessKind = streamConnected ? 'live' : 'unknown';
+  const now = Date.now();
+  const chainAge = lastChainUpdate > 0 ? now - lastChainUpdate : now - lastUpdate;
+
+  const sessionLabel =
+    session.phase === 'open'
+      ? 'RTH'
+      : session.phase === 'pre'
+        ? 'PRE'
+        : session.phase === 'after'
+          ? 'AH'
+          : session.phase === 'holiday'
+            ? 'HOL'
+            : 'CLOSED';
+
+  const expiryCount = snapshot?.expiries.length ?? 0;
+  const quoteCount =
+    snapshot?.expiries.reduce((s, e) => s + e.calls.length + e.puts.length, 0) ?? 0;
+  const chainLabel = !chainAvailable || chainUsed === 'none'
+    ? 'chain:none'
+    : `chain:${chainUsed}`;
+  const fmpPrice = fmpQuote?.price;
+
   const spotAsOf = provenance.spot?.asOfMs ?? (lastSpotUpdate > 0 ? lastSpotUpdate : null);
   const chainAsOf = provenance.chain?.asOfMs ?? (lastChainUpdate > 0 ? lastChainUpdate : null);
   const asOfHint = [
@@ -76,9 +114,8 @@ export function TerminalHeader({ onOpenShortcuts }: TerminalHeaderProps) {
 
   return (
     <>
-      {/* Single tight BBG top line — desk jump lives in red FunctionMenuBar (1–7). */}
-      <header className="flex h-6 shrink-0 items-center justify-between border-b border-border bg-card px-1 text-type-2xs font-mono sm:px-1.5">
-        <div className="flex min-w-0 items-center gap-1 sm:gap-1.5">
+      <header className="flex h-6 shrink-0 items-center justify-between gap-1 border-b border-border bg-card px-1 text-type-2xs font-mono sm:px-1.5">
+        <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden sm:gap-1.5">
           <span className="term-code shrink-0 tracking-[0.12em]">VT</span>
           <button
             onClick={() => setDialogOpen(true)}
@@ -93,28 +130,75 @@ export function TerminalHeader({ onOpenShortcuts }: TerminalHeaderProps) {
           </span>
           {loading && <span className="text-muted-foreground" title="Refreshing">⟳</span>}
           {atmIV != null && (
-            <span className="text-muted-foreground">
+            <span className="hidden text-muted-foreground sm:inline">
               IV <span className="text-cyan">{fmtPrice(atmIV * 100, 1)}%</span>
             </span>
           )}
-          {termSlope != null && (
-            <span className={termSlope > 0 ? 'text-up' : 'text-down'}>
-              {termSlope > 0 ? '↑' : '↓'}
-              {fmtPrice(Math.abs(termSlope), 1)}
-            </span>
-          )}
-          <span className="hidden text-muted-foreground md:inline">
-            {snapshot?.expiries.length ?? 0}e
-            {chainAvailable ? ` · ${chainUsed}` : ''}
+
+          {/* Former StatusBar — feed health + book size */}
+          <span className="flex shrink-0 items-center gap-1" title="Spot freshness">
+            <span className="hidden text-type-2xs uppercase opacity-70 md:inline">spot</span>
+            <FreshnessChip kind={spotKind} />
           </span>
-          {liveRFR != null && (
-            <span className="hidden text-muted-foreground lg:inline">
-              r <span className="text-rate">{fmtPrice(liveRFR * 100, 2)}</span>
+          <span className="flex shrink-0 items-center gap-1" title="Chain / surface freshness">
+            <span className="hidden text-type-2xs uppercase opacity-70 md:inline">chain</span>
+            <FreshnessChip kind={chainKind} />
+          </span>
+          <span className="hidden text-muted-foreground/80 sm:inline">{sessionLabel}</span>
+          {streamConnected && (
+            <span className="flex items-center gap-0.5" title="SSE spot stream">
+              <FreshnessChip kind={streamKind} />
+              <span className="text-up">SSE</span>
             </span>
           )}
+          <span className="hidden min-w-0 truncate text-muted-foreground lg:inline">
+            {symbol} · {expiryCount}e · {quoteCount}c
+          </span>
+          {(fmpPrice != null || snapshot?.spot != null) && (
+            <span className="hidden xl:inline">
+              spot:{fmtPrice(fmpPrice ?? snapshot?.spot)}
+            </span>
+          )}
+          {liveRFR != null && (
+            <span className="hidden text-muted-foreground xl:inline">
+              RFR:{fmtPct(liveRFR)}
+            </span>
+          )}
+          <span
+            className="hidden min-w-0 truncate text-muted-foreground 2xl:inline"
+            title="Data provenance — which API actually served the last load"
+          >
+            {chainLabel}
+            {spotSource === 'deribit'
+              ? ' · spot:deribit'
+              : spotSource === 'yfinance'
+                ? ' · spot:yfinance'
+                : spotSource === 'fmp'
+                  ? ' · spot:fmp'
+                  : ' · spot:synth'}
+            {historyMode === 'live' ? ` · hist:buf:${historicalFrames.length}` : ' · hist:synth'}
+          </span>
         </div>
 
         <div className="flex shrink-0 items-center gap-1 sm:gap-1.5">
+          <button
+            type="button"
+            onClick={toggleUiDensity}
+            className="rounded px-1 py-0 text-type-2xs uppercase tracking-wider text-muted-foreground hover:bg-muted hover:text-foreground"
+            title="Toggle dense / readable UI (D)"
+          >
+            {uiDensity === 'dense' ? 'dens' : 'read'}
+          </button>
+          <span
+            className="hidden text-muted-foreground md:inline"
+            title="Age of last surface update"
+          >
+            chain {ageLabel(chainAge)}
+            {lastSpotUpdate > 0 ? ` · spot ${ageLabel(now - lastSpotUpdate)}` : ''}
+          </span>
+          <span className="hidden tabular-nums text-muted-foreground lg:inline">
+            {fmtTime(lastUpdate)}
+          </span>
           <span className="hidden tabular-nums text-muted-foreground sm:inline">{fmtClock(clock)}</span>
           <span
             className="px-0.5 text-type-2xs uppercase tracking-wider text-muted-foreground/80"
@@ -128,6 +212,9 @@ export function TerminalHeader({ onOpenShortcuts }: TerminalHeaderProps) {
             title={dataTitle}
             aria-label={`Data freshness: ${summaryKind}`}
           />
+          <span className="hidden text-muted-foreground/70 xl:inline" title="Hotkeys">
+            1–5 · [ ] · R · S · D · ?
+          </span>
           <button
             onClick={() => useTerminalStore.getState().refresh()}
             className="text-muted-foreground hover:text-primary transition-colors"
