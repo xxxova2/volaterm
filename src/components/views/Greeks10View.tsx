@@ -158,7 +158,7 @@ export function Greeks10View() {
   const gexData = data?.gex?.filter((g) => Math.abs(g.gex) > 0) || [];
   const gexTotal = data?.gex_flip?.net_gex ?? gexData.reduce((s, g) => s + g.gex, 0);
   const flipStrike = data?.gex_flip?.strike ?? null;
-  const flipSide = data?.gex_flip?.spot_vs_flip;
+  const flipSide = data?.gex_flip?.spot_vs_flip ?? null;
 
   const gexChartData = gexData
     .filter((g) => data && g.strike >= data.spot * 0.93 && g.strike <= data.spot * 1.07)

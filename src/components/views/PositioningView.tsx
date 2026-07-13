@@ -14,7 +14,7 @@ import { Explain } from '../common/Explain';
 import { EmptyState } from '../common/EmptyState';
 import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
 import { VirtualRows } from '../common/VirtualRows';
-import { fmtCompact, fmtPrice, fmtPct } from '../../lib/format';
+import { fmtCompact, fmtPrice, fmtPct, fmtSigned } from '../../lib/format';
 
 /** Compact signed notional for Δ columns. */
 function fmtDeltaCompact(n: number): string {
