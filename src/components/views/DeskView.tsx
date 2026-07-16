@@ -9,7 +9,7 @@
 
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import {
-  Area, AreaChart, Bar, CartesianGrid, ComposedChart, Line, LineChart,
+  Area, Bar, CartesianGrid, ComposedChart, Line, LineChart,
   ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
 import { useTerminalStore } from '../../store/terminalStore';
@@ -22,19 +22,9 @@ import { DeskChrome } from '../terminal/DeskChrome';
 import { fmtPct, fmtPrice, fmtSigned } from '../../lib/format';
 import { cn } from '../../lib/utils';
 import { UI_COPY } from '../../config/uiCopy';
-import { analyzeComboBreakEven } from '../../lib/options/breakEven';
-import {
-  evaluateCombo,
-  templateLegs,
-} from '../../lib/options/portfolio';
+import { templateLegs } from '../../lib/options/portfolio';
 import { simulatePaths } from '../../lib/options/pathSim';
 import { defaultHedgeFromSnapshot, simulateDeltaHedge, type HedgeMode } from '../../lib/options/hedging';
-import {
-  comboGreeksPnl,
-  historyToSpotBars,
-  optionGreeksPnl,
-  straddleBreakEvens,
-} from '../../lib/options/greeksPnl';
 import { buildBasisCurve, rollPnlHeatmap } from '../../lib/options/basis';
 import { isCryptoSymbol } from '../../lib/options/basis';
 import { inventoryByExpiry, portfolioGreeks } from '../../lib/options/analytics';
@@ -45,6 +35,9 @@ import { ComboGreeksTool } from '../desk/tools/ComboGreeksTool';
 import { GridTool } from '../desk/tools/GridTool';
 import { BreakEvenTool } from '../desk/tools/BreakEvenTool';
 import { SubjectiveTool } from '../desk/tools/SubjectiveTool';
+import { ComboPnlTool } from '../desk/tools/ComboPnlTool';
+import { OptionPnlTool } from '../desk/tools/OptionPnlTool';
+import { StraddleTool } from '../desk/tools/StraddleTool';
 
 const GreeksView = lazy(() =>
   import('./GreeksView').then((m) => ({ default: m.GreeksView })),
@@ -373,22 +366,6 @@ export function DeskView({
   );
 }
 
-/**
- * Spot path for desk tools: real FMP/yfinance history only.
- * No synthetic path under LIVE — tools show empty until history is available.
- */
-function useSpotPath(days = 40) {
-  const fmpHistory = useTerminalStore(s => s.fmpHistory);
-  const historySource = useTerminalStore(s => s.historySource);
-  return useMemo(() => {
-    const fromHist = historyToSpotBars(fmpHistory, days);
-    if (fromHist.length >= 5 && historySource !== 'none') {
-      return { path: fromHist, source: historySource };
-    }
-    return { path: [] as ReturnType<typeof historyToSpotBars>, source: 'none' as const };
-  }, [fmpHistory, historySource, days]);
-}
-
 /* ─── Hedging ───────────────────────────────────────────────── */
 
 function HedgeTool() {
@@ -678,275 +655,6 @@ function DFollowTool() {
           </LineChart>
         </ResponsiveContainer>
       </Panel>
-    </ToolChrome>
-  );
-}
-
-/* ─── Combo PnL (historical greek decomposition) ───────────── */
-
-function ComboPnlTool() {
-  const snapshot = useTerminalStore(s => s.snapshot)!;
-  const { path, source: pathSrc } = useSpotPath(45);
-  const [template, setTemplate] = useState<'short_straddle' | 'long_straddle' | 'risk_reversal' | 'call_spread' | 'long_call'>('short_straddle');
-  const [expiryIdx, setExpiryIdx] = useState(0);
-
-  const legs = useMemo(() => templateLegs(template, snapshot, expiryIdx), [template, snapshot, expiryIdx]);
-  const series = useMemo(() => comboGreeksPnl(legs, snapshot, path), [legs, snapshot, path]);
-
-  const chart = series.bars.map(b => ({
-    t: b.dateLabel,
-    pnl: b.pnl,
-    delta: b.cumDelta,
-    gamma: b.cumGamma,
-    theta: b.cumTheta,
-    residual: b.cumResidual,
-  }));
-
-  return (
-    <ToolChrome>
-      <div className="flex flex-wrap gap-3 px-2 py-1 border border-border bg-card/50 rounded items-end">
-        <label className="text-type-xs font-mono text-muted-foreground flex flex-col gap-0.5">
-          Structure
-          <select className="bg-background border border-border rounded px-1 py-0.5 text-xs font-mono" value={template} onChange={e => setTemplate(e.target.value as typeof template)}>
-            <option value="short_straddle">Short straddle</option>
-            <option value="long_straddle">Long straddle</option>
-            <option value="risk_reversal">Risk reversal</option>
-            <option value="call_spread">Call spread</option>
-            <option value="long_call">Long call</option>
-          </select>
-        </label>
-        <label className="text-type-xs font-mono text-muted-foreground flex flex-col gap-0.5">
-          Expiry
-          <select className="bg-background border border-border rounded px-1 py-0.5 text-xs font-mono" value={expiryIdx} onChange={e => setExpiryIdx(+e.target.value)}>
-            {snapshot.expiries.map((e, i) => (
-              <option key={e.expiry} value={i}>{e.expiry} ({e.dte}d)</option>
-            ))}
-          </select>
-        </label>
-        <Stat label="Term PnL" value={fmtSigned(series.terminalPnl)} color={series.terminalPnl >= 0 ? 'var(--up)' : 'var(--down)'} />
-        <Stat label="Σ Δ" value={fmtSigned(series.totalDelta)} />
-        <Stat label="Σ Γ" value={fmtSigned(series.totalGamma)} />
-        <Stat label="Σ Θ" value={fmtSigned(series.totalTheta)} />
-        <Stat label="Residual" value={fmtSigned(series.totalResidual)} />
-        <Stat label="Path" value={pathSrc} />
-        <Stat label="Marks" value="BS sticky-IV" />
-      </div>
-      <Panel
-        title="Combo mark PnL · greek attribution"
-        subtitle={`Approx · sticky-strike BS (not exchange marks) · path=${pathSrc} · Δ·dS+½Γ·dS²+Θ·dT`}
-        className="flex-1 min-h-0"
-      >
-        <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={chart} margin={{ top: 8, right: 12, bottom: 4, left: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--grid)" />
-            <XAxis dataKey="t" tick={{ fontSize: 9, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }} interval="preserveStartEnd" />
-            <YAxis tick={{ fontSize: 9, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }} width={48} />
-            <Tooltip contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', fontSize: 11, fontFamily: 'JetBrains Mono' }} />
-            <ReferenceLine y={0} stroke="var(--muted-foreground)" />
-            <Area type="monotone" dataKey="pnl" stroke="var(--primary)" fill="var(--primary)" fillOpacity={0.12} name="Mark PnL" />
-            <Line type="monotone" dataKey="delta" stroke="var(--cyan)" strokeWidth={1} dot={false} name="ΣΔ" />
-            <Line type="monotone" dataKey="gamma" stroke="var(--up)" strokeWidth={1} dot={false} name="ΣΓ" />
-            <Line type="monotone" dataKey="theta" stroke="var(--amber)" strokeWidth={1} dot={false} name="ΣΘ" />
-            <Line type="monotone" dataKey="residual" stroke="var(--muted-foreground)" strokeWidth={1} strokeDasharray="2 2" dot={false} name="Residual" />
-          </ComposedChart>
-        </ResponsiveContainer>
-      </Panel>
-    </ToolChrome>
-  );
-}
-
-/* ─── Option PnL ─────────────────────────────────────────────── */
-
-function OptionPnlTool() {
-  const snapshot = useTerminalStore(s => s.snapshot)!;
-  const { path, source: pathSrc } = useSpotPath(45);
-  const [expiryIdx, setExpiryIdx] = useState(0);
-  const [type, setType] = useState<'call' | 'put'>('call');
-  const [side, setSide] = useState<'long' | 'short'>('long');
-
-  const slice = snapshot.expiries[expiryIdx] ?? snapshot.expiries[0];
-  const strikes = useMemo(() => {
-    if (!slice) return [] as number[];
-    const list = type === 'call' ? slice.calls : slice.puts;
-    return list.filter(q => q.iv != null).map(q => q.strike).sort((a, b) => a - b);
-  }, [slice, type]);
-
-  const defaultStrike = useMemo(() => {
-    if (!strikes.length) return snapshot.spot;
-    return strikes.reduce((b, k) => Math.abs(k - snapshot.spot) < Math.abs(b - snapshot.spot) ? k : b, strikes[0]!);
-  }, [strikes, snapshot.spot]);
-
-  const [strike, setStrike] = useState(defaultStrike);
-  useEffect(() => { setStrike(defaultStrike); }, [defaultStrike]);
-
-  const series = useMemo(() => {
-    if (!slice) return null;
-    return optionGreeksPnl(snapshot, {
-      type, strike, expiry: slice.expiry, side, path,
-    });
-  }, [snapshot, type, strike, slice, side, path]);
-
-  const chart = series?.bars.map(b => ({
-    t: b.dateLabel,
-    pnl: b.pnl,
-    mark: b.mark,
-    delta: b.cumDelta,
-    gamma: b.cumGamma,
-    theta: b.cumTheta,
-  })) ?? [];
-
-  return (
-    <ToolChrome>
-      <div className="flex flex-wrap gap-3 px-2 py-1 border border-border bg-card/50 rounded items-end">
-        <label className="text-type-xs font-mono text-muted-foreground flex flex-col gap-0.5">
-          Expiry
-          <select className="bg-background border border-border rounded px-1 py-0.5 text-xs font-mono" value={expiryIdx} onChange={e => setExpiryIdx(+e.target.value)}>
-            {snapshot.expiries.map((e, i) => (
-              <option key={e.expiry} value={i}>{e.expiry} ({e.dte}d)</option>
-            ))}
-          </select>
-        </label>
-        <label className="text-type-xs font-mono text-muted-foreground flex flex-col gap-0.5">
-          Type
-          <select className="bg-background border border-border rounded px-1 py-0.5 text-xs font-mono" value={type} onChange={e => setType(e.target.value as 'call' | 'put')}>
-            <option value="call">Call</option>
-            <option value="put">Put</option>
-          </select>
-        </label>
-        <label className="text-type-xs font-mono text-muted-foreground flex flex-col gap-0.5">
-          Strike
-          <select className="bg-background border border-border rounded px-1 py-0.5 text-xs font-mono" value={strike} onChange={e => setStrike(+e.target.value)}>
-            {strikes.map(k => (
-              <option key={k} value={k}>{fmtPrice(k, k > 1000 ? 0 : 2)}</option>
-            ))}
-          </select>
-        </label>
-        <label className="text-type-xs font-mono text-muted-foreground flex flex-col gap-0.5">
-          Side
-          <select className="bg-background border border-border rounded px-1 py-0.5 text-xs font-mono" value={side} onChange={e => setSide(e.target.value as 'long' | 'short')}>
-            <option value="long">Long</option>
-            <option value="short">Short</option>
-          </select>
-        </label>
-        {series && (
-          <>
-            <Stat label="Term PnL" value={fmtSigned(series.terminalPnl)} color={series.terminalPnl >= 0 ? 'var(--up)' : 'var(--down)'} />
-            <Stat label="Σ Δ" value={fmtSigned(series.totalDelta)} />
-            <Stat label="Σ Γ" value={fmtSigned(series.totalGamma)} />
-            <Stat label="Σ Θ" value={fmtSigned(series.totalTheta)} />
-            <Stat label="Path" value={pathSrc} />
-            <Stat label="Marks" value="BS sticky-IV" />
-          </>
-        )}
-      </div>
-      <Panel title="Option mark PnL" subtitle={`Approx · sticky-strike BS (not exchange marks) · path=${pathSrc}`} className="flex-1 min-h-0">
-        <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={chart} margin={{ top: 8, right: 12, bottom: 4, left: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--grid)" />
-            <XAxis dataKey="t" tick={{ fontSize: 9, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }} interval="preserveStartEnd" />
-            <YAxis tick={{ fontSize: 9, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }} width={48} />
-            <Tooltip contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', fontSize: 11, fontFamily: 'JetBrains Mono' }} />
-            <ReferenceLine y={0} stroke="var(--muted-foreground)" />
-            <Area type="monotone" dataKey="pnl" stroke="var(--primary)" fill="var(--primary)" fillOpacity={0.15} />
-            <Line type="monotone" dataKey="delta" stroke="var(--cyan)" strokeWidth={1} dot={false} />
-            <Line type="monotone" dataKey="theta" stroke="var(--amber)" strokeWidth={1} dot={false} />
-          </ComposedChart>
-        </ResponsiveContainer>
-      </Panel>
-    </ToolChrome>
-  );
-}
-
-/* ─── Straddle (BE + historical PnL) ─────────────────────────── */
-
-function StraddleTool() {
-  const snapshot = useTerminalStore(s => s.snapshot)!;
-  const { path, source: pathSrc } = useSpotPath(45);
-  const [expiryIdx, setExpiryIdx] = useState(0);
-  const [mode, setMode] = useState<'breakeven' | 'pnl'>('breakeven');
-  const [side, setSide] = useState<'long' | 'short'>('long');
-
-  const legs = useMemo(
-    () => templateLegs(side === 'long' ? 'long_straddle' : 'short_straddle', snapshot, expiryIdx),
-    [side, snapshot, expiryIdx],
-  );
-  const mark = useMemo(() => evaluateCombo(legs, snapshot), [legs, snapshot]);
-  const be = useMemo(() => analyzeComboBreakEven(legs, snapshot.spot), [legs, snapshot]);
-
-  const strike = legs[0]?.strike ?? snapshot.spot;
-  const callMid = legs.find(l => l.kind === 'call')?.entryPrice ?? 0;
-  const putMid = legs.find(l => l.kind === 'put')?.entryPrice ?? 0;
-  const strBe = straddleBreakEvens(strike, callMid, putMid, side);
-
-  const series = useMemo(() => comboGreeksPnl(legs, snapshot, path), [legs, snapshot, path]);
-  const pnlChart = series.bars.map(b => ({ t: b.dateLabel, pnl: b.pnl, delta: b.cumDelta, theta: b.cumTheta }));
-  const payoffChart = be.payoffCurve.map(p => ({ spot: p.spot, pnl: p.pnl }));
-
-  return (
-    <ToolChrome>
-      <div className="flex flex-wrap gap-3 px-2 py-1 border border-border bg-card/50 rounded items-end">
-        <label className="text-type-xs font-mono text-muted-foreground flex flex-col gap-0.5">
-          Mode
-          <select className="bg-background border border-border rounded px-1 py-0.5 text-xs font-mono" value={mode} onChange={e => setMode(e.target.value as typeof mode)}>
-            <option value="breakeven">Break-even</option>
-            <option value="pnl">Historical PnL</option>
-          </select>
-        </label>
-        <label className="text-type-xs font-mono text-muted-foreground flex flex-col gap-0.5">
-          Side
-          <select className="bg-background border border-border rounded px-1 py-0.5 text-xs font-mono" value={side} onChange={e => setSide(e.target.value as typeof side)}>
-            <option value="long">Long straddle</option>
-            <option value="short">Short straddle</option>
-          </select>
-        </label>
-        <label className="text-type-xs font-mono text-muted-foreground flex flex-col gap-0.5">
-          Expiry
-          <select className="bg-background border border-border rounded px-1 py-0.5 text-xs font-mono" value={expiryIdx} onChange={e => setExpiryIdx(+e.target.value)}>
-            {snapshot.expiries.map((e, i) => (
-              <option key={e.expiry} value={i}>{e.expiry} ({e.dte}d)</option>
-            ))}
-          </select>
-        </label>
-        <Stat label="K" value={fmtPrice(strike, strike > 1000 ? 0 : 2)} />
-        <Stat label="Premium" value={fmtPrice(strBe.totalPremium)} />
-        <Stat label="BE lo" value={fmtPrice(strBe.lower, strBe.lower > 1000 ? 0 : 2)} />
-        <Stat label="BE hi" value={fmtPrice(strBe.upper, strBe.upper > 1000 ? 0 : 2)} />
-        <Stat label="Mark Δ" term="delta" value={fmtSigned(mark.greeks.delta, 3)} />
-        <Stat label="Mark ν" term="vega" value={fmtSigned(mark.greeks.vega, 2)} />
-        {mode === 'pnl' && <Stat label="Path" value={pathSrc} />}
-      </div>
-      {mode === 'breakeven' ? (
-        <Panel title="Straddle payoff at expiry" subtitle="BEs = K ± (call+put premium)" className="flex-1 min-h-0">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={payoffChart} margin={{ top: 8, right: 12, bottom: 4, left: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--grid)" />
-              <XAxis dataKey="spot" tick={{ fontSize: 9, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }} tickFormatter={(v: number) => fmtPrice(v, 0)} />
-              <YAxis tick={{ fontSize: 9, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }} width={44} />
-              <Tooltip contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', fontSize: 11, fontFamily: 'JetBrains Mono' }} />
-              <ReferenceLine y={0} stroke="var(--muted-foreground)" />
-              <ReferenceLine x={snapshot.spot} stroke="var(--amber)" strokeDasharray="3 3" />
-              <ReferenceLine x={strBe.lower} stroke="var(--cyan)" strokeDasharray="2 2" />
-              <ReferenceLine x={strBe.upper} stroke="var(--cyan)" strokeDasharray="2 2" />
-              <Area type="monotone" dataKey="pnl" stroke="var(--primary)" fill="var(--primary)" fillOpacity={0.2} />
-            </AreaChart>
-          </ResponsiveContainer>
-        </Panel>
-      ) : (
-        <Panel title="Straddle historical mark PnL" subtitle="BS sticky-IV greek decomposition" className="flex-1 min-h-0">
-          <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={pnlChart} margin={{ top: 8, right: 12, bottom: 4, left: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--grid)" />
-              <XAxis dataKey="t" tick={{ fontSize: 9, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }} interval="preserveStartEnd" />
-              <YAxis tick={{ fontSize: 9, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }} width={48} />
-              <Tooltip contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', fontSize: 11, fontFamily: 'JetBrains Mono' }} />
-              <ReferenceLine y={0} stroke="var(--muted-foreground)" />
-              <Area type="monotone" dataKey="pnl" stroke="var(--primary)" fill="var(--primary)" fillOpacity={0.15} />
-              <Line type="monotone" dataKey="delta" stroke="var(--cyan)" strokeWidth={1} dot={false} />
-              <Line type="monotone" dataKey="theta" stroke="var(--amber)" strokeWidth={1} dot={false} />
-            </ComposedChart>
-          </ResponsiveContainer>
-        </Panel>
-      )}
     </ToolChrome>
   );
 }
