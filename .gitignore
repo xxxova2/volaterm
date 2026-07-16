@@ -19,3 +19,4 @@ cfg.json
 
 # Brainstorm / visual companion session artifacts
 .superpowers/
+.worktrees/
