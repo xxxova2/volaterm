@@ -16,3 +16,6 @@ screenshot.mjs
 cfg.json
 .vercel
 .env*
+
+# Brainstorm / visual companion session artifacts
+.superpowers/
