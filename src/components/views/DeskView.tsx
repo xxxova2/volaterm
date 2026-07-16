@@ -8,21 +8,15 @@
  */
 
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
-import {
-  Bar, CartesianGrid, ComposedChart, Line, LineChart,
-  ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
-} from 'recharts';
 import { useTerminalStore } from '../../store/terminalStore';
 import { Panel } from '../terminal/Panel';
-import { Explain } from '../common/Explain';
 import { EmptyState } from '../common/EmptyState';
 import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
 import { FreshnessFromDomain } from '../common/Freshness';
 import { DeskChrome } from '../terminal/DeskChrome';
-import { fmtPct, fmtPrice, fmtSigned } from '../../lib/format';
+import { fmtPrice } from '../../lib/format';
 import { cn } from '../../lib/utils';
 import { UI_COPY } from '../../config/uiCopy';
-import { buildBasisCurve, rollPnlHeatmap } from '../../lib/options/basis';
 import { isCryptoSymbol } from '../../lib/options/basis';
 import { inventoryByExpiry, portfolioGreeks } from '../../lib/options/analytics';
 import { DeskLoading } from '../common/Skeleton';
@@ -38,6 +32,8 @@ import { StraddleTool } from '../desk/tools/StraddleTool';
 import { HedgeTool } from '../desk/tools/HedgeTool';
 import { DFollowTool } from '../desk/tools/DFollowTool';
 import { BacktestTool } from '../desk/tools/BacktestTool';
+import { BasisTool } from '../desk/tools/BasisTool';
+import { RollTool } from '../desk/tools/RollTool';
 
 const GreeksView = lazy(() =>
   import('./GreeksView').then((m) => ({ default: m.GreeksView })),
@@ -180,21 +176,6 @@ function apiBadge(
     return { label: 'SYNTH+SPOT', detail: 'Crypto smile @ live spot' };
   }
   return { label: 'SYNTH', detail: 'Synthetic surface fallback' };
-}
-
-function Stat({ label, value, color, term }: { label: string; value: string; color?: string; term?: string }) {
-  return (
-    <div className="flex flex-col">
-      <span className="text-type-xs text-muted-foreground font-mono">
-        {term ? <Explain term={term}>{label}</Explain> : label}
-      </span>
-      <span className="text-xs font-semibold font-mono tabular-nums" style={{ color: color ?? 'var(--foreground)' }}>{value}</span>
-    </div>
-  );
-}
-
-function ToolChrome({ children }: { children: React.ReactNode }) {
-  return <div className="flex flex-col h-full min-h-0 gap-1">{children}</div>;
 }
 
 export function DeskView({
@@ -363,147 +344,5 @@ export function DeskView({
         </SectionErrorBoundary>
       </div>
     </div>
-  );
-}
-
-/* ─── Basis ──────────────────────────────────────────────────── */
-
-function BasisTool() {
-  const snapshot = useTerminalStore(s => s.snapshot)!;
-  const fundingAnn = useTerminalStore(s => s.fundingAnn);
-  const liveFunding = fundingAnn ?? snapshot.fundingAnn ?? null;
-  const curve = useMemo(
-    () => buildBasisCurve(snapshot, { fundingAnn: liveFunding }),
-    [snapshot, liveFunding],
-  );
-  const chart = curve.points.map(p => ({
-    dte: p.dte,
-    basisPct: (p.basis / curve.spot) * 100,
-    carry: p.annCarry * 100,
-    forward: p.forward,
-    source: p.source,
-  }));
-  const mktN = curve.points.filter(p => p.source === 'market').length;
-
-  return (
-    <ToolChrome>
-      <div className="flex flex-wrap gap-3 px-2 py-1 border border-border bg-card/50 rounded items-end">
-        <Stat label="Spot" value={fmtPrice(snapshot.spot, snapshot.spot > 1000 ? 1 : 2)} />
-        <Stat label="r" value={fmtPct(curve.r)} />
-        <Stat label="q_eff" value={fmtPct(curve.q)} />
-        {liveFunding != null && <Stat label="Funding ann" term="rollPnl" value={fmtPct(liveFunding)} color={liveFunding >= 0 ? 'var(--up)' : 'var(--down)'} />}
-        {curve.perp && (
-          <Stat
-            label="Perp mark"
-            value={`${fmtPrice(curve.perp.mark, curve.perp.mark > 1000 ? 0 : 2)} (${fmtSigned(curve.perp.basis)})`}
-          />
-        )}
-        <Stat label="Front basis" value={chart[0] ? `${chart[0].basisPct.toFixed(3)}%` : '—'} />
-        <Stat label="Marks" value={curve.hasMarketMarks ? `mkt ${mktN}` : 'theo'} />
-        <span className="text-type-2xs font-mono text-muted-foreground self-center">
-          {curve.hasMarketMarks
-            ? 'Live futures marks when matched · else F=S·e⁽ʳ⁻ᵠ⁾ᵀ'
-            : <>F = S·e<sup>(r−q)T</sup>{isCryptoSymbol(snapshot.symbol) ? ' · crypto q≈−funding' : ''}</>}
-        </span>
-      </div>
-      <div className="flex-1 grid grid-cols-2 gap-1 min-h-0">
-        <Panel title="Basis % vs DTE" subtitle={curve.hasMarketMarks ? 'Market F − S (Deribit)' : '(F−S)/S theo'} className="min-h-0">
-          <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={chart} margin={{ top: 8, right: 8, bottom: 4, left: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--grid)" />
-              <XAxis dataKey="dte" tick={{ fontSize: 9, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }} />
-              <YAxis tick={{ fontSize: 9, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }} width={40} unit="%" />
-              <Tooltip contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', fontSize: 11, fontFamily: 'JetBrains Mono' }} />
-              <ReferenceLine y={0} stroke="var(--muted-foreground)" />
-              <Bar dataKey="basisPct" fill="var(--cyan)" opacity={0.8} />
-            </ComposedChart>
-          </ResponsiveContainer>
-        </Panel>
-        <Panel title="Ann. carry" subtitle="(F/S−1)/T" className="min-h-0">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={chart} margin={{ top: 8, right: 8, bottom: 4, left: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--grid)" />
-              <XAxis dataKey="dte" tick={{ fontSize: 9, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }} />
-              <YAxis tick={{ fontSize: 9, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }} width={40} unit="%" />
-              <Tooltip contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', fontSize: 11, fontFamily: 'JetBrains Mono' }} />
-              <Line type="monotone" dataKey="carry" stroke="var(--primary)" strokeWidth={2} dot={{ r: 2 }} />
-            </LineChart>
-          </ResponsiveContainer>
-        </Panel>
-      </div>
-    </ToolChrome>
-  );
-}
-
-/* ─── Roll PnL heatmap ───────────────────────────────────────── */
-
-function RollTool() {
-  const snapshot = useTerminalStore(s => s.snapshot)!;
-  const fundingAnn = useTerminalStore(s => s.fundingAnn);
-  const liveFunding = fundingAnn ?? snapshot.fundingAnn ?? null;
-  const roll = useMemo(
-    () => rollPnlHeatmap(snapshot, {
-      fundingAnn: liveFunding ?? (snapshot.riskFreeRate - snapshot.dividendYield),
-    }),
-    [snapshot, liveFunding],
-  );
-
-  const flat = roll.shocks.flatMap((sh, si) =>
-    roll.horizons.map((h, hi) => ({
-      shock: `${(sh * 100).toFixed(0)}%`,
-      days: h,
-      pnl: roll.pnl[si]![hi]!,
-    })),
-  );
-
-  // Matrix for simple table heatmap
-  const maxAbs = Math.max(...flat.map(c => Math.abs(c.pnl)), 1e-9);
-
-  return (
-    <ToolChrome>
-      <div className="flex flex-wrap gap-3 px-2 py-1 border border-border bg-card/50 rounded items-end">
-        <Stat
-          label="Carry ann"
-          term="rollPnl"
-          value={fmtPct(liveFunding ?? (snapshot.riskFreeRate - snapshot.dividendYield))}
-        />
-        <Stat label="Notional" value={fmtPrice(snapshot.spot, snapshot.spot > 1000 ? 0 : 2)} />
-        <span className="text-type-2xs font-mono text-muted-foreground self-center">
-          PnL ≈ S·(1+shock) · carry · days/365
-          {liveFunding != null ? ' · Deribit funding' : ' · r−q equity carry'}
-        </span>
-      </div>
-      <Panel title="Roll / funding PnL heatmap" subtitle="Spot shock × hold horizon" className="flex-1 min-h-0 overflow-auto">
-        <table className="text-type-xs font-mono border-collapse w-full">
-          <thead className="sticky top-0 bg-card">
-            <tr>
-              <th className="px-2 py-1 text-left text-muted-foreground">Shock \ Days</th>
-              {roll.horizons.map(h => (
-                <th key={h} className="px-2 py-1 text-muted-foreground font-normal">{h}d</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {roll.shocks.map((sh, si) => (
-              <tr key={sh}>
-                <td className="px-2 py-0.5 text-muted-foreground">{(sh * 100).toFixed(0)}%</td>
-                {roll.horizons.map((h, hi) => {
-                  const v = roll.pnl[si]![hi]!;
-                  const intensity = Math.min(1, Math.abs(v) / maxAbs);
-                  const bg = v >= 0
-                    ? `color-mix(in oklch, var(--up) ${Math.round(intensity * 50)}%, transparent)`
-                    : `color-mix(in oklch, var(--down) ${Math.round(intensity * 50)}%, transparent)`;
-                  return (
-                    <td key={h} className="px-2 py-0.5 text-right tabular-nums" style={{ background: bg }}>
-                      {fmtSigned(v, v > 100 ? 0 : 2)}
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </Panel>
-    </ToolChrome>
   );
 }
