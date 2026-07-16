@@ -19,7 +19,7 @@ import { EmptyState } from '../common/EmptyState';
 import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
 import { FreshnessFromDomain } from '../common/Freshness';
 import { DeskChrome } from '../terminal/DeskChrome';
-import { fmtPct, fmtPrice, fmtSigned, fmtCompact } from '../../lib/format';
+import { fmtPct, fmtPrice, fmtSigned } from '../../lib/format';
 import { cn } from '../../lib/utils';
 import { UI_COPY } from '../../config/uiCopy';
 import {
@@ -27,11 +27,8 @@ import {
   breakEvenTable,
 } from '../../lib/options/breakEven';
 import {
-  comboGreeksProfile,
   evaluateCombo,
-  spotGrid,
   templateLegs,
-  type PortfolioLeg,
 } from '../../lib/options/portfolio';
 import { simulatePaths } from '../../lib/options/pathSim';
 import { defaultHedgeFromSnapshot, simulateDeltaHedge, type HedgeMode } from '../../lib/options/hedging';
@@ -49,6 +46,7 @@ import { inventoryByExpiry, portfolioGreeks } from '../../lib/options/analytics'
 import { DeskLoading } from '../common/Skeleton';
 import { consumeDeskJumpOnMount } from '../../lib/market/deskJump';
 import { SimTool } from '../desk/tools/SimTool';
+import { ComboGreeksTool } from '../desk/tools/ComboGreeksTool';
 
 const GreeksView = lazy(() =>
   import('./GreeksView').then((m) => ({ default: m.GreeksView })),
@@ -361,7 +359,7 @@ export function DeskView({
           {tool === 'sim' && snapshot && <SimTool />}
           {tool === 'combopnl' && snapshot && <ComboPnlTool />}
           {tool === 'straddle' && snapshot && <StraddleTool />}
-          {tool === 'combo' && snapshot && <ComboTool />}
+          {tool === 'combo' && snapshot && <ComboGreeksTool />}
           {tool === 'optionpnl' && snapshot && <OptionPnlTool />}
           {tool === 'breakeven' && snapshot && <BreakEvenTool />}
           {tool === 'roll' && snapshot && <RollTool />}
@@ -496,86 +494,6 @@ function HedgeTool() {
           </ComposedChart>
         </ResponsiveContainer>
       </Panel>
-    </ToolChrome>
-  );
-}
-
-/* ─── Combo ─────────────────────────────────────────────────── */
-
-function ComboTool() {
-  const snapshot = useTerminalStore(s => s.snapshot)!;
-  const [template, setTemplate] = useState<'long_straddle' | 'short_straddle' | 'risk_reversal' | 'call_spread' | 'long_call'>('short_straddle');
-  const [expiryIdx, setExpiryIdx] = useState(0);
-
-  const legs: PortfolioLeg[] = useMemo(
-    () => templateLegs(template, snapshot, expiryIdx),
-    [template, snapshot, expiryIdx],
-  );
-  const mark = useMemo(() => evaluateCombo(legs, snapshot), [legs, snapshot]);
-  const profile = useMemo(() => {
-    const spots = spotGrid(snapshot.spot, 0.15, 61);
-    return comboGreeksProfile(legs, snapshot, spots);
-  }, [legs, snapshot]);
-  const be = useMemo(() => analyzeComboBreakEven(legs, snapshot.spot), [legs, snapshot]);
-
-  return (
-    <ToolChrome>
-      <div className="flex flex-wrap gap-3 px-2 py-1 border border-border bg-card/50 rounded items-end">
-        <label className="text-type-xs font-mono text-muted-foreground flex flex-col gap-0.5">
-          Template
-          <select className="bg-background border border-border rounded px-1 py-0.5 text-xs font-mono" value={template} onChange={e => setTemplate(e.target.value as typeof template)}>
-            <option value="short_straddle">Short straddle (MM)</option>
-            <option value="long_straddle">Long straddle</option>
-            <option value="risk_reversal">Risk reversal</option>
-            <option value="call_spread">Call spread</option>
-            <option value="long_call">Long call</option>
-          </select>
-        </label>
-        <label className="text-type-xs font-mono text-muted-foreground flex flex-col gap-0.5">
-          Expiry
-          <select className="bg-background border border-border rounded px-1 py-0.5 text-xs font-mono" value={expiryIdx} onChange={e => setExpiryIdx(+e.target.value)}>
-            {snapshot.expiries.map((e, i) => (
-              <option key={e.expiry} value={i}>{e.expiry} ({e.dte}d)</option>
-            ))}
-          </select>
-        </label>
-        <Stat label="Mark" value={fmtSigned(mark.mark)} />
-        <Stat label="PnL" value={fmtSigned(mark.pnl)} color={mark.pnl >= 0 ? 'var(--up)' : 'var(--down)'} />
-        <Stat label="Δ" term="delta" value={fmtSigned(mark.greeks.delta, 3)} />
-        <Stat label="Γ" term="gamma" value={fmtCompact(mark.greeks.gamma)} />
-        <Stat label="ν" term="vega" value={fmtSigned(mark.greeks.vega, 2)} />
-        <Stat label="Θ" term="theta" value={fmtSigned(mark.greeks.theta, 2)} />
-        <Stat label="BEs" value={be.breakEvens.map(x => fmtPrice(x, 0)).join(' · ') || '—'} />
-      </div>
-      <div className="flex-1 grid grid-cols-2 gap-1 min-h-0">
-        <Panel title="Combo PnL vs Spot" subtitle="Mark-to-model" className="min-h-0">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={profile} margin={{ top: 8, right: 8, bottom: 4, left: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--grid)" />
-              <XAxis dataKey="spot" tick={{ fontSize: 9, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }} tickFormatter={(v: number) => fmtPrice(v, 0)} />
-              <YAxis tick={{ fontSize: 9, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }} width={44} />
-              <Tooltip contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', fontSize: 11, fontFamily: 'JetBrains Mono' }} />
-              <ReferenceLine y={0} stroke="var(--muted-foreground)" />
-              <ReferenceLine x={snapshot.spot} stroke="var(--amber)" strokeDasharray="3 3" />
-              <Area type="monotone" dataKey="pnl" stroke="var(--primary)" fill="var(--primary)" fillOpacity={0.2} />
-            </AreaChart>
-          </ResponsiveContainer>
-        </Panel>
-        <Panel title="Combo Δ / Γ / ν" subtitle="Greeks vs spot" className="min-h-0">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={profile} margin={{ top: 8, right: 8, bottom: 4, left: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--grid)" />
-              <XAxis dataKey="spot" tick={{ fontSize: 9, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }} tickFormatter={(v: number) => fmtPrice(v, 0)} />
-              <YAxis tick={{ fontSize: 9, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }} width={44} />
-              <Tooltip contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', fontSize: 11, fontFamily: 'JetBrains Mono' }} />
-              <ReferenceLine x={snapshot.spot} stroke="var(--amber)" strokeDasharray="3 3" />
-              <Line type="monotone" dataKey="delta" stroke="var(--cyan)" strokeWidth={1.5} dot={false} />
-              <Line type="monotone" dataKey="vega" stroke="var(--primary)" strokeWidth={1.5} dot={false} />
-              <Line type="monotone" dataKey="gamma" stroke="var(--up)" strokeWidth={1} dot={false} />
-            </LineChart>
-          </ResponsiveContainer>
-        </Panel>
-      </div>
     </ToolChrome>
   );
 }
