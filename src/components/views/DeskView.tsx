@@ -48,6 +48,7 @@ import { isCryptoSymbol } from '../../lib/options/basis';
 import { inventoryByExpiry, portfolioGreeks } from '../../lib/options/analytics';
 import { DeskLoading } from '../common/Skeleton';
 import { consumeDeskJumpOnMount } from '../../lib/market/deskJump';
+import { SimTool } from '../desk/tools/SimTool';
 
 const GreeksView = lazy(() =>
   import('./GreeksView').then((m) => ({ default: m.GreeksView })),
@@ -679,77 +680,6 @@ function BacktestTool() {
             <Area type="monotone" dataKey="p95" stroke="none" fill="var(--up)" fillOpacity={0.08} />
             <Area type="monotone" dataKey="p5" stroke="none" fill="var(--down)" fillOpacity={0.08} />
             <Line type="monotone" dataKey="p50" stroke="var(--cyan)" strokeWidth={1.5} dot={false} />
-          </ComposedChart>
-        </ResponsiveContainer>
-      </Panel>
-    </ToolChrome>
-  );
-}
-
-/* ─── Simulator ─────────────────────────────────────────────── */
-
-function SimTool() {
-  const snapshot = useTerminalStore(s => s.snapshot)!;
-  const [drift, setDrift] = useState(0);
-  const [vol, setVol] = useState(snapshot.expiries[0]?.atmIV ?? 0.25);
-  const [days, setDays] = useState(21);
-  const [template, setTemplate] = useState<'short_straddle' | 'long_straddle' | 'long_call'>('short_straddle');
-
-  const legs = useMemo(() => templateLegs(template, snapshot, 0), [template, snapshot]);
-  const sim = useMemo(() => simulatePaths(legs, snapshot, {
-    drift, vol, days, steps: 40, paths: 200, seed: 99,
-  }), [legs, snapshot, drift, vol, days]);
-
-  const chart = sim.t.map((t, i) => ({
-    t: t.toFixed(1),
-    p5: sim.pnlBands.p5[i],
-    p25: sim.pnlBands.p25[i],
-    p50: sim.pnlBands.p50[i],
-    p75: sim.pnlBands.p75[i],
-    p95: sim.pnlBands.p95[i],
-  }));
-
-  return (
-    <ToolChrome>
-      <div className="flex flex-wrap gap-3 px-2 py-1 border border-border bg-card/50 rounded items-end">
-        <label className="text-type-xs font-mono text-muted-foreground flex flex-col gap-0.5">
-          Structure
-          <select className="bg-background border border-border rounded px-1 py-0.5 text-xs font-mono" value={template} onChange={e => setTemplate(e.target.value as typeof template)}>
-            <option value="short_straddle">Short straddle</option>
-            <option value="long_straddle">Long straddle</option>
-            <option value="long_call">Long call</option>
-          </select>
-        </label>
-        <label className="text-type-xs font-mono text-muted-foreground flex flex-col gap-0.5">
-          Drift μ
-          <input type="number" step={0.01} value={drift} onChange={e => setDrift(+e.target.value)} className="w-16 bg-background border border-border rounded px-1 py-0.5 text-xs font-mono" />
-        </label>
-        <label className="text-type-xs font-mono text-muted-foreground flex flex-col gap-0.5">
-          Realized σ
-          <input type="number" step={0.01} value={vol} onChange={e => setVol(+e.target.value)} className="w-16 bg-background border border-border rounded px-1 py-0.5 text-xs font-mono" />
-        </label>
-        <label className="text-type-xs font-mono text-muted-foreground flex flex-col gap-0.5">
-          Horizon d
-          <input type="number" step={1} value={days} onChange={e => setDays(+e.target.value)} className="w-16 bg-background border border-border rounded px-1 py-0.5 text-xs font-mono" />
-        </label>
-        <Stat label="E[PnL]" value={fmtSigned(sim.meanTerminalPnl)} color={sim.meanTerminalPnl >= 0 ? 'var(--up)' : 'var(--down)'} />
-        <Stat label="Win rate" value={fmtPct(sim.winRate)} />
-        <Stat label="p5 term" value={fmtSigned(sim.pnlBands.p5[sim.pnlBands.p5.length - 1])} color="var(--down)" />
-        <Stat label="p95 term" value={fmtSigned(sim.pnlBands.p95[sim.pnlBands.p95.length - 1])} color="var(--up)" />
-      </div>
-      <Panel title="PnL distribution cloud" subtitle="Monte Carlo bands (200 paths)" className="flex-1 min-h-0">
-        <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={chart} margin={{ top: 8, right: 12, bottom: 4, left: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--grid)" />
-            <XAxis dataKey="t" tick={{ fontSize: 9, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }} />
-            <YAxis tick={{ fontSize: 9, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }} width={48} />
-            <Tooltip contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', fontSize: 11, fontFamily: 'JetBrains Mono' }} />
-            <ReferenceLine y={0} stroke="var(--muted-foreground)" />
-            <Area type="monotone" dataKey="p95" stroke="none" fill="var(--cyan)" fillOpacity={0.08} />
-            <Area type="monotone" dataKey="p5" stroke="none" fill="var(--background)" fillOpacity={1} />
-            <Area type="monotone" dataKey="p75" stroke="none" fill="var(--primary)" fillOpacity={0.15} />
-            <Area type="monotone" dataKey="p25" stroke="none" fill="var(--background)" fillOpacity={1} />
-            <Line type="monotone" dataKey="p50" stroke="var(--primary)" strokeWidth={2} dot={false} />
           </ComposedChart>
         </ResponsiveContainer>
       </Panel>
