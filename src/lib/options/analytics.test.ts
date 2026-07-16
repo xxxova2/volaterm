@@ -18,6 +18,7 @@ import {
   scanParityEdges,
   realizedVolCloseToClose,
   inventoryByExpiry,
+  flipFromSeries,
 } from './analytics';
 import type { VolSnapshot } from './types';
 
@@ -521,6 +522,38 @@ describe('Gamma Exposure', () => {
     expect(gex.points).toHaveLength(0);
     expect(gex.totalGEX).toBe(0);
     expect(gex.gammaFlip).toBeNull();
+  });
+});
+
+/**
+ * Golden fixture shared with macrovol-api/services/test_greeks_calculator.py
+ * (compute_gex_flip). Cumulative: -100 → -150 → -140 → +60 → +110 → flip @ 105.
+ */
+describe('flipFromSeries cumulative golden (aligned with Python)', () => {
+  const GOLDEN = [
+    { strike: 90, net: -100 },
+    { strike: 95, net: -50 },
+    { strike: 100, net: 10 },
+    { strike: 105, net: 200 },
+    { strike: 110, net: 50 },
+  ];
+
+  it('crosses zero on cumulative GEX at strike 105 (not pointwise ~99)', () => {
+    expect(flipFromSeries(GOLDEN)).toBe(105);
+  });
+
+  it('falls back to min |running sum| when all positive', () => {
+    expect(
+      flipFromSeries([
+        { strike: 90, net: 50 },
+        { strike: 100, net: 80 },
+        { strike: 110, net: 20 },
+      ]),
+    ).toBe(90);
+  });
+
+  it('returns null for empty series', () => {
+    expect(flipFromSeries([])).toBeNull();
   });
 });
 

@@ -14,6 +14,7 @@ import { Explain } from '../common/Explain';
 import { EmptyState } from '../common/EmptyState';
 import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
 import { VirtualRows } from '../common/VirtualRows';
+import { FlashAlphaStrip } from '../positioning/FlashAlphaStrip';
 import { fmtCompact, fmtPrice, fmtPct, fmtSigned } from '../../lib/format';
 
 /** Compact signed notional for Δ columns. */
@@ -33,7 +34,7 @@ import {
 } from '../../lib/options/analytics';
 import { interpretHedgeFlow, riskBudgetGeometry } from '../../lib/options/hedgeFlow';
 import { cn } from '../../lib/utils';
-import { CHART, chartAxisTick, chartTooltipStyle, chartGridProps } from '../../lib/chartTheme';
+import { CHART } from '../../lib/chartTheme';
 import {
   useBoardFocus,
   useRegisterBoard,
@@ -43,6 +44,10 @@ import { PERF_BUDGET } from '../../config/perfBudget';
 import { GexLevelsStrip } from '../common/GexLevelsStrip';
 import { StrategyBuilderStrip } from '../common/StrategyBuilderStrip';
 import { consumeDeskJumpOnMount } from '../../lib/market/deskJump';
+import { DeskChartFrame, deskChartChrome, deskAxisLabel } from '../desk/DeskChart';
+import { PrintStrip } from '../desk/PrintStrip';
+import { DESK_SERIES } from '../desk/seriesGrammar';
+import { DeskModeBar } from '../terminal/DeskModeBar';
 import { DealerGradientPanel } from './DealerGradientPanel';
 import { DealerGreekProfiles } from './DealerGreekProfiles';
 import { SessionGexHeatmap } from './SessionGexHeatmap';
@@ -191,6 +196,7 @@ export function PositioningView() {
       spot: snapshot.spot,
       atmIV: front.atmIV,
       dte: front.dte,
+      expiry: front.expiry,
       straddle: move?.straddle,
     });
   }, [snapshot, move]);
@@ -315,27 +321,43 @@ export function PositioningView() {
       {/* Sticky GEX walls + regime + session path (Phase 2.5 / 3) */}
       <GexLevelsStrip className="bg-card/50" showSpark />
 
-      {/* Extra context under sticky strip */}
+      {/* Print strip under sticky walls — B density */}
       {snapshot && (
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-border bg-card/30 px-3 py-1 font-mono text-type-2xs text-muted-foreground">
-          {flip != null && (
-            <span className={aboveFlip ? 'text-up' : 'text-down'}>
-              {aboveFlip ? 'ABOVE γ-FLIP' : 'BELOW γ-FLIP'}
-            </span>
-          )}
-          <span>
-            Max pain{' '}
-            <span className="text-foreground">{maxPain != null ? fmtPrice(maxPain, 0) : '—'}</span>
-          </span>
-          <span>
-            Move <span className="text-cyan">{move ? `±${fmtPrice(move.move)}` : '—'}</span>
-          </span>
-          {tradeableParity.length > 0 && (
-            <span className="text-foreground">
-              {tradeableParity.length} parity flag{tradeableParity.length > 1 ? 's' : ''}
-            </span>
-          )}
-          <span className="ml-auto">{dealer?.unitNote ?? ''}</span>
+        <div className="border-b border-border px-2 py-1">
+          <PrintStrip
+            items={[
+              {
+                label: 'γ-flip',
+                value:
+                  flip == null
+                    ? '—'
+                    : aboveFlip
+                      ? `ABOVE ${fmtPrice(flip, 0)}`
+                      : `BELOW ${fmtPrice(flip, 0)}`,
+                tone: flip == null ? 'muted' : aboveFlip ? 'up' : 'down',
+              },
+              {
+                label: 'Max pain',
+                value: maxPain != null ? fmtPrice(maxPain, 0) : '—',
+              },
+              {
+                label: 'Move',
+                value: move ? `±${fmtPrice(move.move)}` : '—',
+                tone: 'muted',
+              },
+              {
+                label: 'Parity',
+                value: tradeableParity.length > 0 ? String(tradeableParity.length) : '0',
+                tone: tradeableParity.length > 0 ? 'default' : 'muted',
+              },
+              {
+                label: 'Weight',
+                value: dealer?.weight ?? '—',
+                tone: 'muted',
+                title: dealer?.unitNote,
+              },
+            ]}
+          />
         </div>
       )}
 
@@ -377,163 +399,170 @@ export function PositioningView() {
                     {dealer.unitNote}
                   </div>
                 )}
-                <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-1.5">
-                  <div className="flex gap-0.5">
-                    {METRICS.map((m) => (
-                      <button
-                        key={m.id}
-                        type="button"
-                        onClick={() => setMetric(m.id)}
-                        className={cn(
-                          'rounded px-2 py-0.5 font-mono text-type-xs border transition-colors',
-                          metric === m.id
-                            ? 'border-primary bg-secondary text-foreground ring-1 ring-border'
-                            : 'border-border text-muted-foreground hover:text-foreground',
-                        )}
-                      >
-                        <Explain term={m.term}>{m.label}</Explain>
-                      </button>
-                    ))}
+                <div className="flex flex-col gap-1 border-b border-border px-2 py-1.5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <DeskModeBar
+                      items={METRICS.map((m) => ({
+                        id: m.id,
+                        label: m.label,
+                        title: m.unit,
+                      }))}
+                      activeId={metric}
+                      onSelect={(id) => setMetric(id as DealerMetric)}
+                    />
+                    <DeskModeBar
+                      items={[
+                        { id: 'all', label: 'All exp', short: 'All' },
+                        { id: '0dte', label: '0DTE', short: '0D' },
+                        { id: 'front', label: 'Front', short: 'Fr' },
+                      ]}
+                      activeId={
+                        expMode === 'all' || expMode === '0dte' || expMode === 'front'
+                          ? expMode
+                          : 'all'
+                      }
+                      onSelect={(id) => setExpMode(id as ExpMode)}
+                      className="ml-1"
+                    />
+                    <DeskModeBar
+                      items={[
+                        {
+                          id: 'oi',
+                          label: dealer.weightFallback && weight === 'oi' ? 'OI·auto' : 'OI',
+                          title: 'Open interest (auto→volume if OI missing)',
+                        },
+                        { id: 'volume', label: 'Vol', title: 'Session volume weight' },
+                        { id: 'unit', label: 'Unit', title: '1 per listed contract' },
+                      ]}
+                      activeId={
+                        weight === 'oi' || weight === 'volume' || weight === 'unit'
+                          ? weight
+                          : dealer.weight
+                      }
+                      onSelect={(id) => setWeight(id as ExposureWeight)}
+                      className="ml-1"
+                    />
+                    <DeskModeBar
+                      items={[
+                        { id: 'atm5', label: '±5%' },
+                        { id: 'atm10', label: '±10%' },
+                        { id: 'atm20', label: '±20%' },
+                        { id: 'all', label: 'All K' },
+                      ]}
+                      activeId={strikeZoom}
+                      onSelect={(id) => setStrikeZoom(id as StrikeZoom)}
+                      className="ml-1"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setProfileOn((v) => !v)}
+                      className={cn(
+                        'rounded px-1.5 py-0.5 font-mono text-type-2xs border',
+                        profileOn
+                          ? 'border-primary bg-primary/10 text-foreground'
+                          : 'border-border text-muted-foreground',
+                      )}
+                      title="Toggle cumulative GEX/DEX profile lines"
+                    >
+                      <Explain term="gexProfile">Profiles</Explain>
+                    </button>
                   </div>
-                  <div className="flex gap-0.5 ml-1" title="Expiry book slice">
-                    {(
-                      [
-                        ['all', 'All exp'],
-                        ['0dte', '0DTE'],
-                        ['front', 'Front'],
-                      ] as const
-                    ).map(([id, lab]) => (
-                      <button
-                        key={id}
-                        type="button"
-                        onClick={() => setExpMode(id)}
-                        className={cn(
-                          'rounded px-1.5 py-0.5 font-mono text-type-2xs border',
-                          expMode === id
-                            ? 'border-amber bg-amber/10 text-amber'
-                            : 'border-border text-muted-foreground hover:text-foreground',
-                        )}
-                      >
-                        {lab}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="flex gap-0.5 ml-1">
-                    {([
-                      ['oi', 'OI'],
-                      ['volume', 'Vol'],
-                      ['unit', 'Unit'],
-                    ] as const).map(([w, lab]) => {
-                      const effective = dealer.weight;
-                      const active =
-                        weight === w || (w === effective && dealer.weightFallback && weight === 'oi');
-                      return (
-                        <button
-                          key={w}
-                          type="button"
-                          onClick={() => setWeight(w)}
-                          className={cn(
-                            'rounded px-2 py-0.5 font-mono text-type-xs border',
-                            active
-                              ? 'border-border bg-secondary text-foreground'
-                              : 'border-border text-muted-foreground',
-                          )}
-                          title={
-                            w === 'oi'
-                              ? 'Open interest (auto→volume if OI missing)'
-                              : w === 'volume'
-                                ? 'Session volume weight'
-                                : '1 per listed contract'
-                          }
-                        >
-                          {lab}
-                          {w === 'volume' && dealer.weightFallback && weight === 'oi' ? '·auto' : ''}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <div className="ml-1 flex gap-0.5" title="Strike axis zoom around spot">
-                    {([
-                      ['atm5', '±5%'],
-                      ['atm10', '±10%'],
-                      ['atm20', '±20%'],
-                      ['all', 'All'],
-                    ] as const).map(([id, lab]) => (
-                      <button
-                        key={id}
-                        type="button"
-                        onClick={() => setStrikeZoom(id)}
-                        className={cn(
-                          'rounded px-1.5 py-0.5 font-mono text-type-2xs border',
-                          strikeZoom === id
-                            ? 'border-cyan bg-cyan/10 text-cyan'
-                            : 'border-border text-muted-foreground hover:text-foreground',
-                        )}
-                      >
-                        {lab}
-                      </button>
-                    ))}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setProfileOn((v) => !v)}
-                    className={cn(
-                      'rounded px-1.5 py-0.5 font-mono text-type-2xs border',
-                      profileOn
-                        ? 'border-primary bg-primary/10 text-foreground'
-                        : 'border-border text-muted-foreground',
-                    )}
-                    title="Toggle cumulative GEX/DEX profile lines"
-                  >
-                    <Explain term="gexProfile">Profiles</Explain>
-                  </button>
-                  <div className="ml-auto flex flex-wrap gap-3 font-mono text-type-xs">
-                    <StatMini label={`Σ ${metric.toUpperCase()}`} value={fmtCompact(totalVal)} color={totalVal >= 0 ? CHART.series.up : CHART.series.down} />
-                    <StatMini label="DEX $" value={fmtCompact(dealer.totalDEX)} color={dealer.totalDEX >= 0 ? CHART.series.up : CHART.series.down} />
-                    <StatMini label="CR" value={dealer.callWall != null ? fmtPrice(dealer.callWall, 0) : '—'} color={CHART.series.up} />
-                    <StatMini label="PS" value={dealer.putWall != null ? fmtPrice(dealer.putWall, 0) : '—'} color={CHART.series.down} />
-                    <StatMini label="HVL" value={dealer.highVolLevel != null ? fmtPrice(dealer.highVolLevel, 0) : '—'} color={CHART.series.amber} />
-                    <StatMini label="Flip" value={dealer.gammaFlip != null ? fmtPrice(dealer.gammaFlip, 0) : '—'} color={CHART.series.amber} />
-                  </div>
+                  <PrintStrip
+                    items={[
+                      {
+                        label: `Σ ${metric.toUpperCase()}`,
+                        value: fmtCompact(totalVal),
+                        tone: totalVal >= 0 ? 'up' : 'down',
+                      },
+                      {
+                        label: 'DEX',
+                        value: fmtCompact(dealer.totalDEX),
+                        tone: dealer.totalDEX >= 0 ? 'up' : 'down',
+                      },
+                      {
+                        label: 'CR',
+                        value: dealer.callWall != null ? fmtPrice(dealer.callWall, 0) : '—',
+                        tone: 'up',
+                      },
+                      {
+                        label: 'PS',
+                        value: dealer.putWall != null ? fmtPrice(dealer.putWall, 0) : '—',
+                        tone: 'down',
+                      },
+                      {
+                        label: 'HVL',
+                        value: dealer.highVolLevel != null ? fmtPrice(dealer.highVolLevel, 0) : '—',
+                      },
+                      {
+                        label: 'Flip',
+                        value: dealer.gammaFlip != null ? fmtPrice(dealer.gammaFlip, 0) : '—',
+                      },
+                    ]}
+                  />
                 </div>
                 <div className="flex min-h-[220px] flex-1 flex-col lg:flex-row">
                   <div className="relative min-h-[200px] min-w-0 flex-1 basis-0 lg:min-h-0">
-                    <div className="absolute inset-0">
+                    <div className="absolute inset-0 p-0.5">
+                      <DeskChartFrame
+                        xTitle="Strike"
+                        yTitle={
+                          metric === 'gex'
+                            ? 'Net GEX ($M)'
+                            : `Net ${metric.toUpperCase()} ($M)`
+                        }
+                        className="h-full"
+                      >
                       <ResponsiveContainer width="100%" height="100%">
-                        <ComposedChart data={chartData} margin={{ top: 16, right: profileOn ? 44 : 12, bottom: 8, left: 4 }}>
-                          <CartesianGrid {...chartGridProps} />
+                        <ComposedChart
+                          data={chartData}
+                          margin={{
+                            ...deskChartChrome().margin,
+                            right: profileOn ? 44 : deskChartChrome().margin.right,
+                            top: 18,
+                          }}
+                        >
+                          <CartesianGrid {...deskChartChrome().grid} />
                           <XAxis
                             dataKey="label"
-                            tick={{ ...chartAxisTick, fontSize: 9 }}
+                            tick={{ ...deskChartChrome().tick, fontSize: 9 }}
                             tickLine={false}
+                            stroke={deskChartChrome().axisLine}
                             interval={Math.max(0, Math.floor(chartData.length / 14))}
+                            label={deskAxisLabel('Strike')}
                           />
                           <YAxis
                             yAxisId="bar"
-                            tick={chartAxisTick}
+                            tick={deskChartChrome().tick}
                             tickLine={false}
+                            stroke={deskChartChrome().axisLine}
                             width={44}
                             tickFormatter={(v: number) => `${v.toFixed(0)}M`}
+                            label={deskAxisLabel(
+                              metric === 'gex' ? 'Net GEX ($M)' : `Net ${metric.toUpperCase()} ($M)`,
+                              'insideLeft',
+                            )}
                           />
                           {profileOn && metric === 'gex' && (
                             <YAxis
                               yAxisId="cum"
                               orientation="right"
-                              tick={{ ...chartAxisTick, fontSize: 8 }}
+                              tick={{ ...deskChartChrome().tick, fontSize: 8 }}
                               tickLine={false}
+                              stroke={deskChartChrome().axisLine}
                               width={40}
                               tickFormatter={(v: number) => `${v.toFixed(0)}M`}
+                              label={deskAxisLabel('Cum ($M)', 'insideRight')}
                             />
                           )}
-                          <Tooltip contentStyle={chartTooltipStyle} />
-                          <ReferenceLine yAxisId="bar" y={0} stroke={CHART.refLine} />
+                          <Tooltip contentStyle={deskChartChrome().tooltipStyle} />
+                          <ReferenceLine yAxisId="bar" y={0} stroke={DESK_SERIES.zero} />
                           {spotLabel && (
                             <ReferenceLine
                               yAxisId="bar"
                               x={spotLabel}
-                              stroke={CHART.series.info}
+                              stroke={DESK_SERIES.spot}
                               strokeDasharray="4 4"
-                              label={{ value: 'Spot', position: 'top', fill: CHART.series.info, fontSize: 9, fontFamily: 'JetBrains Mono' }}
+                              label={{ value: 'Spot', position: 'top', fill: DESK_SERIES.spot, fontSize: 9, fontFamily: 'JetBrains Mono' }}
                             />
                           )}
                           {flipLabel && flipLabel !== spotLabel && (
@@ -603,7 +632,7 @@ export function PositioningView() {
                                 type="monotone"
                                 dataKey="dexCum"
                                 name="DEX profile"
-                                stroke={CHART.series.down}
+                                stroke={DESK_SERIES.short}
                                 strokeWidth={1.5}
                                 strokeDasharray="4 2"
                                 dot={false}
@@ -613,6 +642,7 @@ export function PositioningView() {
                           )}
                         </ComposedChart>
                       </ResponsiveContainer>
+                      </DeskChartFrame>
                     </div>
                   </div>
                   <div className="flex h-44 w-full shrink-0 flex-col border-t border-border lg:h-auto lg:min-h-0 lg:w-48 lg:border-l lg:border-t-0">
@@ -862,13 +892,13 @@ export function PositioningView() {
                               {fmtCompact(row.totalGEX)}
                             </span>
                           </div>
-                          <div className="h-16">
+                          <div className="h-16 rounded border border-border/40 bg-black">
                             {pts.length === 0 ? (
                               <div className="flex h-full items-center justify-center text-type-2xs text-muted-foreground">—</div>
                             ) : (
                               <ResponsiveContainer width="100%" height="100%">
                                 <BarChart data={pts} margin={{ top: 2, right: 2, bottom: 0, left: 0 }}>
-                                  <ReferenceLine y={0} stroke={CHART.refLine} />
+                                  <ReferenceLine y={0} stroke={DESK_SERIES.zero} />
                                   <Bar dataKey="net" isAnimationActive={false}>
                                     {pts.map((p, i) => (
                                       <Cell
@@ -939,81 +969,78 @@ export function PositioningView() {
                 </div>
               </Panel>
             )}
+            <FlashAlphaStrip />
             <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
               <Panel title={<Explain term="keyLevels">Dealer Levels</Explain>}>
-                <div className="grid grid-cols-2 gap-3 p-3 font-mono">
-                  <LevelStat label="Spot" value={snapshot ? fmtPrice(snapshot.spot) : '—'} />
-                  <LevelStat
-                    label="Gamma Flip"
-                    term="gammaFlip"
-                    value={dealer?.gammaFlip != null ? fmtPrice(dealer.gammaFlip, 0) : '—'}
-                    color="text-foreground"
+                <div className="flex flex-col gap-1.5 p-2">
+                  <PrintStrip
+                    items={[
+                      { label: 'Spot', value: snapshot ? fmtPrice(snapshot.spot) : '—' },
+                      {
+                        label: 'γ-flip',
+                        value: dealer?.gammaFlip != null ? fmtPrice(dealer.gammaFlip, 0) : '—',
+                      },
+                      {
+                        label: 'CR',
+                        value: dealer?.callWall != null ? fmtPrice(dealer.callWall, 0) : '—',
+                        tone: 'up',
+                      },
+                      {
+                        label: 'PS',
+                        value: dealer?.putWall != null ? fmtPrice(dealer.putWall, 0) : '—',
+                        tone: 'down',
+                      },
+                      {
+                        label: 'HVL',
+                        value: dealer?.highVolLevel != null ? fmtPrice(dealer.highVolLevel, 0) : '—',
+                      },
+                      {
+                        label: 'Max pain',
+                        value: maxPain != null ? fmtPrice(maxPain, 0) : '—',
+                      },
+                    ]}
                   />
-                  <LevelStat
-                    label="Call Resistance"
-                    term="callWall"
-                    value={dealer?.callWall != null ? fmtPrice(dealer.callWall, 0) : '—'}
-                    color="text-up"
+                  <PrintStrip
+                    items={[
+                      {
+                        label: 'Σ GEX',
+                        value: dealer ? fmtCompact(dealer.totalGEX) : '—',
+                        tone: (dealer?.totalGEX ?? 0) >= 0 ? 'up' : 'down',
+                      },
+                      {
+                        label: 'Σ DEX',
+                        value: dealer ? fmtCompact(dealer.totalDEX) : '—',
+                        tone: (dealer?.totalDEX ?? 0) >= 0 ? 'up' : 'down',
+                      },
+                      {
+                        label: 'Σ Charm/d',
+                        value: dealer ? fmtCompact(dealer.totalCharm) : '—',
+                      },
+                      {
+                        label: 'Σ VEX',
+                        value: dealer ? fmtCompact(dealer.totalVEX) : '—',
+                      },
+                      {
+                        label: 'EM $',
+                        value: move ? `±${fmtPrice(move.move)}` : '—',
+                        tone: 'muted',
+                      },
+                      {
+                        label: 'EM %',
+                        value: move ? fmtPct(move.movePct) : '—',
+                        tone: 'muted',
+                      },
+                      {
+                        label: 'P(touch)',
+                        value: move ? fmtPct(move.probTouch) : '—',
+                        tone: 'muted',
+                      },
+                    ]}
                   />
-                  <LevelStat
-                    label="Put Support"
-                    term="putWall"
-                    value={dealer?.putWall != null ? fmtPrice(dealer.putWall, 0) : '—'}
-                    color="text-down"
-                  />
-                  <LevelStat
-                    label="High Vol Level"
-                    term="highVolLevel"
-                    value={dealer?.highVolLevel != null ? fmtPrice(dealer.highVolLevel, 0) : '—'}
-                    color="text-amber"
-                  />
-                  <LevelStat
-                    label="Max Pain"
-                    term="maxPain"
-                    value={maxPain != null ? fmtPrice(maxPain, 0) : '—'}
-                    color="text-foreground"
-                  />
-                  <LevelStat
-                    label="Total GEX"
-                    term="gex"
-                    value={dealer ? fmtCompact(dealer.totalGEX) : '—'}
-                    color={(dealer?.totalGEX ?? 0) >= 0 ? 'text-up' : 'text-down'}
-                  />
-                  <LevelStat
-                    label="Σ DEX $"
-                    term="dex"
-                    value={dealer ? fmtCompact(dealer.totalDEX) : '—'}
-                    color={(dealer?.totalDEX ?? 0) >= 0 ? 'text-up' : 'text-down'}
-                  />
-                  <LevelStat
-                    label="Σ Charm/d"
-                    term="charmExposure"
-                    value={dealer ? fmtCompact(dealer.totalCharm) : '—'}
-                  />
-                  <LevelStat
-                    label="Σ VEX"
-                    term="vex"
-                    value={dealer ? fmtCompact(dealer.totalVEX) : '—'}
-                  />
-                  <LevelStat
-                    label="Exp Move $"
-                    term="expectedMove"
-                    value={move ? `±${fmtPrice(move.move)}` : '—'}
-                  />
-                  <LevelStat
-                    label="Exp Move %"
-                    value={move ? fmtPct(move.movePct) : '—'}
-                  />
-                  <LevelStat
-                    label="P(touch +EM)"
-                    term="probTouch"
-                    value={move ? fmtPct(move.probTouch) : '—'}
-                  />
+                  <p className="font-mono text-type-2xs text-muted-foreground leading-snug">
+                    Walls = call/put GEX extremes. Flip = cum net GEX zero-cross. Max pain = min aggregate payoff at front.
+                  </p>
                 </div>
-                <p className="border-t border-border px-3 py-2 text-type-2xs font-mono text-muted-foreground leading-snug">
-                  Walls = test levels / range boundaries from call & put GEX. Flip = cumulative net GEX zero-cross.
-                  Max pain = strike minimising aggregate option payoff at front expiry.
-                </p>
               </Panel>
 
               {equityBasis && equityBasis.points.length > 0 && (
@@ -1080,102 +1107,120 @@ export function PositioningView() {
               )}
 
               <Panel title={<Explain term="riskBudget">Risk Budget · stop vs option</Explain>}>
-                <div className="grid grid-cols-2 gap-3 p-3 font-mono">
-                  <LevelStat
-                    label="ATM ≈ 0.4·S·σ√T"
-                    term="riskBudget"
-                    value={riskBudget ? fmtPrice(riskBudget.atmPremiumApprox) : '—'}
+                <div className="flex flex-col gap-1.5 p-2">
+                  <PrintStrip
+                    items={[
+                      {
+                        label: 'ATM ≈0.4·S·σ√T',
+                        value: riskBudget ? fmtPrice(riskBudget.atmPremiumApprox) : '—',
+                      },
+                      {
+                        label: 'Straddle',
+                        value:
+                          riskBudget && riskBudget.straddle > 0
+                            ? fmtPrice(riskBudget.straddle)
+                            : '—',
+                      },
+                      {
+                        label: 'Stop@prem',
+                        value: riskBudget ? `±${fmtPrice(riskBudget.stopAtPremium)}` : '—',
+                      },
+                      {
+                        label: 'P(touch)prem',
+                        value: riskBudget ? fmtPct(riskBudget.probTouchPremium) : '—',
+                        tone: 'muted',
+                      },
+                      {
+                        label: 'Stop@50%',
+                        value: riskBudget ? `±${fmtPrice(riskBudget.stopAtHalfTouch)}` : '—',
+                      },
+                      {
+                        label: 'P(touch)½',
+                        value: riskBudget ? fmtPct(riskBudget.probTouchHalf) : '—',
+                        tone: 'muted',
+                      },
+                    ]}
                   />
-                  <LevelStat
-                    label="Live straddle"
-                    value={riskBudget && riskBudget.straddle > 0 ? fmtPrice(riskBudget.straddle) : '—'}
-                  />
-                  <LevelStat
-                    label="Stop @ premium"
-                    value={riskBudget ? `±${fmtPrice(riskBudget.stopAtPremium)}` : '—'}
-                  />
-                  <LevelStat
-                    label="P(touch) @ prem"
-                    term="probTouch"
-                    value={riskBudget ? fmtPct(riskBudget.probTouchPremium) : '—'}
-                  />
-                  <LevelStat
-                    label="Stop @ 50% touch"
-                    value={riskBudget ? `±${fmtPrice(riskBudget.stopAtHalfTouch)}` : '—'}
-                  />
-                  <LevelStat
-                    label="P(touch) half"
-                    value={riskBudget ? fmtPct(riskBudget.probTouchHalf) : '—'}
-                  />
+                  <p className="font-mono text-type-2xs text-muted-foreground leading-snug">
+                    Stop underlier ≈ ATM premium (~69% touch BM). ~50% touch ≈ 1.7× prem. ATM vol only.
+                  </p>
                 </div>
-                <p className="border-t border-border px-3 py-2 text-type-2xs font-mono text-muted-foreground leading-snug">
-                  Same risk budget as a long ATM option: stop the underlier at ≈ premium (~69% touch under BM).
-                  For ~50% touch use ~1.7× premium (0.67·S·σ√T). Smile/skew ignored — ATM vol only.
-                </p>
               </Panel>
 
               <Panel title="Open Interest by Expiry">
-                <div className="h-64 p-2">
+                <div className="h-64 p-1">
                   {oiByExpiry.length === 0 ? (
                     <div className="flex h-full items-center justify-center font-mono text-xs text-muted-foreground">
                       No chain data
                     </div>
                   ) : (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={oiByExpiry} margin={{ top: 8, right: 8, bottom: 4, left: 0 }}>
-                        <CartesianGrid {...chartGridProps} />
-                        <XAxis
-                          dataKey="label"
-                          tick={{ ...chartAxisTick, fontSize: 9 }}
-                        />
-                        <YAxis
-                          tick={{ ...chartAxisTick, fontSize: 9 }}
-                          width={40}
-                          tickFormatter={(v) => `${(v / 1000).toFixed(0)}K`}
-                        />
-                        <Tooltip contentStyle={chartTooltipStyle} />
-                        <Bar dataKey="callOI" stackId="oi" fill={CHART.series.up} name="Call OI" opacity={0.85} />
-                        <Bar dataKey="putOI" stackId="oi" fill={CHART.series.down} name="Put OI" opacity={0.85} />
-                      </BarChart>
-                    </ResponsiveContainer>
+                    <DeskChartFrame xTitle="Expiry (DTE)" yTitle="OI (K)" className="h-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={oiByExpiry} margin={deskChartChrome().margin}>
+                          <CartesianGrid {...deskChartChrome().grid} />
+                          <XAxis
+                            dataKey="label"
+                            tick={{ ...deskChartChrome().tick, fontSize: 9 }}
+                            stroke={deskChartChrome().axisLine}
+                            label={deskAxisLabel('Expiry (DTE)')}
+                          />
+                          <YAxis
+                            tick={{ ...deskChartChrome().tick, fontSize: 9 }}
+                            stroke={deskChartChrome().axisLine}
+                            width={40}
+                            tickFormatter={(v) => `${(v / 1000).toFixed(0)}K`}
+                            label={deskAxisLabel('OI (K)', 'insideLeft')}
+                          />
+                          <Tooltip contentStyle={deskChartChrome().tooltipStyle} />
+                          <Bar dataKey="callOI" stackId="oi" fill={CHART.series.up} name="Call OI" opacity={0.85} />
+                          <Bar dataKey="putOI" stackId="oi" fill={CHART.series.down} name="Put OI" opacity={0.85} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </DeskChartFrame>
                   )}
                 </div>
               </Panel>
 
               {snapshot && dealer && (
                 <Panel title="Net GEX near spot (±8%)" className="lg:col-span-2">
-                  <div className="h-56 p-2">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart
-                        data={dealer.points
-                          .filter((p) => Math.abs(p.strike / snapshot.spot - 1) <= 0.08)
-                          .map((p) => ({
-                            label: fmtPrice(p.strike, 0),
-                            net: p.netGEX / 1e6,
-                          }))}
-                        margin={{ top: 8, right: 8, bottom: 4, left: 0 }}
-                      >
-                        <CartesianGrid {...chartGridProps} />
-                        <XAxis
-                          dataKey="label"
-                          tick={{ ...chartAxisTick, fontSize: 8 }}
-                          interval={Math.max(0, Math.floor(dealer.points.length / 20))}
-                        />
-                        <YAxis
-                          tick={{ ...chartAxisTick, fontSize: 9 }}
-                          width={36}
-                          tickFormatter={(v) => `${v.toFixed(0)}M`}
-                        />
-                        <Tooltip contentStyle={chartTooltipStyle} />
-                        <ReferenceLine y={0} stroke={CHART.refLine} />
-                        <ReferenceLine
-                          x={fmtPrice(snapshot.spot, 0)}
-                          stroke={CHART.series.amber}
-                          strokeDasharray="3 3"
-                        />
-                        <Bar dataKey="net" fill={CHART.series.cyan} name="Net GEX $M" opacity={0.9} />
-                      </BarChart>
-                    </ResponsiveContainer>
+                  <div className="h-56 p-1">
+                    <DeskChartFrame xTitle="Strike" yTitle="Net GEX ($M)" className="h-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart
+                          data={dealer.points
+                            .filter((p) => Math.abs(p.strike / snapshot.spot - 1) <= 0.08)
+                            .map((p) => ({
+                              label: fmtPrice(p.strike, 0),
+                              net: p.netGEX / 1e6,
+                            }))}
+                          margin={deskChartChrome().margin}
+                        >
+                          <CartesianGrid {...deskChartChrome().grid} />
+                          <XAxis
+                            dataKey="label"
+                            tick={{ ...deskChartChrome().tick, fontSize: 8 }}
+                            stroke={deskChartChrome().axisLine}
+                            interval={Math.max(0, Math.floor(dealer.points.length / 20))}
+                            label={deskAxisLabel('Strike')}
+                          />
+                          <YAxis
+                            tick={{ ...deskChartChrome().tick, fontSize: 9 }}
+                            stroke={deskChartChrome().axisLine}
+                            width={36}
+                            tickFormatter={(v) => `${v.toFixed(0)}M`}
+                            label={deskAxisLabel('Net GEX ($M)', 'insideLeft')}
+                          />
+                          <Tooltip contentStyle={deskChartChrome().tooltipStyle} />
+                          <ReferenceLine y={0} stroke={DESK_SERIES.zero} />
+                          <ReferenceLine
+                            x={fmtPrice(snapshot.spot, 0)}
+                            stroke={DESK_SERIES.spot}
+                            strokeDasharray="3 3"
+                          />
+                          <Bar dataKey="net" fill={CHART.series.cyan} name="Net GEX $M" opacity={0.9} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </DeskChartFrame>
                   </div>
                 </Panel>
               )}
@@ -1186,20 +1231,23 @@ export function PositioningView() {
             className="min-h-[280px]"
           >
             <div className="flex h-full flex-col">
-              <div className="flex flex-wrap gap-4 border-b border-border px-3 py-2 font-mono text-type-xs">
-                <span>
-                  <span className="text-muted-foreground">Pairs scanned </span>
-                  <span className="text-foreground">{parity.length}</span>
-                </span>
-                <span>
-                  <span className="text-muted-foreground">Tradeable after costs </span>
-                  <span className={tradeableParity.length ? 'text-warn' : 'text-up'}>
-                    {tradeableParity.length}
-                  </span>
-                </span>
-                <span className="text-muted-foreground">
-                  residual = (C−P) − (Se^{'-qT'} − Ke^{'-rT'}) · band ±6% · DTE≤120
-                </span>
+              <div className="border-b border-border px-2 py-1">
+                <PrintStrip
+                  items={[
+                    { label: 'Pairs', value: String(parity.length) },
+                    {
+                      label: 'Tradeable',
+                      value: String(tradeableParity.length),
+                      tone: tradeableParity.length ? 'default' : 'muted',
+                    },
+                    {
+                      label: 'Model',
+                      value: 'C−P − (Se⁻qT−Ke⁻rT)',
+                      tone: 'muted',
+                      title: 'Residual band ±6% · DTE≤120 · after half-spreads',
+                    },
+                  ]}
+                />
               </div>
               <div className="min-h-0 flex-1 overflow-auto">
                 {parity.length === 0 ? (
@@ -1267,7 +1315,7 @@ export function PositioningView() {
             <div id="pos-sub-strategy" data-desk-section="1" className="flex flex-col gap-2 p-1">
               <StrategyBuilderStrip />
               <p className="px-1 font-mono text-type-2xs text-muted-foreground">
-                Same units as chain greeks (per contract). Source may differ from MacroVol Greeks 1.0 —
+                Same units as chain greeks (per contract). Source may differ from Vol · Greeks 1.0 —
                 use MM Desk for path sim / hedge tools.
               </p>
             </div>
@@ -1279,32 +1327,3 @@ export function PositioningView() {
   );
 }
 
-function StatMini({ label, value, color }: { label: string; value: string; color?: string }) {
-  return (
-    <span>
-      <span className="text-muted-foreground">{label} </span>
-      <span className="font-semibold tabular-nums" style={{ color: color ?? 'var(--foreground)' }}>{value}</span>
-    </span>
-  );
-}
-
-function LevelStat({
-  label,
-  value,
-  color = 'text-foreground',
-  term,
-}: {
-  label: string;
-  value: string;
-  color?: string;
-  term?: string;
-}) {
-  return (
-    <div>
-      <div className="text-type-2xs uppercase tracking-wider text-muted-foreground">
-        {term ? <Explain term={term}>{label}</Explain> : label}
-      </div>
-      <div className={`text-sm font-semibold tabular-nums ${color}`}>{value}</div>
-    </div>
-  );
-}

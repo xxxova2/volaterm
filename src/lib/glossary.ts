@@ -347,7 +347,7 @@ export const GLOSSARY: Record<string, GlossaryEntry> = {
   },
   vrp: {
     title: 'Variance Risk Premium',
-    body: 'Gap between implied vol and your subjective realized-vol view. Positive VRP means you think options are rich → short vol edge. Short weekly straddles harvest VRP when IV > RV after hedges — more γ risk and often more edge in shorter DTE.',
+    body: 'Gap between implied vol and realized vol (e.g. ATM IV vs RV20), not ATM vs VIXCLS unless you label that as VIX basis. Positive VRP means you think options are rich → short vol edge. Short weekly straddles harvest VRP when IV > RV after hedges — more γ risk and often more edge in shorter DTE.',
   },
   collar: {
     title: 'Collar (25Δ-style)',

@@ -1,6 +1,8 @@
 /**
- * MacroVol API client — all calls go through our Node proxy at /api/macrovol/*
- * which forwards to the MacroVol FastAPI (FRED + yfinance).
+ * Rates / macro / greeks client.
+ * Browser path: /api/macrovol/* → Node proxy → local FastAPI pipe that fans out to
+ * real vendors (FRED, NYFed, yfinance, Frankfurter, FiscalData, CoinGecko, …).
+ * "macrovol" is the route prefix only — not a market data vendor.
  */
 
 const BASE = '/api/macrovol';
@@ -24,7 +26,7 @@ async function fetchJson<T = unknown>(url: string, init?: RequestInit): Promise<
 }
 
 export const macrovolApi = {
-  /** Probe rates summary as a cheap health check (proxy → MacroVol FastAPI). */
+  /** Probe rates summary as a cheap health check (proxy → local FRED/NYFed pipe). */
   health: async () => {
     try {
       await fetchJson(`${BASE}/rates/summary`);
@@ -50,6 +52,10 @@ export const macrovolApi = {
     fetchJson<CorrelationData>(`${BASE}/rates/correlations?window=${window}&period=${encodeURIComponent(period)}`),
 
   macroSummary: () => fetchJson<MacroSummary>(`${BASE}/macro/summary`),
+  /** Free FRED stress pack (HY/IG, VIX, BEI, USD, NFCI) — shared TTL via proxy. */
+  macroStress: () => fetchJson<MacroStressPack>(`${BASE}/macro/stress`),
+  /** Keyless OFR repo + ECB DFR — complements FRED stress (1h shared TTL). */
+  macroPrimary: () => fetchJson<MacroPrimaryPack>(`${BASE}/macro/primary`),
   series: (id: string, limit = 500) =>
     fetchJson<SeriesData>(`${BASE}/macro/series/${encodeURIComponent(id)}?limit=${limit}`),
 
@@ -79,7 +85,7 @@ export const macrovolApi = {
   secContext: (symbol: string, limit = 8) =>
     fetchJson<SecContextData>(`${BASE}/sec/context/${encodeURIComponent(symbol)}?limit=${limit}`),
 
-  /** Omit r to let MacroVol API default to live SOFR. */
+  /** Omit r to default to live SOFR (FRED). */
   surface: (ticker: string, r?: number | null, q = 0.0) => {
     const params = new URLSearchParams();
     if (r != null) params.set('r', String(r));
@@ -89,12 +95,18 @@ export const macrovolApi = {
   surfacePreview: (ticker: string) =>
     fetchJson(`${BASE}/surface/${encodeURIComponent(ticker)}/preview`),
 
-  /** Omit r to let API use live SOFR as risk-free. */
-  greeks: (ticker: string, r?: number | null, q = 0.013) => {
+  /**
+   * Omit r → live SOFR / Treasury term (fail-closed).
+   * Omit q → API estimates dividend yield from yfinance (no silent 1.3%).
+   */
+  greeks: (ticker: string, r?: number | null, q?: number | null) => {
     const params = new URLSearchParams();
     if (r != null) params.set('r', String(r));
-    params.set('q', String(q));
-    return fetchJson<GreeksData>(`${BASE}/greeks/${encodeURIComponent(ticker)}?${params}`);
+    if (q != null) params.set('q', String(q));
+    const qs = params.toString();
+    return fetchJson<GreeksData>(
+      `${BASE}/greeks/${encodeURIComponent(ticker)}${qs ? `?${qs}` : ''}`,
+    );
   },
   greeksHistory: (ticker: string, period = '1mo') =>
     fetchJson<HistoryData>(`${BASE}/greeks/${encodeURIComponent(ticker)}/history?period=${encodeURIComponent(period)}`),
@@ -378,6 +390,45 @@ export interface MacroSummary {
   source?: string;
 }
 
+/** Free FRED risk/liquidity prints — one shared pack for the desk. */
+export interface MacroStressPack {
+  vix: number | null;
+  hy_oas: number | null;
+  ig_oas: number | null;
+  bei_5y: number | null;
+  bei_10y: number | null;
+  real_10y: number | null;
+  usd_broad: number | null;
+  nfci: number | null;
+  term_sofr_3m: number | null;
+  units?: Record<string, string>;
+  labels?: Record<string, string>;
+  obs_dates?: Record<string, string | null>;
+  field_source?: Record<string, string>;
+  series_ids?: Record<string, string>;
+  missing_fields?: string[];
+  note?: string;
+  as_of?: string;
+  source?: string;
+}
+
+/** Keyless primary sources: OFR NY Fed repo + ECB DFR (not FRED VIXCLS). */
+export interface MacroPrimaryPack {
+  bgcr: number | null;
+  tgcr: number | null;
+  sofr_ofr: number | null;
+  ecb_dfr: number | null;
+  units?: Record<string, string>;
+  labels?: Record<string, string>;
+  obs_dates?: Record<string, string | null>;
+  field_source?: Record<string, string>;
+  series_ids?: Record<string, string>;
+  missing_fields?: string[];
+  note?: string;
+  as_of?: string;
+  source?: string;
+}
+
 export interface StirContract {
   contract: string;
   /** Board ticker e.g. SFRM6 */
@@ -644,6 +695,7 @@ export interface GreeksData {
   r?: number;
   q?: number;
   r_source?: string;
+  q_source?: string;
   r_mode?: string;
   units?: {
     theta?: string;

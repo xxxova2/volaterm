@@ -9,7 +9,7 @@
 | **Principle** | Steal **layout + decision jobs**, not branding, proprietary OI attribution, or fake 1‑min institutional feeds |
 | **Chart owner** | Prefer **Grok** for visual/chart/profile implementation (user preference); Hy3 for pure chrome packs if needed |
 
-Related: `docs/BLOOMBERG_VISUAL_RESEARCH.md`, `docs/API_PROVIDERS_EVAL.md`, `docs/BLOOMBERG_SHELL_REDESIGN.md`, **`docs/MACROS_GREEKS_GEX_RESEARCH.md`** (MenthorQ GEX/DEX/HVL + Conks plumbing + Benn greeks).
+Related: `docs/BLOOMBERG_VISUAL_RESEARCH.md`, `docs/engineering/API_PROVIDERS_EVAL.md`, `docs/BLOOMBERG_SHELL_REDESIGN.md`, **`docs/MACROS_GREEKS_GEX_RESEARCH.md`** (MenthorQ GEX/DEX/HVL + Conks plumbing + Benn greeks).
 
 ---
 

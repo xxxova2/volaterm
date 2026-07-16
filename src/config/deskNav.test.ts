@@ -23,6 +23,16 @@ describe('deskNav', () => {
     expect(secs.find((s) => s.id === 'pos-sub-strategy')).toBeUndefined();
   });
 
+  it('trade is Structure + PnL + Hedge (not 12 tool chips)', () => {
+    const secs = sectionsForTab('desk');
+    expect(secs.map((s) => s.id)).toEqual([
+      'trade-sub-structure',
+      'trade-sub-pnl',
+      'trade-sub-risk',
+    ]);
+    expect(secs.find((s) => s.id === 'desk-ws-optionpnl')).toBeUndefined();
+  });
+
   it('crypto is Thalex lab order (Lab first, then Market, then tools)', () => {
     const secs = sectionsForTab('crypto');
     expect(secs[0]?.id).toBe('crypto-sub-lab');
@@ -48,6 +58,23 @@ describe('deskNav', () => {
     expect(findSectionMeta('rates-mode-funding', 'rates')?.label).toBe('Funding');
     expect(findSectionMeta('rates-mode-stir', 'rates')?.label).toMatch(/STIR/i);
     expect(findSectionMeta('vol-sub-smile', 'vol')?.label).toBe('Smile');
+  });
+
+  it('academy is education only — no Engineering, Design, or Positioning sections', () => {
+    const secs = sectionsForTab('academy');
+    const labels = secs.map((s) => s.label.toLowerCase());
+    const ids = secs.map((s) => s.id);
+    expect(labels.some((l) => /engineer|design|positioning/.test(l))).toBe(false);
+    expect(ids).not.toContain('academy-sub-engineering');
+    expect(ids).not.toContain('academy-sub-design');
+    expect(ids).not.toContain('academy-sub-positioning');
+    expect(ids).toEqual([
+      'academy-sub-start',
+      'academy-sub-options',
+      'academy-sub-macro',
+      'academy-sub-news',
+      'academy-sub-glossary',
+    ]);
   });
 });
 

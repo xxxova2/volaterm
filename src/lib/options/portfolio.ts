@@ -4,6 +4,7 @@
 
 import { computeGreeks, type GreeksResult } from './greeks';
 import { blackScholes } from './black-scholes';
+import { yearFractionFromSlice } from './time';
 import type { VolSnapshot, OptionQuote } from './types';
 
 export type LegSide = 'long' | 'short';
@@ -72,8 +73,8 @@ function findQuote(
 
 function dteYears(snap: VolSnapshot, expiry: string): number {
   const slice = snap.expiries.find(e => e.expiry === expiry);
-  if (!slice) return 30 / 365;
-  return Math.max(1 / 365 / 24, slice.dte / 365);
+  if (!slice) return yearFractionFromSlice({ expiry, dte: 30 });
+  return yearFractionFromSlice(slice);
 }
 
 /**

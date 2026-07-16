@@ -68,14 +68,19 @@ export function monthBudgetAllows(provider, maxPerMonth, headroom = 0.85) {
  * @param {string} key
  * @param {number} ttlMs
  * @param {() => Promise<T>} loader
- * @param {{ allowStaleOnError?: boolean, force?: boolean }} [opts]
- * @returns {Promise<{ data: T, fromCache: boolean, ageMs: number }>}
+ * @param {{ allowStaleOnError?: boolean, force?: boolean, cacheIf?: (data: T) => boolean }} [opts]
+ * @returns {Promise<{ data: T, fromCache: boolean, ageMs: number, stale?: boolean }>}
+ *
+ * `cacheIf` — when provided, only persist loader results that pass the predicate
+ * (e.g. MacroVol proxy: cache only HTTP 2xx envelopes; never sticky 5xx bodies).
+ * On loader throw with a prior hit and allowStaleOnError, returns last good data
+ * with `stale: true` so clients can label provenance.
  */
 export async function getOrFetch(key, ttlMs, loader, opts = {}) {
   const now = Date.now();
   const hit = store.get(key);
   if (!opts.force && hit && now - hit.timestamp < ttlMs) {
-    return { data: hit.data, fromCache: true, ageMs: now - hit.timestamp };
+    return { data: hit.data, fromCache: true, ageMs: now - hit.timestamp, stale: false };
   }
 
   let pending = inflight.get(key);
@@ -83,11 +88,14 @@ export async function getOrFetch(key, ttlMs, loader, opts = {}) {
     pending = (async () => {
       try {
         const data = await loader();
-        store.set(key, { data, timestamp: Date.now() });
-        return data;
+        const okToCache = typeof opts.cacheIf === 'function' ? !!opts.cacheIf(data) : true;
+        if (okToCache) {
+          store.set(key, { data, timestamp: Date.now() });
+        }
+        return { data, stale: false, hitTs: null };
       } catch (err) {
         if (opts.allowStaleOnError !== false && hit) {
-          return hit.data;
+          return { data: hit.data, stale: true, hitTs: hit.timestamp };
         }
         throw err;
       } finally {
@@ -97,11 +105,19 @@ export async function getOrFetch(key, ttlMs, loader, opts = {}) {
     inflight.set(key, pending);
   }
 
-  const data = await pending;
+  const result = await pending;
+  if (result.stale) {
+    return {
+      data: result.data,
+      fromCache: true,
+      ageMs: result.hitTs != null ? Date.now() - result.hitTs : 0,
+      stale: true,
+    };
+  }
   const entry = store.get(key);
   const ageMs = entry ? Date.now() - entry.timestamp : 0;
   // Fresh network fill (or single-flight join on a miss) reports fromCache: false.
-  return { data, fromCache: false, ageMs };
+  return { data: result.data, fromCache: false, ageMs, stale: false };
 }
 
 export function peek(key) {
@@ -132,12 +148,20 @@ export const TTL = {
   FINNHUB_NEWS_MS: 5 * 60_000,  // company/market news
   FINNHUB_EARNINGS_MS: 30 * 60_000,
   FINNHUB_QUOTE_MS: 2 * 60_000, // SPY quote — shared 2 min
+  /** Economic calendar — rarely changes; one shared pull for all visitors */
+  FINNHUB_ECO_MS: 6 * 60 * 60_000,
+  FINNHUB_META_MS: 24 * 60 * 60_000, // peers / recommendation
   /** Alpha Vantage ~25/day → ~every 90–120 min for a few symbols */
   ALPHA_VANTAGE_MS: 90 * 60_000,
   /** TradingView RapidAPI ~5/day usable → multi-hour TTL */
   TRADINGVIEW_MS: 6 * 60 * 60_000,
+  /** Massive/Polygon-style prev bar — daily is enough */
+  MASSIVE_PREV_MS: 60 * 60_000,
   DESK_STATUS_MS: 30_000,
 };
+
+/** FlashAlpha free ≈ 5/day — soft budget for levels only */
+export const FLASHALPHA_FREE_DAILY = 5;
 
 export function cacheStats() {
   const keys = [];

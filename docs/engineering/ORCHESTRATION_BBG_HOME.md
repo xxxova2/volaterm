@@ -308,7 +308,7 @@ You are running on Tencent Hy3 (or Claude Code with Hy3): strong multi-file agen
 Workspace: /home/kalde/trading-terminal-pro
 Stack: React 19, Vite, Zustand, Tailwind, Vitest; Node server.js; MacroVol FastAPI under macrovol-api/
 Read first:
-- docs/ORCHESTRATION_BBG_HOME.md (this plan)
+- docs/engineering/ORCHESTRATION_BBG_HOME.md (this plan)
 - docs/BLOOMBERG_SHELL_REDESIGN.md (shell constraints)
 - DESIGN.md (as-built)
 - src/config/functionRegistry.ts
@@ -323,7 +323,7 @@ Our codes: HOME VOL SURF SMILE TERM POS CHAIN GEX GRK RATES SOFR … (see functi
 Data may be delayed (Yahoo/FMP/FRED) — always preserve freshness labels.
 
 # CURRENT TASK PACK
-Execute ONLY Pack 1 from docs/ORCHESTRATION_BBG_HOME.md §6:
+Execute ONLY Pack 1 from docs/engineering/ORCHESTRATION_BBG_HOME.md §6:
 
 Home briefing layout:
 1. Restructure DashboardView: Regime/DES band → top action chips (max 3 visible) → LaunchpadGrid → GexLevelsStrip → FeedHealth → collapsible Analytics for the rest.

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 420" role="img" aria-label="Money market rate corridor">
+  <rect width="960" height="420" fill="#0b1220"/>
+  <text x="40" y="48" fill="#e8edf5" font-family="Georgia, serif" font-size="28" font-weight="700">The rate corridor (simplified)</text>
+  <text x="40" y="84" fill="#9aa8bc" font-family="system-ui" font-size="18">Cash parks between a floor and a ceiling set by Fed facilities</text>
+  <rect x="120" y="120" width="720" height="70" rx="8" fill="#1e293b" stroke="#f87171" stroke-width="2"/>
+  <text x="480" y="165" text-anchor="middle" fill="#fca5a5" font-family="system-ui" font-size="22" font-weight="700">Ceiling · Standing Repo Facility (SRF) / discount window style backup</text>
+  <rect x="120" y="210" width="720" height="70" rx="8" fill="#1e293b" stroke="#e6c35c" stroke-width="2"/>
+  <text x="480" y="255" text-anchor="middle" fill="#e6c35c" font-family="system-ui" font-size="22" font-weight="700">Market rates · SOFR · EFFR (where overnight funding trades)</text>
+  <rect x="120" y="300" width="720" height="70" rx="8" fill="#1e293b" stroke="#4ade80" stroke-width="2"/>
+  <text x="480" y="345" text-anchor="middle" fill="#86efac" font-family="system-ui" font-size="22" font-weight="700">Floor · IORB · overnight RRP (where cash can earn a safe return)</text>
+</svg>

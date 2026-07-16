@@ -76,6 +76,21 @@ describe('greeks unit matrix (TS ↔ MacroVol Python)', () => {
     expect(g.vega).toBeLessThan(2);
   });
 
+  it('returns finite zeros (not NaN) for T<=0 or vol<=0', () => {
+    for (const g of [
+      computeGreeks('call', 100, 100, 0, 0.05, 0.01, 0.2),
+      computeGreeks('put', 100, 100, 0.25, 0.05, 0.01, 0),
+      computeGreeks('call', 100, 100, -1, 0.05, 0.01, 0.2),
+      computeGreeks('call', NaN, 100, 0.25, 0.05, 0.01, 0.2),
+    ]) {
+      expect(Number.isFinite(g.delta)).toBe(true);
+      expect(Number.isFinite(g.gamma)).toBe(true);
+      expect(Number.isFinite(g.vega)).toBe(true);
+      expect(g.gamma).toBe(0);
+      expect(g.vega).toBe(0);
+    }
+  });
+
   it('vanna is raw ∂²V/∂S∂σ (not /100)', () => {
     const g = computeGreeks('call', 100, 100, 0.25, 0.05, 0.01, 0.2);
     // ATM vanna near 0; finite and not volga-scale

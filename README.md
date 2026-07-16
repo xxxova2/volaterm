@@ -1,6 +1,25 @@
-# VOLATERM — AAA+ Options Trading Terminal
+# VOLATERM
 
-Institutional-grade options trading terminal: equity vol, positioning, Greeks, MM desk, crypto (Deribit), and macros & rates.
+**Live demo (Railway):** → [https://volaterm-production-f082.up.railway.app](https://volaterm-production-f082.up.railway.app)
+
+A browser-based **options trading terminal**. Open the link above to try it — no install.
+
+### What it is (short)
+
+VOLATERM is a multi-desk terminal for reading **equity options volatility**, **dealer positioning (GEX)**, **Greeks / MM tools**, **crypto options (Deribit)**, **rates / macros**, and a built-in **Academy** of desk notes.
+
+| Desk | What you get |
+|------|----------------|
+| **Vol** | 3D IV surface, smile, term structure, wing-side controls |
+| **Flow** | Option chain + GEX / key levels |
+| **Trade** | Blotter-style tools, scenarios, Greeks |
+| **Crypto** | BTC/ETH options tape (Deribit) |
+| **Rates** | Curves, SOFR path, macro strip |
+| **Academy** | Essays, glossary, news (education — not a trading desk) |
+
+Full stack on Railway: React SPA + Node API + Yahoo/yfinance chains + MacroVol rates.
+
+---
 
 ## Quick Start
 
@@ -12,18 +31,29 @@ Launches Vite (frontend), Fastify API (`server.js`), and MacroVol Python API con
 
 Default ports: Vite `3000` (or `VITE_PORT`), API `3001` (or `PORT`), MacroVol `8765`.
 
+### Production deploy (full stack only)
+
+**Full product** = SPA + `server.js` + MacroVol + yfinance. Use **Docker** / Render blueprint (`render.yaml`) / Railway with `scripts/start-production.sh`.
+
+| Path | What you get |
+|------|----------------|
+| `npm run dev` / Docker / Render | Full API: options, Deribit, FRED proxy, Finnhub board, FlashAlpha |
+| **Vercel** (`vercel.json`) | **SPA only** + thin FMP/history serverless stubs — **not** a full terminal |
+
+Do not expect live chains/rates from a Vercel-only deploy without a separate Node API host.
+
 ## Features
 
 **Core desks (6 tabs)**
 
 | Hotkey | Desk | Contents |
 |--------|------|----------|
-| **1** | **Home** | Dashboard, portfolio strip, deep-links into desks |
-| **2** | **Vol** | 3D IV surface + smile/term (split), surface fit |
-| **3** | **Flow** | Option chain + dealer GEX / γ-flip, key levels, parity edge |
-| **4** | **Trade** | MM blotter tools, scenarios, hedging · **Analyze** = Greeks 1.0 |
-| **5** | **Crypto** | Dual BTC/ETH Deribit tape; optional 2× thin charts |
-| **6** | **Rates** | FRED/NYFed macro strip, STIR path, SERFF, UST curve |
+| **1** | **Vol** | 3D IV surface + smile/term (split), surface fit |
+| **2** | **Flow** | Option chain + dealer GEX / γ-flip, key levels, parity edge |
+| **3** | **Trade** | MM blotter tools, scenarios, hedging · **Analyze** = Greeks 1.0 |
+| **4** | **Crypto** | Dual BTC/ETH Deribit tape; optional 2× thin charts |
+| **5** | **Rates** | FRED/NYFed macro strip, STIR path, SERFF, UST curve |
+| **6** | **Academy** | Desk essays / glossary / news (Substack-style reader) |
 
 **Analytics & risk**
 - Portfolio Greeks, scenario analysis, breakeven, expected move, max pain
@@ -104,9 +134,11 @@ Optional OPRA skeleton (server only, off by default): `OPRA_ENABLED`, `OPRA_VEND
 
 ## Live app
 
-**Production (Railway):** [https://volaterm-production-f082.up.railway.app](https://volaterm-production-f082.up.railway.app)
+**Try it now:** [https://volaterm-production-f082.up.railway.app](https://volaterm-production-f082.up.railway.app)
 
-Open that URL for the full stack (SPA + Node API + MacroVol rates). After each deploy, `/api/health` should return `{"status":"ok",...}` and the shell should show the boot briefing then the Vol desk — not a black screen.
+That is the only public production URL (Railway full stack). Health check: `/api/health` should return `{"status":"ok",...}`. The shell boots into a short briefing, then the Vol desk.
+
+Repo: [github.com/xxxova2/volaterm](https://github.com/xxxova2/volaterm)
 
 ## Deployment
 

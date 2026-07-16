@@ -1,12 +1,20 @@
 import asyncio
+import math
 import os
+import re
 from collections import Counter
 from datetime import date as date_cls, datetime, timedelta, timezone
 
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
-from services.fred_client import fetch_series, get_latest, get_meta, source_label
+from services.fred_client import (
+    fetch_series,
+    get_latest,
+    get_meta,
+    source_label,
+    is_fred_series_allowed,
+)
 from services.iv_calculator import build_iv_surface
 from services.greeks_calculator import build_greeks_surface, build_interpolated_surface, build_gex_grid, build_charm_exposure_grid
 from services import rate_risk
@@ -590,21 +598,38 @@ async def rates_basis_history(limit: int = 90):
     }
 
 
+def _curve_history_lookback(periods: str) -> tuple[str, int, int]:
+    """
+    Parse compare window → (label, fetch_limit, target_days).
+    Presets: 1W/1M/3M/6M/1Y/2Y. Custom: Nd or N (calendar days, 7–800).
+    Never invents yields — only sizes the FRED observation window.
+    """
+    raw = (periods or "1Y").strip()
+    key = raw.upper()
+    limit_map = {"1W": 15, "1M": 35, "3M": 90, "6M": 160, "1Y": 280, "2Y": 540}
+    target_days = {"1W": 7, "1M": 30, "3M": 90, "6M": 180, "1Y": 365, "2Y": 730}
+    if key in target_days:
+        return key, limit_map[key], target_days[key]
+    # Custom day count: "45d", "45D", "45"
+    m = re.fullmatch(r"(\d+)\s*D?", key)
+    if m:
+        days = max(7, min(int(m.group(1)), 800))
+        return f"{days}d", min(days + 40, 900), days
+    return "1Y", 280, 365
+
+
 @app.get("/api/rates/curve-history")
 async def curve_history(periods: str = "1Y"):
     """
     Live UST CMT curve vs a historical snapshot (default 1Y ago).
     Used by Curves & Spreads dual-curve chart (today white · compare blue).
-    FRED series are newest-first.
+    FRED series are newest-first. periods: 1M|3M|6M|1Y|2Y or Nd custom days.
     """
     tenors = list(CURVE_IDS)
     labels = list(CURVE_LABELS)
 
-    # Approx calendar-day lookbacks → pull enough daily observations
-    limit_map = {"1W": 15, "1M": 35, "3M": 90, "6M": 160, "1Y": 280, "2Y": 540}
-    target_days = {"1W": 7, "1M": 30, "3M": 90, "6M": 180, "1Y": 365, "2Y": 730}
-    limit = limit_map.get(periods, 280)
-    want_days = target_days.get(periods, 365)
+    periods_label, limit, want_days = _curve_history_lookback(periods)
+    periods = periods_label
 
     results = await asyncio.gather(
         *[fetch_series(t, limit=limit + 10) for t in tenors],
@@ -1040,19 +1065,137 @@ async def get_macro_summary():
     return out
 
 @app.get("/api/macro/series/{series_id}")
-async def get_macro_series(series_id: str, limit: int = Query(500)):
-    data = await fetch_series(series_id, limit)
+async def get_macro_series(series_id: str, limit: int = Query(500, ge=1, le=2000)):
+    sid = (series_id or "").upper().strip()
+    if not is_fred_series_allowed(sid):
+        raise HTTPException(status_code=404, detail="Series not allowed")
+    data = await fetch_series(sid, limit)
     return {
-        "series": series_id,
+        "series": sid,
         "data": data,
         "as_of": datetime.now(timezone.utc).isoformat(),
         "source": "FRED",
     }
 
+
+# Free FRED series already available under our key — batched once for the whole desk.
+# Shared TTL: N browsers must not N× FRED (Node proxy also caches /macro/stress).
+MACRO_STRESS_TTL = 300
+# FRED BAML* OAS series are Percent (e.g. 2.72 = 2.72pp ≈ 272 bps) — not raw bps.
+STRESS_SERIES = {
+    "vix": ("VIXCLS", "index", "VIX close"),
+    "hy_oas": ("BAMLH0A0HYM2", "percent", "ICE BofA HY OAS"),
+    "ig_oas": ("BAMLC0A0CM", "percent", "ICE BofA IG OAS"),
+    "bei_5y": ("T5YIE", "percent", "5Y breakeven inflation"),
+    "bei_10y": ("T10YIE", "percent", "10Y breakeven inflation"),
+    "real_10y": ("DFII10", "percent", "10Y TIPS real yield"),
+    "usd_broad": ("DTWEXBGS", "index", "Trade-weighted USD broad"),
+    "nfci": ("NFCI", "index", "Chicago Fed NFCI"),
+    "term_sofr_3m": ("TSFR3M", "percent", "3M term SOFR"),
+}
+
+
+@app.get("/api/macro/stress")
+async def get_macro_stress():
+    """
+    One shared pack of free FRED risk/liquidity prints.
+    Complements /macro/summary (activity) with credit, vol, inflation expectations, USD, conditions.
+    Fail-closed nulls — never inject FALLBACK_DATA into trader UI.
+    """
+    mkey = "macro:stress:v1"
+    mhit = ttl_cache.get_cached(mkey, MACRO_STRESS_TTL)
+    if not ttl_cache.is_miss(mhit):
+        return mhit
+
+    ids = [sid for sid, _, _ in STRESS_SERIES.values()]
+    results = await asyncio.gather(
+        *[get_latest(sid, allow_fallback=False) for sid in ids],
+        return_exceptions=True,
+    )
+
+    fields: dict = {}
+    units: dict = {}
+    labels: dict = {}
+    obs_dates: dict = {}
+    field_source: dict = {}
+    missing: list[str] = []
+
+    for i, (key, (sid, unit, label)) in enumerate(STRESS_SERIES.items()):
+        r = results[i]
+        units[key] = unit
+        labels[key] = label
+        if isinstance(r, Exception) or r is None:
+            fields[key] = None
+            missing.append(key)
+            field_source[key] = "unavailable"
+            obs_dates[key] = None
+        else:
+            fields[key] = float(r)
+            meta = get_meta(sid)
+            field_source[key] = meta.get("source", "FRED")
+            obs_dates[key] = meta.get("obs_date")
+
+    live_n = sum(1 for v in fields.values() if v is not None)
+    out = {
+        **fields,
+        "units": units,
+        "labels": labels,
+        "obs_dates": obs_dates,
+        "field_source": field_source,
+        "series_ids": {k: v[0] for k, v in STRESS_SERIES.items()},
+        "missing_fields": missing,
+        "as_of": datetime.now(timezone.utc).isoformat(),
+        "source": "FRED" if not missing else ("FRED+partial" if live_n else "unavailable"),
+        "note": (
+            "Free FRED stress pack · shared TTL · HY/IG OAS, VIX, BEI, real yields, USD, NFCI, term SOFR. "
+            "Null = missing observation, not a fake print."
+        ),
+    }
+    ttl_cache.set_cached(mkey, out)
+    return out
+
+
+PRIMARY_BOARD_TTL = 3600  # keyless OFR/ECB — 1h shared
+
+
+@app.get("/api/macro/primary")
+async def get_macro_primary():
+    """
+    Keyless primary-source pack: OFR NY Fed repo rates + ECB deposit facility.
+    Complements /macro/stress (FRED). Fail-closed nulls.
+    """
+    mkey = "macro:primary:v1"
+    mhit = ttl_cache.get_cached(mkey, PRIMARY_BOARD_TTL)
+    if not ttl_cache.is_miss(mhit):
+        return mhit
+    try:
+        from services.free_primary import build_primary_board
+        out = await asyncio.to_thread(build_primary_board)
+        ttl_cache.set_cached(mkey, out)
+        return out
+    except Exception as e:
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            status_code=502,
+            content={
+                "error": f"{type(e).__name__}: {e}",
+                "source": "unavailable",
+                "note": "Primary board fetch failed — no synthetic levels.",
+            },
+        )
+
+
+def _debug_enabled() -> bool:
+    """Debug routes off by default. Enable only with MACROVOL_DEBUG=1 (local ops)."""
+    return os.getenv("MACROVOL_DEBUG", "0") == "1"
+
+
 @app.get("/api/debug/fred")
 async def debug_fred():
+    from fastapi.responses import JSONResponse
+    if not _debug_enabled():
+        return JSONResponse(status_code=404, content={"error": "Not found"})
     import httpx
-    import os
     api_key = os.getenv("FRED_API_KEY")
     url = "https://api.stlouisfed.org/fred/series/observations"
     params = {
@@ -1073,6 +1216,9 @@ async def debug_fred():
 
 @app.get("/api/debug/clear-cache")
 async def clear_cache():
+    from fastapi.responses import JSONResponse
+    if not _debug_enabled():
+        return JSONResponse(status_code=404, content={"error": "Not found"})
     import services.fred_client as fc
     fred_n = len(fc._cache)
     fc._cache.clear()
@@ -1081,6 +1227,9 @@ async def clear_cache():
 
 @app.get("/api/debug/sofr")
 async def debug_sofr():
+    from fastapi.responses import JSONResponse
+    if not _debug_enabled():
+        return JSONResponse(status_code=404, content={"error": "Not found"})
     import services.fred_client as fc
     fc._cache.clear()
     result = await fc.get_latest("SOFR")
@@ -1502,11 +1651,38 @@ async def get_stir_strip():
     ttl_cache.set_cached(key, result)
     return result
 
+def _estimate_dividend_yield(ticker: str) -> tuple[float, str]:
+    """
+    Live dividend yield for BS q. Prefer yfinance info; fall back to 0 (no silent 1.3%).
+    Returns (q_decimal, q_source).
+    """
+    try:
+        import yfinance as yf
+        info = yf.Ticker(ticker).info or {}
+        dy = info.get("dividendYield")
+        if dy is not None:
+            q = float(dy)
+            if math.isfinite(q) and q >= 0:
+                # yfinance may return percent (1.3) or decimal (0.013) depending on version
+                if q > 1.0:
+                    q = q / 100.0
+                return round(min(q, 0.25), 6), "yfinance.dividendYield"
+        rate = info.get("dividendRate")
+        price = info.get("currentPrice") or info.get("regularMarketPrice")
+        if rate is not None and price and float(price) > 0:
+            q = float(rate) / float(price)
+            if math.isfinite(q) and q >= 0:
+                return round(min(q, 0.25), 6), "yfinance.dividendRate/price"
+    except Exception:
+        pass
+    return 0.0, "none_zero"
+
+
 @app.get("/api/greeks/{ticker}")
 async def get_greeks(
     ticker: str,
     r: float | None = Query(None, description="Risk-free decimal; default = live SOFR"),
-    q: float = Query(0.013, description="Dividend yield decimal"),
+    q: float | None = Query(None, description="Dividend yield decimal; default = yfinance estimate"),
 ):
     from fastapi.responses import JSONResponse
     r_eff = r if r is not None else await _default_r()
@@ -1519,12 +1695,17 @@ async def get_greeks(
     if r_eff is None and curve_pts:
         r_eff = float(curve_pts[0][1])
     r_mode = "flat" if r is not None else ("term_structure" if curve_pts else "SOFR")
-    key = f"greeks:{ticker}:{r_eff}:{q}:{r_mode}"
+    if q is not None:
+        q_eff = float(q)
+        q_source = "query"
+    else:
+        q_eff, q_source = await asyncio.to_thread(_estimate_dividend_yield, ticker)
+    key = f"greeks:{ticker}:{r_eff}:{q_eff}:{r_mode}:{q_source}"
     hit = ttl_cache.get_cached(key, GREEKS_CACHE_TTL)
     if not ttl_cache.is_miss(hit):
         return hit
     try:
-        result = await asyncio.to_thread(build_greeks_surface, ticker, r_eff, q, curve_pts)
+        result = await asyncio.to_thread(build_greeks_surface, ticker, r_eff, q_eff, curve_pts)
         spot = result["spot"]
         surfaces = {}
         for greek in ["delta", "gamma", "vega", "theta", "vanna", "charm"]:
@@ -1538,8 +1719,9 @@ async def get_greeks(
         result["as_of"] = datetime.now(timezone.utc).isoformat()
         result["source"] = "yfinance"
         result["r"] = r_eff
-        result["q"] = q
+        result["q"] = q_eff
         result["r_source"] = "query" if r is not None else ("treasury_term + SOFR anchor" if curve_pts else "SOFR")
+        result["q_source"] = q_source
         result["r_mode"] = r_mode
         result["units"] = {
             "theta": "per_calendar_day",

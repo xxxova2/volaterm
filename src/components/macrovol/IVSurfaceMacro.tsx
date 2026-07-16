@@ -33,6 +33,8 @@ export function IVSurfaceMacro({ defaultTicker }: { defaultTicker?: string }) {
   const [yAxis, setYAxis] = useState<'strike' | 'moneyness'>('moneyness');
   const [maxT, setMaxT] = useState(999);
   const [rLabel, setRLabel] = useState('SOFR live');
+  const deskAtm = useTerminalStore((s) => s.snapshot?.expiries[0]?.atmIV ?? null);
+  const [pathNote, setPathNote] = useState<string | null>(null);
 
   useEffect(() => {
     macrovolApi.ratesSummary().then((s) => {
@@ -46,6 +48,7 @@ export function IVSurfaceMacro({ defaultTicker }: { defaultTicker?: string }) {
     setLoading(true);
     setError('');
     setData(null);
+    setPathNote(null);
     try {
       // null r → backend uses live SOFR (avoids stale 5% risk-free)
       const res = await macrovolApi.surface(t, r, q);
@@ -53,6 +56,29 @@ export function IVSurfaceMacro({ defaultTicker }: { defaultTicker?: string }) {
       if ((res as IVSurfaceData & { r?: number }).r != null) {
         const used = (res as IVSurfaceData & { r: number }).r;
         setRLabel(`r ${(used * 100).toFixed(2)}%`);
+      }
+      // Rough ATM from Macro grid nearest spot vs desk chain ATM (paths can diverge).
+      if (deskAtm != null && deskAtm > 0 && res.strikes?.length && res.iv_grid?.length) {
+        const ki = res.strikes.reduce(
+          (best, k, i) =>
+            Math.abs(k - res.spot) < Math.abs(res.strikes[best]! - res.spot) ? i : best,
+          0,
+        );
+        const front = res.iv_grid[0];
+        const macroAtmPct = front?.[ki];
+        if (macroAtmPct != null && macroAtmPct > 0) {
+          const deskPct = deskAtm * 100;
+          const gap = Math.abs(macroAtmPct - deskPct);
+          if (gap > 3) {
+            setPathNote(
+              `paths diverge: Macro ATM~${macroAtmPct.toFixed(1)}% vs desk ${(deskPct).toFixed(1)}% (fit/filter — not dual market)`,
+            );
+          } else {
+            setPathNote(
+              `desk↔Macro ATM within ${gap.toFixed(1)} vol pts · Macro is diagnostic grid`,
+            );
+          }
+        }
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to fetch surface');
@@ -77,6 +103,15 @@ export function IVSurfaceMacro({ defaultTicker }: { defaultTicker?: string }) {
 
   return (
     <div className="flex flex-col gap-4 p-3 font-mono">
+      {pathNote && (
+        <div
+          className="rounded border border-border/60 bg-card/50 px-2 py-1 text-type-2xs text-muted-foreground"
+          data-testid="macro-desk-path-note"
+          title="Desk chain (SVI) and Macro IV grid use different filters/fit — divergence is expected"
+        >
+          {pathNote}
+        </div>
+      )}
       <div className="flex flex-wrap items-center gap-2 text-type-xs">
         <span className="text-muted-foreground">EXPIRY:</span>
         {TIME_FILTERS.map((f) => (
@@ -180,7 +215,7 @@ export function IVSurfaceMacro({ defaultTicker }: { defaultTicker?: string }) {
 
       {loading && (
         <div className="text-type-xs text-muted-foreground">
-          Fetching option chain for {ticker} via MacroVol API (yfinance)… 15–30s
+          Fetching option chain for {ticker} via yfinance… 15–30s cold
         </div>
       )}
       {error && (
@@ -196,7 +231,7 @@ export function IVSurfaceMacro({ defaultTicker }: { defaultTicker?: string }) {
             <span>Strikes: <strong className="text-foreground">{data.strikes?.length}</strong></span>
             <span>Points: <strong className="text-foreground">{data.raw_points ?? '—'}</strong></span>
             <span>r: <strong className="text-foreground">{rLabel}</strong></span>
-            <span>API: <strong className="text-up">yfinance · MacroVol</strong></span>
+            <span>API: <strong className="text-up">yfinance · FRED</strong></span>
           </div>
 
           <div className="overflow-hidden rounded-xl border border-border bg-card">
@@ -253,7 +288,7 @@ export function IVSurfaceMacro({ defaultTicker }: { defaultTicker?: string }) {
               />
             </Suspense>
           </div>
-          <DataBadge asOf={data.as_of || data.timestamp} source={data.source || 'yfinance · MacroVol'} staleThresholdMin={60} />
+          <DataBadge asOf={data.as_of || data.timestamp} source={data.source || 'yfinance'} staleThresholdMin={60} />
         </>
       )}
     </div>

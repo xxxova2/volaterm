@@ -4,6 +4,7 @@
  * Educational path bias — not a trade signal.
  */
 import { normCdf } from './black-scholes';
+import { yearFractionFromSlice } from './time';
 
 export type HedgeFlowInputs = {
   totalGEX: number;
@@ -126,12 +127,16 @@ export function riskBudgetGeometry(opts: {
   spot: number;
   atmIV: number;
   dte: number;
+  /** YYYY-MM-DD when known — enables continuous T to 16:00 ET */
+  expiry?: string;
   /** Optional live straddle mid; used only for display comparison */
   straddle?: number;
 }): RiskBudget {
   const spot = opts.spot;
   const sigma = Math.max(opts.atmIV > 0 ? opts.atmIV : 0.2, 0.01);
-  const T = Math.max(opts.dte / 365, 1e-8);
+  const T = opts.expiry
+    ? yearFractionFromSlice({ expiry: opts.expiry, dte: opts.dte })
+    : Math.max(opts.dte / 365, 1e-8);
   const volTime = spot * sigma * Math.sqrt(T);
   const atmPremiumApprox = 0.4 * volTime;
   const stopAtPremium = atmPremiumApprox;

@@ -66,3 +66,66 @@ export function fetchFinnhubEarnings(symbol: string): Promise<FinnhubEarningsDat
   const q = new URLSearchParams({ symbol: symbol.toUpperCase() });
   return fetchJson(`/api/finnhub/earnings?${q}`);
 }
+
+export interface FinnhubEcoEvent {
+  id?: string;
+  country?: string | null;
+  event?: string | null;
+  time?: string | null;
+  impact?: string | null;
+  actual?: string | number | null;
+  estimate?: string | number | null;
+  prev?: string | number | null;
+}
+
+export interface FinnhubEcoCalendar {
+  from?: string;
+  to?: string;
+  events: FinnhubEcoEvent[];
+  count?: number;
+  as_of?: string;
+  source?: string;
+  note?: string;
+  error?: string | null;
+  fromCache?: boolean;
+}
+
+export interface FinnhubRecommendation {
+  symbol: string;
+  latest: {
+    period?: string | null;
+    strongBuy?: number | null;
+    buy?: number | null;
+    hold?: number | null;
+    sell?: number | null;
+    strongSell?: number | null;
+  } | null;
+  as_of?: string;
+  source?: string;
+  note?: string;
+  error?: string | null;
+}
+
+export interface FinnhubPeers {
+  symbol: string;
+  peers: string[];
+  count?: number;
+  as_of?: string;
+  source?: string;
+  error?: string | null;
+}
+
+/** Shared 6h economic calendar — server warmer owns refresh. */
+export function fetchFinnhubEconomicCalendar(): Promise<FinnhubEcoCalendar> {
+  return fetchJson('/api/finnhub/economic-calendar');
+}
+
+export function fetchFinnhubRecommendation(symbol: string): Promise<FinnhubRecommendation> {
+  const q = new URLSearchParams({ symbol: symbol.toUpperCase() });
+  return fetchJson(`/api/finnhub/recommendation?${q}`);
+}
+
+export function fetchFinnhubPeers(symbol: string): Promise<FinnhubPeers> {
+  const q = new URLSearchParams({ symbol: symbol.toUpperCase() });
+  return fetchJson(`/api/finnhub/peers?${q}`);
+}

@@ -61,24 +61,45 @@ describe('SurfaceTools source badge', () => {
   });
 
   it('shows Waiting when liveAvailable is false', () => {
-    seedStore({ source: 'live', liveAvailable: false });
+    seedStore({ source: 'live', liveAvailable: false, chainAvailable: false });
     render(toolsNode());
     expect(screen.getByTestId('source-badge').textContent).toBe('Waiting');
   });
 
-  it('shows Live when source is live AND liveAvailable is true', () => {
-    seedStore({ source: 'live', liveAvailable: true });
+  it('shows Spot only when quote is up but chain is not', () => {
+    seedStore({ source: 'live', liveAvailable: true, chainAvailable: false });
+    render(toolsNode());
+    expect(screen.getByTestId('source-badge').textContent).toBe('Spot only');
+  });
+
+  it('shows Live when source is live AND chainAvailable is true', () => {
+    seedStore({ source: 'live', liveAvailable: true, chainAvailable: true });
     render(toolsNode());
     expect(screen.getByTestId('source-badge').textContent).toBe('Live');
     expect(screen.queryByText('Demo')).not.toBeInTheDocument();
   });
 
-  it('switches badge when feed arrives', () => {
+  it('renders chain side OTM/ITM/ALL and switches mode', () => {
+    seedStore({
+      source: 'live',
+      liveAvailable: true,
+      chainAvailable: true,
+      surfaceWingMode: 'otm',
+    });
+    render(toolsNode());
+    expect(screen.getByTestId('wing-mode-panel')).toBeInTheDocument();
+    act(() => {
+      screen.getByTestId('wing-mode-itm').click();
+    });
+    expect(useTerminalStore.getState().surfaceWingMode).toBe('itm');
+  });
+
+  it('switches badge when chain feed arrives', () => {
     const { rerender } = render(toolsNode());
     expect(screen.getByTestId('source-badge').textContent).toBe('Waiting');
 
     act(() => {
-      seedStore({ source: 'live', liveAvailable: true });
+      seedStore({ source: 'live', liveAvailable: true, chainAvailable: true });
     });
     rerender(toolsNode());
     expect(screen.getByTestId('source-badge').textContent).toBe('Live');

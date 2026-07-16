@@ -1,6 +1,6 @@
 import { create } from 'zustand';
-import type { VolSnapshot, SurfaceGrid, ActiveTab, DisplayMode } from '../lib/options/types';
-import { buildSurfaceGrid } from '../lib/options/synthetic';
+import type { VolSnapshot, SurfaceGrid, ActiveTab, DisplayMode, FALevels } from '../lib/options/types';
+import { buildSurfaceGrid, type SurfaceWingMode } from '../lib/options/synthetic';
 import { diagnoseArbitrage, type NoArbResult } from '../lib/options/noarb';
 import { sviReadout, type SVIReadout } from '../lib/options/surfaceTools';
 import { REFRESH_CONFIG, VALIDATION_CONFIG } from '../config/constants';
@@ -29,6 +29,14 @@ import {
 import { perfMark, perfTimeSync } from '../config/perfBudget';
 import type { BoardFocusState } from '../hooks/useBoardFocus';
 import { findSectionMeta, sectionsForTab, RATES_SECTION_TO_MODE } from '../config/deskSections';
+import { repriceSnapshotAtSpot } from '../lib/options/reprice';
+import {
+  extractSurfaceMetrics,
+  pushSurfaceMetrics,
+  type SurfaceMetricsFrame,
+  type SurfaceUpdatePath,
+} from '../lib/options/surfaceMetrics';
+import { prefetchGreeks, invalidateGreeksCache } from '../lib/macrovol/greeksCache';
 
 function processSurface(surface: SurfaceGrid, spot: number) {
   const readout = sviReadout(surface, spot);
@@ -36,8 +44,35 @@ function processSurface(surface: SurfaceGrid, spot: number) {
   return { surface, sviReadout: readout, arbResult: arb };
 }
 
-function processSnapshot(snap: VolSnapshot) {
-  return processSurface(buildSurfaceGrid(snap), snap.spot);
+function recordSurfaceMetrics(
+  snap: VolSnapshot,
+  path: SurfaceUpdatePath,
+  get: () => TerminalStore,
+  set: (partial: Partial<TerminalStore>) => void,
+) {
+  if (snap.surfaceSource === 'synthetic') return;
+  const frame = extractSurfaceMetrics(snap, path, snap.timestamp || Date.now());
+  const prev = get().surfaceMetrics;
+  set({
+    surfaceMetrics: pushSurfaceMetrics(prev, frame),
+    lastSurfacePath: path,
+  });
+}
+
+function processSnapshot(snap: VolSnapshot, wingMode: SurfaceWingMode = 'otm') {
+  return processSurface(buildSurfaceGrid(snap, { wingMode }), snap.spot);
+}
+
+/** Spot tick: sticky-IV reprice greeks + rebuild surface (shared by poll + SSE). */
+export function applySpotPatch(
+  snap: VolSnapshot,
+  price: number,
+  now: number,
+  wingMode: SurfaceWingMode = 'otm',
+) {
+  const patched = repriceSnapshotAtSpot(snap, price, { timestamp: now });
+  const processed = processSnapshot(patched, wingMode);
+  return { patched, processed };
 }
 
 function liveSnapshotCtx(state: {
@@ -119,6 +154,18 @@ interface TerminalStore {
   keyboardBoardFocusEnabled: boolean;
   /** Dual BTC+ETH charts (default off). */
   cryptoDualCharts: boolean;
+  /** FlashAlpha dealer levels (free tier: individual stocks only, no SPY). */
+  faLevels: FALevels | null;
+  faLevelsLoading: boolean;
+  /** How the current surface was last built — full chain vs sticky-IV spot reprice. */
+  lastSurfacePath: SurfaceUpdatePath | null;
+  /** Session tape of ATM / fixed-K / 25Δ RR for shape-change diagnostics. */
+  surfaceMetrics: SurfaceMetricsFrame[];
+  /**
+   * Which chain side feeds each strike on the SURF mesh.
+   * OTM = desk default; ITM = opposite; ALL = avg when both sides quote.
+   */
+  surfaceWingMode: SurfaceWingMode;
 
   playbackInterval: ReturnType<typeof setInterval> | null;
   refreshInterval: ReturnType<typeof setInterval> | null;
@@ -144,6 +191,9 @@ interface TerminalStore {
   setBoardFocus: (focus: BoardFocusState) => void;
   setKeyboardBoardFocusEnabled: (on: boolean) => void;
   setCryptoDualCharts: (on: boolean) => void;
+  setFALevels: (data: FALevels | null) => void;
+  /** Rebuild surface from current chain using OTM / ITM / ALL quote preference. */
+  setSurfaceWingMode: (mode: SurfaceWingMode) => void;
 }
 
 export const useTerminalStore = create<TerminalStore>((set, get) => ({
@@ -210,6 +260,17 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
     } catch { /* ignore */ }
     return false;
   })(),
+  faLevels: null,
+  faLevelsLoading: false,
+  lastSurfacePath: null,
+  surfaceMetrics: [],
+  surfaceWingMode: (() => {
+    try {
+      const raw = localStorage.getItem('ui.surface.wingMode');
+      if (raw === 'otm' || raw === 'itm' || raw === 'all') return raw;
+    } catch { /* ignore */ }
+    return 'otm' as const;
+  })(),
 
   playbackInterval: null,
   refreshInterval: null,
@@ -221,6 +282,13 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
       toast.error('Invalid symbol', {
         description: 'Enter a ticker (e.g. SPY, AAPL, BTC)',
       });
+      return;
+    }
+
+    // StrictMode / double boot: same symbol already loading — do not restart and
+    // invalidate the in-flight chain fetch (that was the false "chain unavailable" toast).
+    const prev = get();
+    if (prev.symbol === trimmed && prev.loading && liveFetchGen > 0) {
       return;
     }
 
@@ -251,37 +319,21 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
       spotSource: 'none',
       fundingAnn: null,
       source: 'live',
+      faLevels: null,
+      faLevelsLoading: false,
+      lastSurfacePath: null,
+      surfaceMetrics: [],
     });
 
     // Background load — do not block first paint (boot briefing uses this window).
     startRefreshLoop(get, set, 'live');
     void (async () => {
-      try {
-        await fetchLiveEnrichment(trimmed);
-      } catch { /* optional */ }
       if (get().symbol !== trimmed) return;
-      await fetchLiveSnapshot(trimmed, true);
-      if (get().symbol !== trimmed) return;
-      if (!get().snapshot) {
-        set({
-          snapshot: null,
-          surface: null,
-          sviReadout: null,
-          arbResult: null,
-          historicalFrames: [],
-          loading: false,
-          chainUsed: 'none',
-          chainAvailable: false,
-          session: usEquitySession(),
-        });
-        if (!hasWarned(symbol)) {
-          markWarned(symbol);
-          toast.warning('Live chain unavailable', {
-            description:
-              'Equity chain: yfinance (delayed) or FMP if keyed failed/timeout. Crypto: Deribit. No synthetic chain shown.',
-          });
-        }
-      }
+      // Chain first — enrichment (history/profile/news) must never gate surface.
+      // FlashAlpha is NOT fetched here — free tier ~5/day; Flow desk loads on demand.
+      const chainP = fetchLiveSnapshot(trimmed, true);
+      void fetchLiveEnrichment(trimmed).catch(() => { /* optional */ });
+      await chainP;
     })();
   },
 
@@ -292,7 +344,7 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
       set({ historicalFrames: [], historyMode: 'live', frameIndex: 0 });
       return;
     }
-    const surface = buildSurfaceGrid(snap);
+    const surface = buildSurfaceGrid(snap, { wingMode: state.surfaceWingMode });
     const base = state.historyMode === 'live' ? state.historicalFrames : [];
     const frames = pushLiveFrame(base, snap, surface);
     set({
@@ -318,14 +370,48 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
     set({ cryptoDualCharts: on });
   },
 
+  setFALevels: (data) => set({ faLevels: data, faLevelsLoading: false }),
+
+  setSurfaceWingMode: (mode) => {
+    try {
+      localStorage.setItem('ui.surface.wingMode', mode);
+    } catch { /* ignore */ }
+    const snap = get().snapshot;
+    if (!snap || snap.surfaceSource === 'synthetic') {
+      set({ surfaceWingMode: mode });
+      return;
+    }
+    const { surface, sviReadout: readout, arbResult: arb } = processSnapshot(snap, mode);
+    set({
+      surfaceWingMode: mode,
+      surface,
+      sviReadout: readout,
+      arbResult: arb,
+    });
+    // Refresh live history ring so playback matches current wing mode.
+    const state = get();
+    if (state.chainAvailable) {
+      const frames = pushLiveFrame(
+        state.historyMode === 'live' ? state.historicalFrames : [],
+        snap,
+        surface,
+      );
+      set({
+        historicalFrames: frames,
+        frameIndex: Math.max(0, frames.length - 1),
+        historyMode: 'live',
+      });
+    }
+  },
+
   setActiveTab: (tab) => {
-    // Legacy `greeks` desk → Trade · Analyze
+    // Legacy `greeks` desk → Vol · Greeks
     if ((tab as string) === 'greeks') {
       set({
-        activeTab: 'desk',
-        deskSectionId: 'desk-ws-analyze',
-        deskSectionLabel: 'Analyze',
-        deskSectionApis: ['MacroVol', 'yfinance'],
+        activeTab: 'vol',
+        deskSectionId: 'vol-sub-greeks',
+        deskSectionLabel: 'Greeks',
+        deskSectionApis: ['yfinance', 'FRED'],
         boardFocus: { boardId: null, rowIndex: 0, colKey: null },
       });
       return;
@@ -407,9 +493,11 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
 
     // When SSE is connected, skip poll-based spot (stream owns lastSpotUpdate).
     if (needSpot && !state.streamConnected) {
+      const spotSym = state.symbol.toUpperCase();
       try {
         const quotes = await fetchFmpQuote(state.symbol);
-        if (quotes && quotes.length > 0) {
+        // Drop stale poll replies (symbol switched while quote was in flight).
+        if (get().symbol.toUpperCase() === spotSym && quotes && quotes.length > 0) {
           const q = quotes[0]!;
           const prevSpotKind = get().provenance.spot?.kind;
           const spotProv = makeProvenance('spot', 'fmp', now, {
@@ -425,15 +513,22 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
             provenance: { ...get().provenance, spot: spotProv },
           });
           const snap = get().snapshot;
-          if (snap && q.price > 0 && Math.abs(q.price - snap.spot) / snap.spot > 0.00005) {
-            const patched = { ...snap, spot: q.price, timestamp: now };
-            const processed = perfTimeSync('store.spotPatch', () => processSnapshot(patched));
+          if (
+            snap
+            && snap.symbol?.toUpperCase() === spotSym
+            && q.price > 0
+            && Math.abs(q.price - snap.spot) / snap.spot > 0.00005
+          ) {
+            const { patched, processed } = perfTimeSync('store.spotPatch', () =>
+              applySpotPatch(snap, q.price, now, get().surfaceWingMode),
+            );
             set({
               snapshot: patched,
               surface: processed.surface,
               sviReadout: processed.sviReadout,
               arbResult: processed.arbResult,
             });
+            recordSurfaceMetrics(patched, 'sticky_spot', get, set);
           }
         }
       } catch (err) {
@@ -441,7 +536,8 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
       }
     }
 
-    if (needChain) {
+    // Never compete with setSymbol's initial force-fetch (gen race → false "unavailable" toast).
+    if (needChain && !state.loading) {
       await fetchLiveSnapshot(state.symbol, false);
       // Periodic enrichment (history/news) — cheap via cache.
       fetchLiveEnrichment(state.symbol);
@@ -511,6 +607,20 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
       set({ deskSectionId: null, deskSectionLabel: null, deskSectionApis: [] });
       return;
     }
+    // Legacy Trade Analyze / greeks-desk → Vol · Greeks (unless this tab owns the id, e.g. Crypto Thalex lab)
+    if (
+      (sectionId === 'desk-ws-analyze' || sectionId === 'greeks-desk')
+      && !sectionsForTab(tab).some((s) => s.id === sectionId)
+    ) {
+      const meta = findSectionMeta('vol-sub-greeks', 'vol');
+      set({
+        activeTab: 'vol',
+        deskSectionId: 'vol-sub-greeks',
+        deskSectionLabel: meta?.label ?? 'Greeks',
+        deskSectionApis: meta?.apis ?? ['yfinance', 'FRED'],
+      });
+      return;
+    }
     // Rates: map legacy sec-* / function codes → 4 mode ids in the red bar registry
     let resolved = sectionId;
     if (tab === 'rates') {
@@ -556,12 +666,12 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
     if (refreshInterval) clearInterval(refreshInterval);
     set({ source: 'live', lastSpotUpdate: 0, lastChainUpdate: 0, loading: true });
     startRefreshLoop(get, set, 'live');
-    // Non-blocking: boot UI shows rates/macro while chain loads in background.
+    // Non-blocking: chain first; enrichment parallel (never gate surface).
     void (async () => {
-      try {
-        await fetchLiveEnrichment(get().symbol);
-      } catch { /* enrichment is optional */ }
-      await fetchLiveSnapshot(get().symbol, true);
+      const sym = get().symbol;
+      const chainP = fetchLiveSnapshot(sym, true);
+      void fetchLiveEnrichment(sym).catch(() => { /* optional */ });
+      await chainP;
     })();
   },
 }));
@@ -604,6 +714,7 @@ async function fetchLiveSnapshot(symbol: string, force: boolean) {
       invalidateYahooChainCache();
       invalidateFmpCache('options/symbol');
       invalidateDeribitCache();
+      invalidateGreeksCache(upper);
     }
     perfMark('live.snapshot.start');
     const snap = await provider.getSnapshot(upper, liveSnapshotCtx(useTerminalStore.getState()));
@@ -639,7 +750,8 @@ async function fetchLiveSnapshot(symbol: string, force: boolean) {
       }
       return;
     }
-    const { surface, sviReadout: readout, arbResult: arb } = processSnapshot(snap);
+    const wingMode = useTerminalStore.getState().surfaceWingMode;
+    const { surface, sviReadout: readout, arbResult: arb } = processSnapshot(snap, wingMode);
     const now = Date.now();
     const liveSpot = provider.lastSpotSource !== 'synthetic';
     const prev = useTerminalStore.getState();
@@ -684,8 +796,16 @@ async function fetchLiveSnapshot(symbol: string, force: boolean) {
         spot: spotProv,
         chain: chainProv,
       },
+      lastSurfacePath: 'full_chain',
     });
+    recordSurfaceMetrics(snap, 'full_chain', () => useTerminalStore.getState(), set);
     useTerminalStore.getState().storeFrames(snap);
+
+    // Warm Greeks pack in background (same underlier). Vol · GRK must not re-pull
+    // a cold yfinance book after chain already painted.
+    if (chainOk) {
+      prefetchGreeks(upper, Number.isFinite(snap.dividendYield) ? snap.dividendYield : null);
+    }
 
     if (!provider.lastChainAvailable && !hasWarned(upper)) {
       markWarned(upper);
@@ -729,60 +849,66 @@ async function fetchLiveSnapshot(symbol: string, force: boolean) {
 async function fetchLiveEnrichment(symbol: string) {
   const set = useTerminalStore.setState;
   const upper = symbol.toUpperCase();
+  // Capture gen at start — late enrichment must not clobber a newer symbol/chain.
+  const gen = liveFetchGen;
   const isBtcEth = upper === 'BTC' || upper === 'ETH';
   const histSymbol = upper === 'BTC' ? 'BTC-USD' : upper === 'ETH' ? 'ETH-USD' : symbol;
 
-  if (!isBtcEth) {
-    const quotes = await fetchFmpQuote(symbol);
-    if (quotes && quotes.length > 0) {
-      const t = Date.now();
-      const prev = useTerminalStore.getState();
-      set({
-        fmpQuote: quotes[0]!,
-        fmpSpot: quotes[0]!.price,
-        liveAvailable: true,
-        lastSpotUpdate: t,
-        spotSource: 'fmp',
-        provenance: {
-          ...prev.provenance,
-          spot: makeProvenance('spot', 'fmp', t, { previousKind: prev.provenance.spot?.kind }),
-        },
-      });
-    }
+  // Parallel free-tier enrichment — never serial waterfall (was multi-second before chain).
+  const [quotes, fmpHist, yfHist, fmpProf, yfProf, news, earnings, treasury] = await Promise.all([
+    isBtcEth ? Promise.resolve(null) : fetchFmpQuote(symbol).catch(() => null),
+    isBtcEth ? Promise.resolve(null) : fetchFmpPriceHistory(symbol).catch(() => null),
+    fetchYfHistory(histSymbol).catch(() => null),
+    fetchFmpProfile(symbol).catch(() => null),
+    fetchYfInfo(symbol).catch(() => null),
+    fetchFmpNews(symbol).catch(() => null),
+    fetchFmpEarnings(symbol).catch(() => null),
+    useTerminalStore.getState().fmpTreasuryRates
+      ? Promise.resolve(null)
+      : fetchFmpTreasuryRates().catch(() => null),
+  ]);
+
+  if (gen !== liveFetchGen || useTerminalStore.getState().symbol.toUpperCase() !== upper) {
+    return;
   }
 
-  // Price history: FMP primary, yfinance fallback (BTC-USD / ETH-USD for crypto).
-  let history = isBtcEth ? null : await fetchFmpPriceHistory(symbol);
-  if (history && history.length > 0) {
-    set({ fmpHistory: history, historySource: 'fmp' });
+  if (quotes && quotes.length > 0) {
+    const t = Date.now();
+    const prev = useTerminalStore.getState();
+    set({
+      fmpQuote: quotes[0]!,
+      fmpSpot: quotes[0]!.price,
+      liveAvailable: true,
+      lastSpotUpdate: t,
+      spotSource: 'fmp',
+      provenance: {
+        ...prev.provenance,
+        spot: makeProvenance('spot', 'fmp', t, { previousKind: prev.provenance.spot?.kind }),
+      },
+    });
+  }
+
+  if (fmpHist && fmpHist.length > 0) {
+    set({ fmpHistory: fmpHist, historySource: 'fmp' });
+  } else if (yfHist && yfHist.length > 0) {
+    set({ fmpHistory: yfHist, historySource: 'yfinance' });
   } else {
-    history = await fetchYfHistory(histSymbol);
-    if (history && history.length > 0) set({ fmpHistory: history, historySource: 'yfinance' });
-    else set({ fmpHistory: null, historySource: 'none' });
+    set({ fmpHistory: null, historySource: 'none' });
   }
 
-  // Fundamentals: FMP primary, yfinance fallback.
-  let profile = await fetchFmpProfile(symbol);
-  if (profile) {
-    set({ fmpProfile: profile, profileSource: 'fmp' });
+  if (fmpProf) {
+    set({ fmpProfile: fmpProf, profileSource: 'fmp' });
+  } else if (yfProf) {
+    set({ fmpProfile: yfProf, profileSource: 'yfinance' });
   } else {
-    profile = await fetchYfInfo(symbol);
-    if (profile) set({ fmpProfile: profile, profileSource: 'yfinance' });
-    else set({ fmpProfile: null, profileSource: 'none' });
+    set({ fmpProfile: null, profileSource: 'none' });
   }
 
-  const news = await fetchFmpNews(symbol);
   if (news) set({ fmpNews: news });
-
-  const earnings = await fetchFmpEarnings(symbol);
   if (earnings) set({ fmpEarnings: earnings });
 
-  // Treasury rates are symbol-independent; refresh hourly via fmpClient TTL.
-  if (!useTerminalStore.getState().fmpTreasuryRates) {
-    const rates = await fetchFmpTreasuryRates();
-    if (rates && rates.length > 0) {
-      const y1 = rates[0]!.year1;
-      set({ fmpTreasuryRates: rates, liveRFR: y1 > 1 ? y1 / 100 : y1 });
-    }
+  if (treasury && treasury.length > 0) {
+    const y1 = treasury[0]!.year1;
+    set({ fmpTreasuryRates: treasury, liveRFR: y1 > 1 ? y1 / 100 : y1 });
   }
 }

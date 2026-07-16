@@ -10,6 +10,7 @@ import { buildStrikeWorldXs, type XTick } from '../surfaceStrikeMapping';
 import { SurfaceTools, type SliceMode } from './SurfaceTools';
 import { SurfaceInspect, type InspectPoint } from './SurfaceInspect';
 import { Explain } from '../../common/Explain';
+import { pickSurfaceQuote, type SurfaceWingMode } from '../../../lib/options/synthetic';
 
 const { MONEYNESS_MIN, MONEYNESS_MAX, WIDTH, DEPTH, VISUAL_HEIGHT, UPSCALE } = VISUAL_CONFIG.surface;
 
@@ -356,6 +357,61 @@ function SurfaceLegend({ minIV, maxIV }: { minIV: number; maxIV: number }) {
   );
 }
 
+const WING_MODE_HINT: Record<SurfaceWingMode, string> = {
+  otm: 'OTM wings (desk default) — cleaner smile; deep OTM still noisy on free chains.',
+  itm: 'ITM side — mid near intrinsic → IV solver can spike; not a crash signal by itself.',
+  all: 'ALL — averages call+put when both exist; blends API coverage, not a new model.',
+};
+
+/** Desk note in empty lower-left canvas (away from mesh / tools). */
+function SurfaceExplainPanel({
+  wingMode,
+  minIV,
+  maxIV,
+  hasMesh,
+}: {
+  wingMode: SurfaceWingMode;
+  minIV: number | null;
+  maxIV: number | null;
+  hasMesh: boolean;
+}) {
+  const scaleNote =
+    minIV != null && maxIV != null
+      ? `Color scale is mesh min–max (${(minIV * 100).toFixed(0)}–${(maxIV * 100).toFixed(0)}%), not ATM.`
+      : 'Color scale is mesh min–max, not ATM / VIX.';
+
+  return (
+    <div
+      className="pointer-events-none absolute top-28 left-3 z-[1] max-w-[min(22rem,40%)] rounded border border-border bg-card/90 p-2.5 text-type-2xs font-mono text-muted-foreground leading-relaxed shadow-sm"
+      data-testid="surface-explain"
+    >
+      <div className="mb-1 text-foreground uppercase tracking-wider">What this surface indicates</div>
+      {!hasMesh ? (
+        <p>
+          No live chain mesh yet. Fail-closed: empty surface means missing quotes, not a synthetic smile.
+          Load a symbol with an option chain (e.g. SPY) under LIVE.
+        </p>
+      ) : (
+        <ul className="list-none space-y-1.5">
+          <li>
+            <span className="text-foreground">Height / color</span> = implied vol by strike × expiry
+            (SVI-smoothed grid). Spikes on far wings often mean <span className="text-foreground">thin mids</span>
+            , not “spot will crash X%.”
+          </li>
+          <li>
+            <span className="text-foreground">ATM / VIX strip</span> is the level story. The 3D max on the
+            legend is usually a <span className="text-foreground">wing cell</span>, not front ATM.
+          </li>
+          <li>
+            <span className="text-foreground">Chain side · {wingMode.toUpperCase()}</span> — {WING_MODE_HINT[wingMode]}
+          </li>
+          <li>{scaleNote} Prefer fixed-K ATM and 25Δ RR/fly over max color for shape changes.</li>
+        </ul>
+      )}
+    </div>
+  );
+}
+
 export function SurfaceView() {
   const [wireframe, setWireframe] = useState(false);
   const [sliceMode, setSliceMode] = useState<SliceMode>('none');
@@ -369,6 +425,7 @@ export function SurfaceView() {
   const sviReadout = useTerminalStore(s => s.sviReadout);
   const arbResult = useTerminalStore(s => s.arbResult);
   const selectedExpiry = useTerminalStore(s => s.selectedExpiry);
+  const surfaceWingMode = useTerminalStore(s => s.surfaceWingMode);
 
   const buildPoint = useCallback((px: number, pz: number): InspectPoint | null => {
     if (!info || !surface || !snapshot) return null;
@@ -380,9 +437,11 @@ export function SurfaceView() {
     if (!expiry || strike == null || iv == null || !isFinite(iv)) return null;
     const slice = snapshot.expiries[cell.expiryIdx];
     const dte = slice?.dte ?? 0;
-    const quote = slice?.calls.find(q => q.strike === strike) ?? slice?.puts.find(q => q.strike === strike);
+    const quote = slice
+      ? pickSurfaceQuote(slice, strike, snapshot.spot, surfaceWingMode)
+      : null;
     return { strike, expiry, dte, iv, delta: quote?.delta ?? null };
-  }, [info, surface, snapshot]);
+  }, [info, surface, snapshot, surfaceWingMode]);
 
   const handlePointerMove = useCallback((e: THREE.Event) => {
     const evt = e as unknown as { point: THREE.Vector3; stopPropagation: () => void };
@@ -444,9 +503,22 @@ export function SurfaceView() {
           <div className="px-2 py-1 text-type-2xs font-mono bg-card/80 border border-border rounded text-muted-foreground">
             <div><Explain term="spot">Spot</Explain> <span className="text-foreground tabular-nums">{spot.toFixed(2)}</span></div>
             <div><Explain term="iv">IV</Explain> <span className="text-cyan tabular-nums">{(info.minIV * 100).toFixed(1)}–{(info.maxIV * 100).toFixed(1)}%</span></div>
+            <div>
+              Side{' '}
+              <span className="text-foreground uppercase tabular-nums" data-testid="wing-mode-badge">
+                {surfaceWingMode}
+              </span>
+            </div>
           </div>
         )}
       </div>
+
+      <SurfaceExplainPanel
+        wingMode={surfaceWingMode}
+        minIV={info?.minIV ?? null}
+        maxIV={info?.maxIV ?? null}
+        hasMesh={!!info}
+      />
 
       <SurfaceTools
         surface={surface}

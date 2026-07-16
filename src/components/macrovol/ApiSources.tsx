@@ -5,16 +5,25 @@ const API_LEGEND: Record<string, string> = {
   FRED: 'Federal Reserve Economic Data — free key recommended · daily/monthly macro & UST',
   MoF: 'Ministry of Finance Japan — free public CSV · JGB constant-maturity yields (real, not demo)',
   NYFed: 'NY Fed Markets API — free, no key · SOFR/EFFR ref prints + volume',
-  yfinance: 'Yahoo Finance via local proxy — delayed futures/equity · free',
-  MacroVol: 'Local aggregator pipe (:8765) — not a market vendor; pulls FRED/NYFed/yfinance',
+  yfinance: 'Yahoo Finance via local proxy — delayed equity/options/futures · free',
   FMP: 'Financial Modeling Prep — spot/profile/news · free tier + paid chain',
   Deribit: 'Deribit public REST — BTC/ETH options mark IV + futures',
+  Frankfurter: 'ECB reference FX via Frankfurter — free, no key',
+  FiscalData: 'US Treasury FiscalData — auctions · free, no key',
+  CoinGecko: 'CoinGecko public REST — crypto spot backup · free',
+  Finnhub: 'Finnhub — news, calendar, quotes · free tier key',
+  FlashAlpha: 'FlashAlpha — GEX/levels · free tier budgeted',
+  Thalex: 'Thalex lab embeds — crypto options tools',
+  OFR: 'OFR Financial Stress Data — free keyless repo prints',
+  ECB: 'ECB Data Portal — free keyless policy rates',
+  Bybit: 'Bybit public REST — linear perp mark/index basis',
+  SEC: 'SEC EDGAR — filings context · free',
   synthetic: 'Demo SVI surface — offline, not market',
 };
 
 /**
- * Per-tool API provenance chips — traders see which upstream each section uses.
- * Prefer concrete vendor names (FRED, NYFed, yfinance) over generic "MacroVol".
+ * Per-tool API provenance chips — traders see which real upstream each section uses.
+ * Never label a local proxy as a market vendor.
  */
 export function ApiSources({
   apis,

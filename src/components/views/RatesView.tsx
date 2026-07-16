@@ -5,6 +5,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useTerminalStore } from '../../store/terminalStore';
 import { MacroPanel } from '../macrovol/MacroPanel';
+import { StressStrip } from '../macrovol/StressStrip';
 import { RatesPanel } from '../macrovol/RatesPanel';
 import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
 import { RATES_SECTION_TO_MODE, RATES_SECTIONS } from '../../config/deskNav';
@@ -62,6 +63,9 @@ export function RatesView() {
           <section id="sec-macro" className="scroll-mt-8 border-b border-border/60" aria-label="US macro indicators">
             <SectionErrorBoundary name="Macro">
               <MacroPanel />
+            </SectionErrorBoundary>
+            <SectionErrorBoundary name="Stress">
+              <StressStrip />
             </SectionErrorBoundary>
           </section>
         )}

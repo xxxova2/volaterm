@@ -56,6 +56,8 @@ describe('OptionPnlTool', () => {
     expect(screen.getByText('Side')).toBeTruthy();
 
     expect(screen.getByText('Path')).toBeTruthy();
+    expect(screen.getByText('synth')).toBeTruthy();
+    expect(screen.getByText('Term PnL')).toBeTruthy();
     expect(screen.getByText('Marks')).toBeTruthy();
 
     expect(screen.getByText('Date')).toBeTruthy();

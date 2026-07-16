@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" role="img" aria-label="Relative value on the curve">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0c0f14"/>
+      <stop offset="100%" stop-color="#151b24"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="80%" cy="20%" r="55%">
+      <stop offset="0%" stop-color="#c4a574" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#c4a574" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1200" height="800" fill="url(#g)"/>
+  <rect width="1200" height="800" fill="url(#glow)"/>
+  <rect x="0" y="0" width="8" height="800" fill="#c4a574"/>
+
+  <text x="48" y="72" fill="#9a9284" font-family="ui-sans-serif" font-size="22" letter-spacing="4">MACRO · RATES</text>
+  <text x="48" y="150" fill="#f3efe6" font-family="Georgia,serif" font-size="48" font-weight="700">Relative value</text>
+  <text x="48" y="210" fill="#f3efe6" font-family="Georgia,serif" font-size="48" font-weight="700">on the curve</text>
+  <!-- yield curve -->
+  <path d="M 100 620 Q 300 500 500 420 Q 750 360 1100 340" fill="none" stroke="#c4a574" stroke-width="5"/>
+  <path d="M 100 580 Q 300 520 500 480 Q 750 460 1100 450" fill="none" stroke="#6a8fa8" stroke-width="3" stroke-dasharray="10 8"/>
+  <circle cx="300" cy="500" r="8" fill="#5a9a72"/>
+  <circle cx="750" cy="360" r="8" fill="#c45c4a"/>
+  <text x="280" y="560" fill="#9a9284" font-size="18">2Y</text>
+  <text x="730" y="320" fill="#9a9284" font-size="18">10Y</text>
+  <text x="48" y="280" fill="#9a9284" font-size="22">Butterflies · flies · who is rich vs cheap</text>
+
+</svg>

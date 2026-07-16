@@ -5,6 +5,7 @@
 import { useTerminalStore } from '../../store/terminalStore';
 import { functionMenuSections } from '../../config/relatedFunctions';
 import { findSectionMeta, sectionsForTab, tabLabel } from '../../config/deskNav';
+import { resolveTradeModeSection } from '../../config/deskSections';
 import { setDeskJump } from '../../lib/market/deskJump';
 import { cn } from '../../lib/utils';
 import { TABS } from './tabs';
@@ -50,14 +51,17 @@ export function FunctionMenuBar({
     });
     setDeskSection(id);
     requestAnimationFrame(() => {
+      // Mode desks + Academy filters switch via store only (no DOM section anchors).
       if (
         !id.startsWith('vol-sub-')
         && !id.startsWith('greeks-sub-')
         && !id.startsWith('desk-ws-')
+        && !id.startsWith('trade-sub-')
         && !id.startsWith('pos-sub-')
         && !id.startsWith('crypto-sub-')
         && !id.startsWith('crypto-ws-')
         && !id.startsWith('rates-mode-')
+        && !id.startsWith('academy-sub-')
       ) {
         document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }
@@ -110,7 +114,12 @@ export function FunctionMenuBar({
           <span className="flex items-center px-2 text-white/50">—</span>
         ) : (
           sections.map((s) => {
-            const active = sectionId === s.id;
+            const active =
+              sectionId === s.id
+              || (activeTab === 'desk' && resolveTradeModeSection(sectionId) === s.id);
+            // Academy + dense red bar: short codes so labels don't stack/clip
+            const label =
+              activeTab === 'academy' && s.short ? s.short : s.label;
             return (
               <button
                 key={s.id}
@@ -125,7 +134,7 @@ export function FunctionMenuBar({
                 )}
                 title={s.code ? `${s.label} (${s.code})` : s.label}
               >
-                {s.label}
+                {label}
               </button>
             );
           })

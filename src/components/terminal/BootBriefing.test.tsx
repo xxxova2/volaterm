@@ -20,6 +20,18 @@ vi.mock('../../lib/macrovol/api', () => ({
       unemployment: 4.2,
       nfp_mom: 120,
     })),
+    macroStress: vi.fn(async () => ({
+      vix: 15.2,
+      // FRED percent scale (2.72 → 272bp in UI), not raw bps.
+      hy_oas: 3.2,
+      ig_oas: 0.95,
+      bei_5y: 2.2,
+      bei_10y: 2.3,
+      real_10y: 2.0,
+      usd_broad: 120,
+      nfci: -0.4,
+      term_sofr_3m: 3.9,
+    })),
     ratesFx: vi.fn(async () => ({
       pairs: [
         { pair: 'USDJPY', rate: 161.5, decimals: 2 },

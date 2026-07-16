@@ -48,9 +48,15 @@ export const DATA_CONFIG = {
     COIN: { spot: 220, iv30: 0.55 },
   },
   
-  /** Default market parameters */
+  /**
+   * Fallback market parameters only — never preferred over live feeds.
+   * LIVE path: r from FMP treasury / SOFR; q from profile / put-call parity.
+   * Greeks API: r from SOFR+CMT via FRED (fail-closed); q from yfinance or caller.
+   */
   market: {
+    /** Stale static fallback when treasury/SOFR unavailable (demo/offline). */
     RISK_FREE_RATE: 0.0525,
+    /** Stale static fallback when profile/parity yield unavailable. */
     DIVIDEND_YIELD: 0.013,
   },
   
@@ -76,10 +82,18 @@ export const API_CONFIG = {
     TTL_MS: 30000, // 30 seconds
   },
   
-  /** Rate limiting */
+  /**
+   * Rate limiting — must stay in sync with server.js @fastify/rate-limit.
+   * Global cap is generous for SPA refresh bursts; key-proxy routes are tighter.
+   */
   rateLimit: {
-    WINDOW_MS: 60000, // 1 minute
-    MAX_REQUESTS: 30, // requests per minute
+    WINDOW_MS: 60_000,
+    /** Global max (static assets allow-listed). */
+    MAX_REQUESTS: 600,
+    /** FMP / Finnhub / desk key proxies. */
+    UPSTREAM_MAX: 120,
+    /** Alpha Vantage / TradingView (tight free quotas). */
+    SCARCE_UPSTREAM_MAX: 30,
   },
   
   /** API timeouts */

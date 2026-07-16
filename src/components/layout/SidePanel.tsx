@@ -15,9 +15,10 @@ export function SidePanel() {
   } = useTerminalStore();
   const spot = snapshot?.spot ?? 0;
 
-  // LIVE-only terminal: never label market UI as Demo.
-  const sourceLabel = liveAvailable || chainAvailable ? 'Live' : 'Waiting';
-  const sourceDotClass = sourceLabel === 'Live' ? 'bg-up' : 'bg-amber';
+  // Live = real option chain; Spot only = quote without surface; never Demo.
+  const sourceLabel = chainAvailable ? 'Live' : liveAvailable ? 'Spot only' : 'Waiting';
+  const sourceDotClass =
+    sourceLabel === 'Live' ? 'bg-up' : sourceLabel === 'Spot only' ? 'bg-cyan' : 'bg-amber';
 
   const modes: { key: DisplayMode; label: string }[] = [
     { key: 'strike', label: 'Strike' },

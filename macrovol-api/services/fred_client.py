@@ -12,6 +12,29 @@ load_dotenv(override=False)
 FRED_API_KEY = os.getenv("FRED_API_KEY")
 FRED_BASE = "https://api.stlouisfed.org/fred/series/observations"
 
+# Public /api/macro/series/{id} and fetch_series only accept this allowlist.
+# Prevents unauthenticated FRED key hammering via arbitrary series_id.
+FRED_SERIES_ALLOWLIST = frozenset({
+    # Money markets / corridor
+    "SOFR", "DFF", "IORB", "OBFR",
+    "TSFR1M", "TSFR3M", "TSFR6M",
+    "RRPONTSYD", "WRESBAL", "WALCL",
+    # UST CMT + T-bill secondary market
+    "DGS1MO", "DGS3MO", "DGS6MO", "DGS1", "DGS2", "DGS5", "DGS10", "DGS20", "DGS30",
+    "DTB3", "DTB6", "DTB1YR",
+    "T10Y2Y", "T10Y3M",
+    # Macro summary
+    "CPIAUCSL", "CPILFESL", "PCEPILFE", "PAYEMS", "UNRATE", "RSAFS", "HOUST",
+    # Stress pack
+    "VIXCLS", "BAMLH0A0HYM2", "BAMLC0A0CM", "T5YIE", "T10YIE", "DFII10",
+    "DTWEXBGS", "NFCI",
+})
+
+
+def is_fred_series_allowed(series_id: str) -> bool:
+    return (series_id or "").upper() in FRED_SERIES_ALLOWLIST
+
+
 # Stale emergency only — never mix silently with live. Keys must match real FRED IDs.
 # Short Tsy bills: DGS1MO / DGS3MO / DGS6MO (NOT DGS1M — that series does not exist).
 FALLBACK_DATA = {
@@ -44,6 +67,11 @@ _last_meta: dict[str, dict] = {}
 
 
 async def fetch_series(series_id: str, limit: int = 500) -> list:
+    series_id = (series_id or "").upper().strip()
+    if not is_fred_series_allowed(series_id):
+        print(f"FRED fetch blocked (not allowlisted): {series_id}")
+        return []
+
     cache_key = f"{series_id}_{limit}"
     now = time.time()
     if cache_key in _cache and now - _cache[cache_key]["time"] < CACHE_TTL:

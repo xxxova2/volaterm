@@ -88,7 +88,7 @@ export function buildSpyHistorySynthetic() {
   const rand = mulberry32(0x5dee5);
   const data = [];
   let price = 40;
-  let vix = 18;
+  let rv = 18;
   const start = new Date('1993-01-29');
   const now = new Date();
 
@@ -96,13 +96,14 @@ export function buildSpyHistorySynthetic() {
     if (d.getDay() === 0 || d.getDay() === 6) continue;
     const ret = (rand() - 0.5) * 0.02;
     price *= 1 + ret;
-    vix = Math.max(8, Math.min(80, vix + (rand() - 0.5) * 2));
+    rv = Math.max(8, Math.min(80, rv + (rand() - 0.5) * 2));
     data.push({
       date: d.toISOString().slice(0, 10),
       close: Math.round(price * 100) / 100,
       return: Math.round(ret * 100000) / 100000,
       logReturn: Math.round(Math.log(1 + ret) * 100000) / 100000,
-      vix: Math.round(vix * 10) / 10,
+      // Synthetic realized-vol path — NOT CBOE VIX / VIXCLS.
+      rv_20d_pct: Math.round(rv * 10) / 10,
     });
   }
 
@@ -127,8 +128,8 @@ export function barsToSpyHistoryPayload(sorted, source) {
     const close = sorted[i].close;
     const prev = i > 0 ? sorted[i - 1].close : close;
     const ret = prev > 0 ? (close - prev) / prev : 0;
-    // Realized-vol proxy as a VIX-like stand-in (20d rolling, annualized).
-    let vix = 18;
+    // 20d close-to-close realized vol (annualized %). NOT CBOE VIX / FRED VIXCLS.
+    let rv_20d_pct = 18;
     if (i >= 20) {
       let sum = 0;
       let sum2 = 0;
@@ -141,14 +142,14 @@ export function barsToSpyHistoryPayload(sorted, source) {
       const n = 20;
       const mean = sum / n;
       const var_ = Math.max(0, sum2 / n - mean * mean);
-      vix = Math.min(80, Math.max(8, Math.sqrt(var_ * 252) * 100));
+      rv_20d_pct = Math.min(80, Math.max(8, Math.sqrt(var_ * 252) * 100));
     }
     data.push({
       date: sorted[i].date,
       close: Math.round(close * 100) / 100,
       return: Math.round(ret * 100000) / 100000,
       logReturn: Math.round(Math.log(1 + ret) * 100000) / 100000,
-      vix: Math.round(vix * 10) / 10,
+      rv_20d_pct: Math.round(rv_20d_pct * 10) / 10,
     });
   }
   return { symbol: 'SPY', data, source };

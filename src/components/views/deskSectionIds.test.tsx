@@ -89,14 +89,14 @@ describe('desk section ids are store-driven (no duplicate in-view bars)', () => 
     expect(useTerminalStore.getState().deskSectionId).toBe('vol-sub-surface');
   });
 
-  it('Trade Analyze registry hosts former Greeks desk', () => {
-    useTerminalStore.setState({ activeTab: 'desk', deskSectionId: 'desk-ws-analyze' });
+  it('Vol · Greeks registry hosts full Greeks desk', () => {
+    useTerminalStore.setState({ activeTab: 'vol', deskSectionId: 'vol-sub-greeks' });
     render(<GreeksView />);
-    expect(GREEKS_SECTIONS.map((s) => s.id)).toEqual(['desk-ws-analyze']);
+    expect(GREEKS_SECTIONS.map((s) => s.id)).toEqual(['vol-sub-greeks']);
     for (const s of GREEKS_SECTIONS) {
-      expect(sectionsForTab('desk').some((x) => x.id === s.id)).toBe(true);
+      expect(sectionsForTab('vol').some((x) => x.id === s.id)).toBe(true);
     }
-    expect(useTerminalStore.getState().deskSectionId).toBe('desk-ws-analyze');
+    expect(useTerminalStore.getState().deskSectionId).toBe('vol-sub-greeks');
   });
 
   it('PositioningView registry + store section (Book default)', () => {
@@ -141,16 +141,20 @@ describe('desk section ids are store-driven (no duplicate in-view bars)', () => 
     expect(useTerminalStore.getState().deskSectionId).toBeNull();
   });
 
-  it('Vol · Greeks stays on vol-sub-greeks (does not fall back to Surface)', async () => {
+  it('Vol · Greeks stays on vol-sub-greeks; legacy desk-ws-analyze remaps to Vol', async () => {
     useTerminalStore.setState({ activeTab: 'vol', deskSectionId: 'vol-sub-surface' });
     render(<VolStructureView />);
     await act(async () => {
       useTerminalStore.getState().setDeskSection('vol-sub-greeks');
     });
-    // Lazy Greeks10View mount + host effect must not rewrite to invalid greeks-desk
+    expect(useTerminalStore.getState().activeTab).toBe('vol');
+    expect(useTerminalStore.getState().deskSectionId).toBe('vol-sub-greeks');
+
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 50));
+      useTerminalStore.getState().setDeskSection('desk-ws-analyze');
     });
+    expect(useTerminalStore.getState().activeTab).toBe('vol');
     expect(useTerminalStore.getState().deskSectionId).toBe('vol-sub-greeks');
   });
 });
+

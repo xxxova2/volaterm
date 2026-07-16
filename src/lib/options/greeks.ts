@@ -33,6 +33,23 @@ export interface GreeksResult extends BSResult {
  * @param vol - Implied volatility (as decimal)
  * @returns Object containing option price and all Greeks
  */
+const ZERO_GREEKS: GreeksResult = {
+  price: 0,
+  delta: 0,
+  gamma: 0,
+  theta: 0,
+  vega: 0,
+  rho: 0,
+  vanna: 0,
+  charm: 0,
+  volga: 0,
+  speed: 0,
+  veta: 0,
+  color: 0,
+  zomma: 0,
+  ultima: 0,
+};
+
 export function computeGreeks(
   type: 'call' | 'put',
   S: number,
@@ -42,6 +59,27 @@ export function computeGreeks(
   q: number,
   vol: number,
 ): GreeksResult {
+  // Mirror MacroVol compute_greeks: refuse singular T/σ (avoid NaN → GEX pollution).
+  if (
+    !(S > 0)
+    || !(K > 0)
+    || !(T > 0)
+    || !(vol > 0)
+    || !Number.isFinite(S)
+    || !Number.isFinite(K)
+    || !Number.isFinite(T)
+    || !Number.isFinite(vol)
+    || !Number.isFinite(r)
+    || !Number.isFinite(q)
+  ) {
+    // Intrinsic-ish price only when S,K finite; else full zeros.
+    if (Number.isFinite(S) && Number.isFinite(K) && S > 0 && K > 0) {
+      const intrinsic = type === 'call' ? Math.max(S - K, 0) : Math.max(K - S, 0);
+      return { ...ZERO_GREEKS, price: intrinsic, delta: type === 'call' ? (S > K ? 1 : S === K ? 0.5 : 0) : (S < K ? -1 : S === K ? -0.5 : 0) };
+    }
+    return { ...ZERO_GREEKS };
+  }
+
   const sqrtT = Math.sqrt(T);
   const volSqrtT = vol * sqrtT;
   const d1 = (Math.log(S / K) + (r - q + vol * vol / 2) * T) / volSqrtT;

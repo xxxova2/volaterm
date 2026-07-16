@@ -1,6 +1,7 @@
 import type { VolSnapshot, GreeksProfile, SensitivityMatrix } from './types';
 import { computeGreeks } from './greeks';
 import { normCdf } from './black-scholes';
+import { yearFractionFromSlice } from './time';
 
 /** Unit greek keys available on each quote for strike profiles. */
 export type ProfileGreekKey = 'delta' | 'gamma' | 'theta' | 'vega' | 'vanna' | 'charm';
@@ -52,7 +53,7 @@ export function spotSensitivity(snap: VolSnapshot): SensitivityMatrix {
     for (const slice of snap.expiries) {
       for (const q of [...slice.calls, ...slice.puts]) {
         if (q.iv == null || q.iv <= 0) continue;
-        const T = slice.dte / 365;
+        const T = yearFractionFromSlice(slice);
         if (T <= 0) continue;
         const g = computeGreeks(q.type, S, q.strike, T, snap.riskFreeRate, snap.dividendYield, q.iv);
         dSum += g.delta;
@@ -89,7 +90,7 @@ export function ivSensitivity(snap: VolSnapshot): SensitivityMatrix {
     for (const slice of snap.expiries) {
       for (const q of [...slice.calls, ...slice.puts]) {
         if (q.iv == null || q.iv <= 0) continue;
-        const T = slice.dte / 365;
+        const T = yearFractionFromSlice(slice);
         if (T <= 0) continue;
         const vol = Math.max(0.01, q.iv * (1 + ivS));
         const g = computeGreeks(q.type, snap.spot, q.strike, T, snap.riskFreeRate, snap.dividendYield, vol);
@@ -132,7 +133,7 @@ export function netByExpiry(snap: VolSnapshot) {
  * while 1σ move = S · σ · √T, so:
  *   1σ ≈ straddle / 0.8
  *
- * Fallback when no liquid straddle: S · atmIV · √(dte/365).
+ * Fallback when no liquid straddle: S · atmIV · √T (continuous yearFractionFromSlice).
  *
  * probTouch ≈ one-sided barrier touch of the +move level under zero-drift BM
  * (reflection): 2 · N(−d) with d = move / (S σ √T). Not a two-sided finish prob.
@@ -158,7 +159,7 @@ export function impliedMove(snap: VolSnapshot) {
   }
 
   // 1σ: straddle ≈ 0.8 × 1σ  ⇒  1σ ≈ straddle / 0.8
-  const T = Math.max(front.dte / 365, 1e-8);
+  const T = yearFractionFromSlice(front);
   const move = straddle > 0
     ? straddle / 0.8
     : snap.spot * front.atmIV * Math.sqrt(T);
@@ -411,7 +412,13 @@ export function resolveExposureWeight(
   };
 }
 
-function flipFromSeries(points: { strike: number; net: number }[]): number | null {
+/**
+ * Cumulative net-GEX zero-crossing (SpotGamma-style).
+ * Aligned with macrovol-api `compute_gex_flip` — both use running sum low→high,
+ * first −→≥0 cross; else strike of min |running sum|.
+ * Exported for golden tests shared with Python.
+ */
+export function flipFromSeries(points: { strike: number; net: number }[]): number | null {
   if (points.length === 0) return null;
   let cumulative = 0;
   let prevCum = 0;
@@ -438,9 +445,10 @@ function flipFromSeries(points: { strike: number; net: number }[]): number | nul
 /**
  * Full dealer stack: GEX / DEX / VEX / Charm by strike.
  *
- * SpotGamma-style convention (customer long listed OI → dealers short):
+ * SpotGamma-style *naive* dealer convention (NOT pure “short all OI”):
  *   call GEX = +γ · S² · 0.01 · w · mult   ($ gamma for a 1% spot move)
  *   put  GEX = −γ · S² · 0.01 · w · mult
+ *   ⇒ models dealers short calls / long puts — not inventory from a book.
  *   DEX = δ · S · w · mult
  *   VEX = vanna · S · w · mult
  *   Charm = charm · S · w · mult   ($ delta change per calendar day)
@@ -803,7 +811,7 @@ export function scanParityEdges(
 
   for (const slice of snap.expiries) {
     if (slice.dte > maxDte || slice.dte <= 0) continue;
-    const T = slice.dte / 365;
+    const T = yearFractionFromSlice(slice);
     const discS = snap.spot * Math.exp(-q * T);
     const putByK = new Map(slice.puts.map((p) => [p.strike, p]));
     for (const c of slice.calls) {

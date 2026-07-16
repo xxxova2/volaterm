@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" role="img" aria-label="Positioning checklist">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0c0f14"/>
+      <stop offset="100%" stop-color="#151b24"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="80%" cy="20%" r="55%">
+      <stop offset="0%" stop-color="#c4a574" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#c4a574" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1200" height="800" fill="url(#g)"/>
+  <rect width="1200" height="800" fill="url(#glow)"/>
+  <rect x="0" y="0" width="8" height="800" fill="#c4a574"/>
+
+  <text x="48" y="72" fill="#9a9284" font-family="ui-sans-serif" font-size="22" letter-spacing="4">POSITIONING</text>
+  <text x="48" y="150" fill="#f3efe6" font-family="Georgia,serif" font-size="44" font-weight="700">A 60-second</text>
+  <text x="48" y="210" fill="#f3efe6" font-family="Georgia,serif" font-size="44" font-weight="700">positioning checklist</text>
+  <g transform="translate(80,300)">
+    
+    <rect x="0" y="0" width="1000" height="70" rx="10" fill="#141a22" stroke="#2a3340" stroke-width="2"/>
+    <circle cx="40" cy="35" r="16" fill="none" stroke="#c4a574" stroke-width="3"/>
+    <text x="80" y="42" fill="#f3efe6" font-size="24">Spot vs key GEX levels</text>
+    
+    <rect x="0" y="90" width="1000" height="70" rx="10" fill="#141a22" stroke="#2a3340" stroke-width="2"/>
+    <circle cx="40" cy="125" r="16" fill="none" stroke="#c4a574" stroke-width="3"/>
+    <text x="80" y="132" fill="#f3efe6" font-size="24">Call wall · put wall · HVL</text>
+    
+    <rect x="0" y="180" width="1000" height="70" rx="10" fill="#141a22" stroke="#2a3340" stroke-width="2"/>
+    <circle cx="40" cy="215" r="16" fill="none" stroke="#c4a574" stroke-width="3"/>
+    <text x="80" y="222" fill="#f3efe6" font-size="24">Charm path for the session</text>
+    
+    <rect x="0" y="270" width="1000" height="70" rx="10" fill="#141a22" stroke="#2a3340" stroke-width="2"/>
+    <circle cx="40" cy="305" r="16" fill="none" stroke="#c4a574" stroke-width="3"/>
+    <text x="80" y="312" fill="#f3efe6" font-size="24">Who is forced if we gap?</text>
+    
+  </g>
+
+</svg>

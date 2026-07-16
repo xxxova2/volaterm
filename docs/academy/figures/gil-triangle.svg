@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 400" role="img" aria-label="Growth Inflation Liquidity">
+  <rect width="960" height="400" fill="#0b1220"/>
+  <text x="40" y="48" fill="#e8edf5" font-family="Georgia, serif" font-size="28" font-weight="700">Growth · Inflation · Liquidity</text>
+  <text x="40" y="84" fill="#9aa8bc" font-family="system-ui" font-size="18">Most macro stories collapse into these three forces</text>
+  <circle cx="240" cy="230" r="90" fill="#121c2e" stroke="#60a5fa" stroke-width="4"/>
+  <text x="240" y="220" text-anchor="middle" fill="#60a5fa" font-family="system-ui" font-size="24" font-weight="700">G</text>
+  <text x="240" y="252" text-anchor="middle" fill="#e8edf5" font-family="system-ui" font-size="18">Growth</text>
+  <circle cx="480" cy="230" r="90" fill="#121c2e" stroke="#f87171" stroke-width="4"/>
+  <text x="480" y="220" text-anchor="middle" fill="#f87171" font-family="system-ui" font-size="24" font-weight="700">I</text>
+  <text x="480" y="252" text-anchor="middle" fill="#e8edf5" font-family="system-ui" font-size="18">Inflation</text>
+  <circle cx="720" cy="230" r="90" fill="#121c2e" stroke="#4ade80" stroke-width="4"/>
+  <text x="720" y="220" text-anchor="middle" fill="#4ade80" font-family="system-ui" font-size="24" font-weight="700">L</text>
+  <text x="720" y="252" text-anchor="middle" fill="#e8edf5" font-family="system-ui" font-size="18">Liquidity</text>
+  <text x="40" y="370" fill="#9aa8bc" font-family="system-ui" font-size="17">Ask: which force is dominating this week — and who is funding it?</text>
+</svg>

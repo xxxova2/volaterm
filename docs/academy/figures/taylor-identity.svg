@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 360" role="img" aria-label="Option P and L buckets">
+  <rect width="960" height="360" fill="#0b1220"/>
+  <text x="40" y="48" fill="#e8edf5" font-family="Georgia, serif" font-size="28" font-weight="700">Where option P&amp;L actually comes from</text>
+  <text x="40" y="84" fill="#9aa8bc" font-family="system-ui" font-size="18">Six buckets. Theta is only one of them.</text>
+  <!-- six boxes -->
+  <rect x="30" y="120" width="140" height="160" rx="10" fill="#121c2e" stroke="#64748b" stroke-width="2"/>
+  <text x="100" y="180" text-anchor="middle" fill="#e6c35c" font-family="system-ui" font-size="20" font-weight="700">Theta</text>
+  <text x="100" y="220" text-anchor="middle" fill="#e8edf5" font-family="system-ui" font-size="16">Clock</text>
+  <rect x="185" y="120" width="140" height="160" rx="10" fill="#121c2e" stroke="#64748b" stroke-width="2"/>
+  <text x="255" y="180" text-anchor="middle" fill="#60a5fa" font-family="system-ui" font-size="20" font-weight="700">Delta</text>
+  <text x="255" y="220" text-anchor="middle" fill="#e8edf5" font-family="system-ui" font-size="16">Direction</text>
+  <rect x="340" y="120" width="140" height="160" rx="10" fill="#121c2e" stroke="#64748b" stroke-width="2"/>
+  <text x="410" y="180" text-anchor="middle" fill="#a78bfa" font-family="system-ui" font-size="20" font-weight="700">Vega</text>
+  <text x="410" y="220" text-anchor="middle" fill="#e8edf5" font-family="system-ui" font-size="16">IV move</text>
+  <rect x="495" y="120" width="140" height="160" rx="10" fill="#121c2e" stroke="#64748b" stroke-width="2"/>
+  <text x="565" y="180" text-anchor="middle" fill="#f87171" font-family="system-ui" font-size="20" font-weight="700">Gamma</text>
+  <text x="565" y="220" text-anchor="middle" fill="#e8edf5" font-family="system-ui" font-size="16">Big moves</text>
+  <rect x="650" y="120" width="140" height="160" rx="10" fill="#121c2e" stroke="#64748b" stroke-width="2"/>
+  <text x="720" y="180" text-anchor="middle" fill="#fb923c" font-family="system-ui" font-size="20" font-weight="700">Vanna</text>
+  <text x="720" y="220" text-anchor="middle" fill="#e8edf5" font-family="system-ui" font-size="16">Spot+vol</text>
+  <rect x="805" y="120" width="140" height="160" rx="10" fill="#121c2e" stroke="#64748b" stroke-width="2"/>
+  <text x="875" y="180" text-anchor="middle" fill="#34d399" font-family="system-ui" font-size="20" font-weight="700">Volga</text>
+  <text x="875" y="220" text-anchor="middle" fill="#e8edf5" font-family="system-ui" font-size="16">Vol of vol</text>
+  <text x="40" y="330" fill="#9aa8bc" font-family="system-ui" font-size="17">Short theta only “works” if the other five buckets do not eat the premium.</text>
+</svg>

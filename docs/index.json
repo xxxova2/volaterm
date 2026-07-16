@@ -1,0 +1,972 @@
+{
+  "version": 3,
+  "generated": "2026-07-15",
+  "title": "VOLATERM Academy",
+  "description": "Institutional plumbing for the terminally online. Options and rates \u2014 desk essays, not tip lists. Positioning lives on the desk as terminal work, not Academy lessons.",
+  "categories": [
+    {
+      "id": "start",
+      "label": "Start Here",
+      "description": "Your map into the Academy. Pick a track or open the core lessons below \u2014 this is not an empty folder.",
+      "files": [
+        {
+          "path": "docs/academy/00-curriculum-overview.md",
+          "title": "How this Academy works",
+          "source": "Two tracks: Options and Macro. Positioning is the Bloomberg-style desk \u2014 build it in the terminal, not here.",
+          "level": "start here",
+          "tags": [
+            "curriculum",
+            "overview",
+            "method"
+          ],
+          "sections": [
+            {
+              "heading": "Why this Academy exists",
+              "tags": [
+                "overview"
+              ]
+            },
+            {
+              "heading": "Tracks and suggested order",
+              "tags": [
+                "tracks"
+              ]
+            },
+            {
+              "heading": "Completion definition",
+              "tags": [
+                "method"
+              ]
+            }
+          ],
+          "figure": "/docs/academy/figures/curriculum-map.svg",
+          "cover": "/docs/academy/figures/curriculum-map.svg"
+        },
+        {
+          "path": "docs/tools/06-study-method.md",
+          "title": "How to study with this terminal",
+          "source": "A weekly loop that beats passive scrolling.",
+          "level": "all levels",
+          "tags": [
+            "study",
+            "notes",
+            "weekly-plan",
+            "method"
+          ],
+          "sections": [
+            {
+              "heading": "Weekly plan",
+              "tags": [
+                "plan"
+              ]
+            },
+            {
+              "heading": "Note template",
+              "tags": [
+                "notes"
+              ]
+            }
+          ],
+          "figure": "/docs/academy/figures/covers/study-method.svg",
+          "cover": "/docs/academy/figures/covers/study-method.svg"
+        }
+      ]
+    },
+    {
+      "id": "options",
+      "label": "Options & Greeks",
+      "description": "Plain-language options mechanics: theta risk, P&L buckets, skew, surface, 0DTE.",
+      "files": [
+        {
+          "path": "docs/options/01-theta-is-not-free-money.md",
+          "title": "The theta income trap",
+          "source": "Short options look like a paycheck. They are not.",
+          "level": "intermediate",
+          "tags": [
+            "theta",
+            "gamma",
+            "taylor",
+            "vrp",
+            "asymmetric-risk"
+          ],
+          "sections": [
+            {
+              "heading": "The myth of income Greeks",
+              "tags": [
+                "theta"
+              ]
+            },
+            {
+              "heading": "Second-order Taylor expansion of P&L",
+              "tags": [
+                "taylor"
+              ]
+            },
+            {
+              "heading": "ATM special case",
+              "tags": [
+                "atm",
+                "gamma"
+              ]
+            }
+          ],
+          "figure": "/docs/academy/figures/theta-not-income.svg",
+          "cover": "/docs/academy/figures/theta-not-income.svg"
+        },
+        {
+          "path": "docs/options/02-theta-calendar-vs-trading-time.md",
+          "title": "Weekends don't decay like weekdays",
+          "source": "Calendar time vs trading time \u2014 why theta is lumpy.",
+          "level": "intermediate",
+          "tags": [
+            "theta",
+            "weekend-effect",
+            "calendar-time",
+            "events"
+          ],
+          "sections": [
+            {
+              "heading": "Continuous time vs market hours",
+              "tags": [
+                "time"
+              ]
+            },
+            {
+              "heading": "The weekend thought experiment",
+              "tags": [
+                "weekend"
+              ]
+            }
+          ],
+          "figure": "/docs/academy/figures/covers/weekend-decay.svg",
+          "cover": "/docs/academy/figures/covers/weekend-decay.svg"
+        },
+        {
+          "path": "docs/options/03-taylor-pnl-decomposition.md",
+          "title": "How option P&L actually breaks down",
+          "source": "Six buckets. Theta is only one of them.",
+          "level": "intermediate",
+          "tags": [
+            "taylor",
+            "pnl",
+            "greeks",
+            "attribution",
+            "gvv"
+          ],
+          "sections": [
+            {
+              "heading": "The working identity",
+              "tags": [
+                "taylor"
+              ]
+            },
+            {
+              "heading": "Reading each term like a risk manager",
+              "tags": [
+                "risk"
+              ]
+            }
+          ],
+          "figure": "/docs/academy/figures/taylor-identity.svg",
+          "cover": "/docs/academy/figures/taylor-identity.svg"
+        },
+        {
+          "path": "docs/options/04-greeks-hierarchy.md",
+          "title": "The greeks, in the order that matters",
+          "source": "Delta first. Then the risks that kill short premium.",
+          "level": "intermediate",
+          "tags": [
+            "delta",
+            "gamma",
+            "vega",
+            "theta",
+            "vanna",
+            "volga",
+            "charm"
+          ],
+          "sections": [
+            {
+              "heading": "First-order greeks",
+              "tags": [
+                "delta",
+                "vega",
+                "theta"
+              ]
+            },
+            {
+              "heading": "Second-order greeks",
+              "tags": [
+                "gamma",
+                "vanna",
+                "volga",
+                "charm"
+              ]
+            }
+          ],
+          "figure": "/docs/academy/figures/covers/greeks-order.svg",
+          "cover": "/docs/academy/figures/covers/greeks-order.svg"
+        },
+        {
+          "path": "docs/options/05-vanna-volga-skew.md",
+          "title": "Why the skew exists (vanna and volga)",
+          "source": "Spot and vol move together. Your book feels it.",
+          "level": "intermediate+",
+          "tags": [
+            "vanna",
+            "volga",
+            "skew",
+            "smile",
+            "trapdoor"
+          ],
+          "sections": [
+            {
+              "heading": "Why the smile exists",
+              "tags": [
+                "skew"
+              ]
+            },
+            {
+              "heading": "Vanna: when spot and vol move together",
+              "tags": [
+                "vanna"
+              ]
+            }
+          ],
+          "figure": "/docs/academy/figures/covers/skew-vanna.svg",
+          "cover": "/docs/academy/figures/covers/skew-vanna.svg"
+        },
+        {
+          "path": "docs/options/06-vol-surface-term-structure.md",
+          "title": "Reading the vol surface like a map",
+          "source": "Term structure and smile \u2014 what rich and cheap actually mean.",
+          "level": "intermediate",
+          "tags": [
+            "surface",
+            "term-structure",
+            "contango",
+            "backwardation",
+            "iv"
+          ],
+          "sections": [
+            {
+              "heading": "Term structure shapes",
+              "tags": [
+                "term"
+              ]
+            },
+            {
+              "heading": "Smile / skew dimension",
+              "tags": [
+                "smile"
+              ]
+            }
+          ],
+          "figure": "/docs/academy/figures/covers/vol-surface.svg",
+          "cover": "/docs/academy/figures/covers/vol-surface.svg"
+        },
+        {
+          "path": "docs/options/10-surface-shape-change-desk-practice.md",
+          "title": "When the SPY surface shape changes",
+          "source": "Sticky-IV vs chain rebuild. VIXCLS \u2260 ATM \u2260 RV20. Falsify shape moves.",
+          "level": "intermediate",
+          "tags": [
+            "surface",
+            "sticky-strike",
+            "vix",
+            "atm",
+            "realized",
+            "desk-practice"
+          ],
+          "sections": [
+            {
+              "heading": "Three numbers",
+              "tags": [
+                "vix",
+                "atm",
+                "rv"
+              ]
+            },
+            {
+              "heading": "Sticky strike vs sticky delta",
+              "tags": [
+                "sticky"
+              ]
+            },
+            {
+              "heading": "Desk drill",
+              "tags": [
+                "practice"
+              ]
+            }
+          ],
+          "figure": "/docs/academy/figures/covers/vol-surface.svg",
+          "cover": "/docs/academy/figures/covers/vol-surface.svg"
+        },
+        {
+          "path": "docs/options/07-variance-risk-premium.md",
+          "title": "The variance risk premium, without the mystique",
+          "source": "Why sellers of insurance get paid on average \u2014 and when they don't.",
+          "level": "intermediate+",
+          "tags": [
+            "vrp",
+            "implied-vs-realized",
+            "theta",
+            "gamma"
+          ],
+          "sections": [
+            {
+              "heading": "Definition",
+              "tags": [
+                "vrp"
+              ]
+            },
+            {
+              "heading": "Link to the Taylor identity",
+              "tags": [
+                "taylor"
+              ]
+            }
+          ],
+          "figure": "/docs/academy/figures/charts/vix.png",
+          "cover": "/docs/academy/figures/charts/vix.png"
+        },
+        {
+          "path": "docs/options/08-zerodte-mechanics.md",
+          "title": "What 0DTE actually changes",
+          "source": "Gamma stacks, charm, and why the day feels different.",
+          "level": "intermediate+",
+          "tags": [
+            "0dte",
+            "gamma",
+            "charm",
+            "pin",
+            "stack"
+          ],
+          "sections": [
+            {
+              "heading": "Stack the gammas",
+              "tags": [
+                "0dte",
+                "gamma"
+              ]
+            },
+            {
+              "heading": "Charm on 0DTE",
+              "tags": [
+                "charm"
+              ]
+            }
+          ],
+          "figure": "/docs/academy/figures/covers/zerodte.svg",
+          "cover": "/docs/academy/figures/covers/zerodte.svg"
+        },
+        {
+          "path": "docs/options/09-black-scholes-intuition.md",
+          "title": "Black\u2013Scholes intuition (no hazing)",
+          "source": "What the model assumes \u2014 and which lies still help.",
+          "level": "intermediate",
+          "tags": [
+            "black-scholes",
+            "iv",
+            "parity",
+            "model-risk",
+            "greeks"
+          ],
+          "sections": [
+            {
+              "heading": "Core assumptions",
+              "tags": [
+                "model"
+              ]
+            },
+            {
+              "heading": "Why one \u03c3 cannot fit all strikes",
+              "tags": [
+                "smile"
+              ]
+            }
+          ],
+          "figure": "/docs/academy/figures/covers/black-scholes.svg",
+          "cover": "/docs/academy/figures/covers/black-scholes.svg"
+        }
+      ]
+    },
+    {
+      "id": "macro",
+      "label": "Macro & Rates",
+      "description": "Growth, inflation, liquidity, and overnight funding \u2014 with FRED charts.",
+      "files": [
+        {
+          "path": "docs/macro/01-capital-flows-framework.md",
+          "title": "Growth, inflation, liquidity \u2014 three numbers",
+          "source": "Most macro noise collapses into G, I, and L.",
+          "level": "intermediate",
+          "tags": [
+            "macro",
+            "growth",
+            "inflation",
+            "liquidity",
+            "positioning",
+            "framework"
+          ],
+          "sections": [
+            {
+              "heading": "Three macro drivers",
+              "tags": [
+                "gil"
+              ]
+            },
+            {
+              "heading": "Stacking edges",
+              "tags": [
+                "alpha"
+              ]
+            }
+          ],
+          "figure": "/docs/academy/figures/gil-triangle.svg",
+          "cover": "/docs/academy/figures/gil-triangle.svg"
+        },
+        {
+          "path": "docs/macro/02-growth-inflation-liquidity.md",
+          "title": "G/I/L in practice this week",
+          "source": "Turning the framework into a Friday note.",
+          "level": "intermediate",
+          "tags": [
+            "growth",
+            "inflation",
+            "liquidity",
+            "regimes"
+          ],
+          "sections": [
+            {
+              "heading": "Liquidity layers",
+              "tags": [
+                "liquidity"
+              ]
+            },
+            {
+              "heading": "Daily study checklist",
+              "tags": [
+                "checklist"
+              ]
+            }
+          ],
+          "figure": "/docs/academy/figures/covers/gil-practice.svg",
+          "cover": "/docs/academy/figures/covers/gil-practice.svg"
+        },
+        {
+          "path": "docs/macro/03-money-markets-repo-hierarchy.md",
+          "title": "Repo hierarchy: who funds whom",
+          "source": "The overnight stack under every leveraged trade.",
+          "level": "intermediate",
+          "tags": [
+            "repo",
+            "sofr",
+            "effr",
+            "slr",
+            "rrp",
+            "srf",
+            "iorb"
+          ],
+          "sections": [
+            {
+              "heading": "Hierarchy of rates",
+              "tags": [
+                "sofr",
+                "effr"
+              ]
+            },
+            {
+              "heading": "Repo mechanics and math",
+              "tags": [
+                "repo"
+              ]
+            },
+            {
+              "heading": "Central bank tools",
+              "tags": [
+                "rrp",
+                "srf"
+              ]
+            }
+          ],
+          "figure": "/docs/academy/figures/rate-hierarchy.svg",
+          "cover": "/docs/academy/figures/rate-hierarchy.svg"
+        },
+        {
+          "path": "docs/macro/04-treasury-cash-futures-basis.md",
+          "title": "The Treasury basis trade, explained calmly",
+          "source": "Cash vs futures, leverage, and why it can snap.",
+          "level": "intermediate+",
+          "tags": [
+            "basis",
+            "ctd",
+            "futures",
+            "repo",
+            "leverage",
+            "margin"
+          ],
+          "sections": [
+            {
+              "heading": "Defining the basis",
+              "tags": [
+                "basis"
+              ]
+            },
+            {
+              "heading": "Long-basis trade risks",
+              "tags": [
+                "leverage"
+              ]
+            }
+          ],
+          "figure": "/docs/academy/figures/covers/basis-trade.svg",
+          "cover": "/docs/academy/figures/covers/basis-trade.svg"
+        },
+        {
+          "path": "docs/macro/05-swaps-spreads-convexity.md",
+          "title": "Swaps, spreads, and convexity bias",
+          "source": "Why fixed income is never just 'the yield'.",
+          "level": "intermediate+",
+          "tags": [
+            "swaps",
+            "swap-spreads",
+            "convexity",
+            "sofr",
+            "stir"
+          ],
+          "sections": [
+            {
+              "heading": "Swap spreads",
+              "tags": [
+                "spreads"
+              ]
+            },
+            {
+              "heading": "Convexity bias",
+              "tags": [
+                "futures"
+              ]
+            }
+          ],
+          "figure": "/docs/academy/figures/covers/swaps-convexity.svg",
+          "cover": "/docs/academy/figures/covers/swaps-convexity.svg"
+        },
+        {
+          "path": "docs/macro/06-relative-value-curves.md",
+          "title": "Relative value on the curve",
+          "source": "Butterflies and flies without the cult language.",
+          "level": "intermediate+",
+          "tags": [
+            "pca",
+            "butterfly",
+            "curve",
+            "rv",
+            "basis-swaps"
+          ],
+          "sections": [
+            {
+              "heading": "PCA decomposition",
+              "tags": [
+                "pca"
+              ]
+            },
+            {
+              "heading": "Butterfly trades",
+              "tags": [
+                "butterfly"
+              ]
+            }
+          ],
+          "figure": "/docs/academy/figures/covers/rel-value.svg",
+          "cover": "/docs/academy/figures/covers/rel-value.svg"
+        },
+        {
+          "path": "docs/macro/07-fx-cross-currency-basis.md",
+          "title": "FX and the cross-currency basis",
+          "source": "Dollar funding pressure shows up here first.",
+          "level": "intermediate+",
+          "tags": [
+            "fx",
+            "xccy",
+            "cip",
+            "dollar",
+            "ndf"
+          ],
+          "sections": [
+            {
+              "heading": "Cross-currency basis",
+              "tags": [
+                "xccy"
+              ]
+            },
+            {
+              "heading": "FX swaps market",
+              "tags": [
+                "fx-swaps"
+              ]
+            }
+          ],
+          "figure": "/docs/academy/figures/covers/fx-basis.svg",
+          "cover": "/docs/academy/figures/covers/fx-basis.svg"
+        },
+        {
+          "path": "docs/macro/08-global-flows-bop.md",
+          "title": "Global flows and the balance of payments",
+          "source": "Who must buy what when surpluses move.",
+          "level": "intermediate",
+          "tags": [
+            "bop",
+            "niip",
+            "flows",
+            "issuance",
+            "fiscal"
+          ],
+          "sections": [
+            {
+              "heading": "Balance of payments",
+              "tags": [
+                "bop"
+              ]
+            },
+            {
+              "heading": "NIIP",
+              "tags": [
+                "niip"
+              ]
+            }
+          ],
+          "figure": "/docs/academy/figures/covers/global-flows.svg",
+          "cover": "/docs/academy/figures/covers/global-flows.svg"
+        },
+        {
+          "path": "docs/macro/09-rrp-sofr-facility-corridor.md",
+          "title": "Where cash actually sleeps overnight",
+          "source": "SOFR, RRP, IORB \u2014 real FRED charts, not diagrams.",
+          "level": "intermediate",
+          "tags": [
+            "rrp",
+            "sofr",
+            "corridor",
+            "equity-repo",
+            "floor-ceiling"
+          ],
+          "sections": [
+            {
+              "heading": "RRP as a buffer",
+              "tags": [
+                "rrp"
+              ]
+            },
+            {
+              "heading": "Corridor cheat sheet",
+              "tags": [
+                "corridor"
+              ]
+            }
+          ],
+          "figure": "/docs/academy/figures/charts/sofr.png",
+          "cover": "/docs/academy/figures/charts/sofr.png"
+        }
+      ]
+    },
+    {
+      "id": "glossary",
+      "label": "Glossary",
+      "description": "Term-first definitions. Quiz yourself.",
+      "entries": [
+        {
+          "term": "GEX",
+          "definition": "Gamma Exposure \u2014 estimated dealer gamma by strike/expiry from OI under a stated convention. Positive GEX: dealers tend to dampen moves; negative GEX: amplify.",
+          "category": "positioning"
+        },
+        {
+          "term": "DEX",
+          "definition": "Delta Exposure \u2014 net delta by strike (often dealer-signed). Shows directional hedge pressure as spot walks, distinct from gamma convexity.",
+          "category": "positioning"
+        },
+        {
+          "term": "Flip / Gamma flip",
+          "definition": "Price region where dealer gamma changes sign from positive to negative (or reverse). A pivot for dampen vs amplify regimes.",
+          "category": "positioning"
+        },
+        {
+          "term": "Call wall / Call resistance",
+          "definition": "Strike with large call OI/GEX mass above spot; educational magnet/resistance from hedging, not classical TA.",
+          "category": "positioning"
+        },
+        {
+          "term": "Put wall / Put support",
+          "definition": "Strike with large put OI/GEX mass below spot; educational support magnet from hedging.",
+          "category": "positioning"
+        },
+        {
+          "term": "HVL",
+          "definition": "High Vol Level \u2014 profile reference often at max |GEX| or vendor 'vol magnet' strike; separates structural regimes on the chart.",
+          "category": "positioning"
+        },
+        {
+          "term": "Charm",
+          "definition": "\u2202\u0394/\u2202t \u2014 delta change from time passage alone. Drives dealer futures hedges even if spot is flat; critical for 0DTE path bias.",
+          "category": "options"
+        },
+        {
+          "term": "Vanna",
+          "definition": "\u2202\u0394/\u2202\u03c3 (or \u2202\u03bd/\u2202S) \u2014 links spot hedges to IV shocks. Crash books and skew dynamics live here.",
+          "category": "options"
+        },
+        {
+          "term": "Volga / Vomma",
+          "definition": "\u2202\u03bd/\u2202\u03c3 \u2014 convexity of value with respect to implied volatility. Punishes casual short wings when IV jumps.",
+          "category": "options"
+        },
+        {
+          "term": "Theta (\u03b8)",
+          "definition": "Time decay of option value. For shorts: compensation for asymmetric risk (gamma/vanna/volga), not free income.",
+          "category": "options"
+        },
+        {
+          "term": "Gamma (\u0393)",
+          "definition": "\u2202\u00b2V/\u2202S\u00b2 = \u2202\u0394/\u2202S. Long options positive. Drives rehedging frequency and GEX construction.",
+          "category": "options"
+        },
+        {
+          "term": "Delta (\u0394)",
+          "definition": "\u2202V/\u2202S. Share-equivalent directional exposure. Migrates with spot, time (charm), and vol (vanna).",
+          "category": "options"
+        },
+        {
+          "term": "Vega (\u03bd)",
+          "definition": "\u2202V/\u2202\u03c3. Sensitivity to implied volatility, often quoted per 1 vol point.",
+          "category": "options"
+        },
+        {
+          "term": "Taylor / GVV identity",
+          "definition": "dV \u2248 \u03b8 dt + \u0394 dx + \u03bd d\u03c3 + \u00bd\u0393(dx)\u00b2 + \u00bdVolga(d\u03c3)\u00b2 + Vanna dx d\u03c3. Desk language for P&L attribution.",
+          "category": "options"
+        },
+        {
+          "term": "0DTE",
+          "definition": "Options expiring the same day. Extreme gamma/theta concentration; stack vs longer-dated gamma before reading path.",
+          "category": "options"
+        },
+        {
+          "term": "VRP",
+          "definition": "Variance risk premium \u2014 tendency for implied variance to exceed realized on average for many equity indices; not a daily free lunch.",
+          "category": "options"
+        },
+        {
+          "term": "Contango (vol)",
+          "definition": "Term structure with longer-dated IV above shorter-dated IV; common calm equity-index shape.",
+          "category": "options"
+        },
+        {
+          "term": "Backwardation (vol)",
+          "definition": "Front IV above back IV; often stress or near-term event demand.",
+          "category": "options"
+        },
+        {
+          "term": "Skew / Smile",
+          "definition": "IV varying by strike. Equity indices typically show put skew (downside insurance expensive).",
+          "category": "options"
+        },
+        {
+          "term": "Sticky strike / sticky delta",
+          "definition": "Rules of thumb for how the smile moves when spot moves; changes effective vanna/volga P&L.",
+          "category": "options"
+        },
+        {
+          "term": "Pin risk",
+          "definition": "Risk that spot gravitates to a large OI strike into expiry due to hedging; pin vanishes after expiry.",
+          "category": "positioning"
+        },
+        {
+          "term": "OI dealer convention",
+          "definition": "Assumption (e.g. customers long options \u21d2 dealers short) used to sign GEX/DEX. Model, not a full participant tape.",
+          "category": "positioning"
+        },
+        {
+          "term": "Trapdoor",
+          "definition": "Educational fragility: negative gamma below a level combined with fat put skew \u2014 breaks can amplify with rising IV.",
+          "category": "positioning"
+        },
+        {
+          "term": "Buy-or-buy mode",
+          "definition": "Dealer gamma profile such that both downside and upside scenarios require buying deltas to hedge \u2014 a flow skew, not a guarantee of rallies.",
+          "category": "positioning"
+        },
+        {
+          "term": "SOFR",
+          "definition": "Secured Overnight Financing Rate \u2014 broad cost of borrowing cash overnight vs Treasury collateral (repo complex).",
+          "category": "macro"
+        },
+        {
+          "term": "EFFR",
+          "definition": "Effective Federal Funds Rate \u2014 unsecured overnight bank reserves market; often residual/regulatory in abundant-reserves regimes.",
+          "category": "macro"
+        },
+        {
+          "term": "IORB",
+          "definition": "Interest on Reserve Balances \u2014 rate Fed pays on reserves; anchors bank reserve remuneration.",
+          "category": "macro"
+        },
+        {
+          "term": "RRP / ON RRP",
+          "definition": "Overnight reverse repo facility \u2014 floor tool and cash sponge for eligible counterparties (e.g. money funds).",
+          "category": "macro"
+        },
+        {
+          "term": "SRF",
+          "definition": "Standing Repo Facility \u2014 ceiling-style backstop lending cash vs Treasuries to limit repo spikes.",
+          "category": "macro"
+        },
+        {
+          "term": "SOFR\u2212EFFR spread",
+          "definition": "Barometer of dealer/balance-sheet capacity: SOFR above EFFR often signals scarce balance sheet / abundant collateral pressure.",
+          "category": "macro"
+        },
+        {
+          "term": "GC repo",
+          "definition": "General collateral repo \u2014 financing against generic eligible Treasuries; SOFR summarizes this complex.",
+          "category": "macro"
+        },
+        {
+          "term": "Specialness",
+          "definition": "GC rate minus special repo rate for a scarce CUSIP; deep specials signal squeeze/scarcity.",
+          "category": "macro"
+        },
+        {
+          "term": "SLR",
+          "definition": "Supplementary Leverage Ratio \u2014 capital vs leverage exposure; taxes balance-sheet intensive intermediation like matched-book repo.",
+          "category": "macro"
+        },
+        {
+          "term": "G-SIB",
+          "definition": "Global Systemically Important Bank surcharge framework; can mechanically constrain warehouse capacity for safe assets.",
+          "category": "macro"
+        },
+        {
+          "term": "Cash\u2013futures basis",
+          "definition": "Relationship between cash bond price and futures (via conversion factor), embedding carry and delivery options; home of levered basis trades.",
+          "category": "macro"
+        },
+        {
+          "term": "CTD",
+          "definition": "Cheapest to Deliver \u2014 bond in the futures basket optimal for the short to deliver; can switch as yields move.",
+          "category": "macro"
+        },
+        {
+          "term": "Conversion factor",
+          "definition": "Exchange factor normalizing deliverable bonds into futures invoice price math.",
+          "category": "macro"
+        },
+        {
+          "term": "Swap spread",
+          "definition": "Swap rate minus comparable Treasury yield; post-LIBOR driven by supply, duration demand, and balance-sheet frictions.",
+          "category": "macro"
+        },
+        {
+          "term": "Convexity bias (rates)",
+          "definition": "Adjustment between futures rates and true forward rates due to daily margining and convexity differences vs OTC.",
+          "category": "macro"
+        },
+        {
+          "term": "PCA (curve)",
+          "definition": "Principal components of yield changes: level, slope, curvature \u2014 RV residuals often sit in PC3.",
+          "category": "macro"
+        },
+        {
+          "term": "Butterfly (rates)",
+          "definition": "Curvature trade: long body vs short wings (or reverse), approximately level- and slope-hedged.",
+          "category": "macro"
+        },
+        {
+          "term": "XCCY basis",
+          "definition": "Cross-currency basis \u2014 cost beyond CIP to swap funding across currencies; gauge of global dollar demand and dealer constraints.",
+          "category": "macro"
+        },
+        {
+          "term": "CIP",
+          "definition": "Covered Interest Parity \u2014 frictionless no-arbitrage link between interest differentials and forward FX; violated when balance sheets are scarce.",
+          "category": "macro"
+        },
+        {
+          "term": "BoP",
+          "definition": "Balance of Payments \u2014 current + financial accounts identity; frames how deficits are financed by capital flows.",
+          "category": "macro"
+        },
+        {
+          "term": "NIIP",
+          "definition": "Net International Investment Position \u2014 external assets minus liabilities; valuation effects matter for USD debtors.",
+          "category": "macro"
+        },
+        {
+          "term": "G/I/L",
+          "definition": "Growth, Inflation, Liquidity \u2014 three-driver macro state vector for asset attribution and correlation regimes.",
+          "category": "macro"
+        },
+        {
+          "term": "Duration risk",
+          "definition": "Sensitivity of present value of cash flows to rates; distinct from credit/default risk.",
+          "category": "macro"
+        },
+        {
+          "term": "Credit risk",
+          "definition": "Uncertainty of receiving promised cash flows (spreads, defaults); can move independently of duration.",
+          "category": "macro"
+        },
+        {
+          "term": "Excess cash regime",
+          "definition": "Plumbing state with abundant cash (often large RRP); private secured rates softer, reach-for-yield risks.",
+          "category": "macro"
+        },
+        {
+          "term": "Excess collateral regime",
+          "definition": "Heavy safe-asset supply vs dealer capacity; SOFR firm/spiky, basis and warehouse stress.",
+          "category": "macro"
+        },
+        {
+          "term": "Expected move",
+          "definition": "Market-implied magnitude of move to an expiry (often from ATM straddle); context rails, not a target.",
+          "category": "options"
+        },
+        {
+          "term": "Variance swap / fair variance",
+          "definition": "Contract on realized variance; fair strike relates to integrated OTM option prices \u2014 cleaner VRP object than a single ATM IV.",
+          "category": "options"
+        },
+        {
+          "term": "Risk reversal",
+          "definition": "OTM call vol minus OTM put vol (sign convention varies); summarizes skew.",
+          "category": "options"
+        },
+        {
+          "term": "Butterfly (vol)",
+          "definition": "Wings vs body vol structure; prices kurtosis / vol-of-vol demand.",
+          "category": "options"
+        },
+        {
+          "term": "Matched book",
+          "definition": "Dealer repo book earning bid\u2013ask by borrowing and lending cash/collateral with limited directional rate view.",
+          "category": "macro"
+        },
+        {
+          "term": "Sponsored repo",
+          "definition": "Market structure letting money funds and others access cleared repo with capital-efficient netting via dealers/CCPs.",
+          "category": "macro"
+        },
+        {
+          "term": "Equity repo / stock loan",
+          "definition": "Financing and borrow markets for equities; haircuts and specials extend leverage stress beyond UST collateral.",
+          "category": "macro"
+        },
+        {
+          "term": "Three machines",
+          "definition": "Product model: Plumbing \u2192 Vol/Greeks \u2192 Positioning path; study all three together.",
+          "category": "positioning"
+        }
+      ]
+    }
+  ],
+  "cover": "/docs/academy/figures/covers/pub-mark.svg"
+}

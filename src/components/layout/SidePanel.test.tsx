@@ -60,6 +60,12 @@ describe('SidePanel source badge', () => {
     expect(screen.queryByText('Demo')).not.toBeInTheDocument();
   });
 
+  it('shows Spot only when quote is up but chain is not', () => {
+    seedStore({ source: 'live', liveAvailable: true, chainAvailable: false });
+    render(<SidePanel />);
+    expect(screen.getByTestId('source-badge').textContent).toMatch(/Spot only/);
+  });
+
   it('switches badge when feed arrives', () => {
     const { rerender } = render(<SidePanel />);
     expect(screen.getByTestId('source-badge').textContent).toMatch(/Waiting/);

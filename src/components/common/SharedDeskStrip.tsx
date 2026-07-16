@@ -1,6 +1,7 @@
 /**
- * Shared free-API desk strip — shows the server board (not per-visitor upstream calls).
- * SPY tape from Finnhub + Alpha Vantage (+ TV if available) and free-tier budget meters.
+ * Shared free-API desk strip — server board only (not per-visitor upstream burns).
+ * Default = one compact line. Expand for full board (AV/TV/budgets/eco).
+ * W5: denser black-field chrome + DeskSpark for daily path.
  */
 import { useEffect, useState } from 'react';
 import {
@@ -8,6 +9,9 @@ import {
   type DeskPack,
 } from '../../lib/data/deskFeedsClient';
 import { cn } from '../../lib/utils';
+import { PrintStrip } from '../desk/PrintStrip';
+import { DeskSpark } from '../desk/DeskSpark';
+import { DESK_SERIES } from '../desk/seriesGrammar';
 
 function fmtAge(ms?: number): string {
   if (ms == null || !Number.isFinite(ms)) return '';
@@ -57,6 +61,7 @@ export function SharedDeskStrip({
 }) {
   const [pack, setPack] = useState<DeskPack | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -73,7 +78,6 @@ export function SharedDeskStrip({
         });
     };
     load();
-    // Re-read server board every 60s (does not re-burn AV/TV if still cached)
     const id = window.setInterval(load, 60_000);
     return () => {
       cancelled = true;
@@ -84,9 +88,14 @@ export function SharedDeskStrip({
   const fh = pack?.finnhub_quote;
   const av = pack?.alphavantage_quote;
   const tv = pack?.tradingview;
+  const ov = pack?.alphavantage_overview?.overview;
+  const rv = pack?.derived?.realized_vol_20d_pct;
+  const eco = (pack?.finnhub_economic_calendar?.events || []).slice(0, 4);
+  const rec = pack?.finnhub_recommendation?.latest;
+  const peers = pack?.finnhub_peers?.peers || [];
   const bars = pack?.alphavantage_daily?.bars || [];
   const lastBars = bars.slice(-16);
-  const maxC = Math.max(...lastBars.map((b) => b.close || 0), 0.001);
+  const sparkCloses = lastBars.map((b) => b.close).filter((c): c is number => c != null && Number.isFinite(c));
   const budgets = pack?.budgets;
 
   const primary =
@@ -100,115 +109,166 @@ export function SharedDeskStrip({
 
   return (
     <div
+      data-testid="shared-desk-strip"
       className={cn(
-        'rounded border border-border/70 bg-card/50 px-2 py-1.5 font-mono',
+        'rounded border border-border bg-black/40 px-2 py-1 font-mono',
         className,
       )}
     >
-      <div className="mb-1 flex flex-wrap items-center gap-1.5">
-        <span className="text-type-2xs font-bold tracking-wide text-foreground">
-          SHARED DESK
-        </span>
-        <span className="text-type-2xs text-muted-foreground">
-          {symbol} · one board for all visitors · free APIs budgeted on server
-        </span>
+      <div className="flex flex-wrap items-end gap-x-2 gap-y-0.5">
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="rounded border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-type-2xs font-bold tracking-wide text-amber-500/90 hover:border-amber-400"
+          aria-expanded={open}
+          title={open ? 'Collapse shared desk board' : 'Expand shared desk board'}
+        >
+          SHARED {open ? '▾' : '▸'}
+        </button>
+        <PrintStrip
+          className="min-w-0 flex-1 border-0 bg-transparent p-0"
+          items={[
+            {
+              label: symbol,
+              value: primary ? primary.price.toFixed(2) : '—',
+              title: primary?.src
+                ? `${primary.src}${primary.age != null ? ` · ${fmtAge(primary.age)}` : ''} · server board`
+                : 'server board',
+            },
+            ...(primary?.chg != null
+              ? [
+                  {
+                    label: 'chg',
+                    value: `${primary.chg >= 0 ? '+' : ''}${primary.chg.toFixed(2)}%`,
+                    tone: (primary.chg >= 0 ? 'up' : 'down') as 'up' | 'down',
+                  },
+                ]
+              : []),
+            ...(primary?.src
+              ? [
+                  {
+                    label: 'src',
+                    value: `${primary.src}${primary.age != null ? ` · ${fmtAge(primary.age)}` : ''}`,
+                    tone: 'muted' as const,
+                  },
+                ]
+              : []),
+          ]}
+        />
+        {sparkCloses.length >= 2 && (
+          <DeskSpark
+            values={sparkCloses}
+            color={DESK_SERIES.long}
+            width={72}
+            height={16}
+            title="AV daily closes"
+          />
+        )}
+        <div className="flex flex-wrap gap-1">
+          <BudgetChip
+            label="AV"
+            used={budgets?.alphavantage?.used}
+            cap={budgets?.alphavantage?.capDaily}
+          />
+          <BudgetChip
+            label="FH"
+            used={budgets?.finnhub?.used}
+            cap={budgets?.finnhub?.capDailySoft}
+            warnAt={0.5}
+          />
+          <BudgetChip
+            label="TV"
+            used={budgets?.tradingview?.usedMonth}
+            cap={budgets?.tradingview?.capMonthly}
+          />
+        </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
-        <div className="rounded border border-border bg-background/50 px-2 py-1">
-          <div className="text-type-2xs text-muted-foreground">{symbol} last</div>
-          <div className="text-lg font-bold tabular-nums text-foreground">
-            {primary ? primary.price.toFixed(2) : '—'}
+      {open && (
+        <div className="mt-1.5 space-y-1.5 border-t border-border/50 pt-1.5">
+          <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+            <div className="rounded border border-border bg-black/50 px-2 py-1">
+              <div className="text-type-2xs text-muted-foreground">Finnhub</div>
+              <div className="text-sm font-semibold tabular-nums">
+                {fh?.price != null ? fh.price.toFixed(2) : '—'}
+              </div>
+              <div className="text-type-2xs text-muted-foreground">
+                {fh?.error ? String(fh.error).slice(0, 24) : fh?.fromCache ? 'cache' : 'live fill'}
+              </div>
+            </div>
+            <div className="rounded border border-border bg-black/50 px-2 py-1">
+              <div className="text-type-2xs text-muted-foreground">Alpha Vantage</div>
+              <div className="text-sm font-semibold tabular-nums">
+                {av?.price != null ? av.price.toFixed(2) : '—'}
+              </div>
+              <div className="text-type-2xs text-muted-foreground">
+                {av?.latest_trading_day || (av?.error ? String(av.error).slice(0, 24) : '—')}
+              </div>
+            </div>
+            <div className="rounded border border-border bg-black/50 px-2 py-1">
+              <div className="text-type-2xs text-muted-foreground">TradingView</div>
+              <div className="text-sm font-semibold tabular-nums">
+                {tv?.price != null ? tv.price.toFixed(2) : '—'}
+              </div>
+              <div className="truncate text-type-2xs text-muted-foreground" title={tv?.note || ''}>
+                {tv?.error ? 'no endpoint / budget' : tv?.source ? 'ok' : '—'}
+              </div>
+            </div>
+            <div className="rounded border border-border bg-black/50 px-2 py-1">
+              <div className="text-type-2xs text-muted-foreground">RV20</div>
+              <div className="text-sm font-semibold tabular-nums">
+                {rv != null ? `${rv.toFixed(1)}%` : '—'}
+              </div>
+              <div className="text-type-2xs text-muted-foreground">shared AV daily</div>
+            </div>
           </div>
-          {primary?.chg != null && (
-            <div
-              className={cn(
-                'text-type-2xs tabular-nums',
-                primary.chg >= 0 ? 'text-up' : 'text-down',
-              )}
-            >
-              {primary.chg >= 0 ? '+' : ''}
-              {primary.chg.toFixed(2)}%
-              <span className="ml-1 text-muted-foreground">
-                {primary.src}
-                {primary.age != null ? ` · ${fmtAge(primary.age)}` : ''}
-              </span>
+
+          {sparkCloses.length >= 2 && (
+            <div className="flex items-center gap-2 px-0.5">
+              <span className="text-type-2xs text-muted-foreground">AV path</span>
+              <DeskSpark values={sparkCloses} color={DESK_SERIES.long} width={160} height={24} />
             </div>
           )}
+
+          {(ov?.sector || ov?.beta != null || ov?.pe != null) && (
+            <div className="flex flex-wrap gap-1.5 text-type-2xs text-muted-foreground">
+              {ov?.name ? <span className="font-medium text-foreground/90">{ov.name}</span> : null}
+              {ov?.sector ? <span>· {ov.sector}</span> : null}
+              {ov?.beta != null ? <span>· β {ov.beta.toFixed(2)}</span> : null}
+              {ov?.pe != null ? <span>· PE {ov.pe.toFixed(1)}</span> : null}
+            </div>
+          )}
+
+          {(rec || peers.length > 0) && (
+            <div className="flex flex-wrap items-center gap-1.5 text-type-2xs text-muted-foreground">
+              {rec ? (
+                <span>
+                  Street B/H/S {(rec.buy ?? 0) + (rec.strongBuy ?? 0)}/{rec.hold ?? 0}/
+                  {(rec.sell ?? 0) + (rec.strongSell ?? 0)}
+                </span>
+              ) : null}
+              {peers.length > 0 ? (
+                <span className="max-w-full truncate">Peers {peers.slice(0, 6).join(' · ')}</span>
+              ) : null}
+            </div>
+          )}
+
+          {eco.length > 0 && (
+            <ul className="space-y-0.5">
+              {eco.map((e) => (
+                <li key={e.id || `${e.event}-${e.time}`} className="truncate text-type-2xs text-foreground/85">
+                  <span className="text-muted-foreground">{e.country || '—'} · </span>
+                  {e.event}
+                  {e.time ? <span className="text-muted-foreground"> · {e.time}</span> : null}
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {(err || pack?.note) && (
+            <p className="text-type-2xs text-muted-foreground">{err || pack?.note}</p>
+          )}
         </div>
-
-        <div className="rounded border border-border bg-background/50 px-2 py-1">
-          <div className="text-type-2xs text-muted-foreground">Finnhub</div>
-          <div className="text-sm font-semibold tabular-nums">
-            {fh?.price != null ? fh.price.toFixed(2) : '—'}
-          </div>
-          <div className="text-type-2xs text-muted-foreground">
-            {fh?.error ? String(fh.error).slice(0, 24) : fh?.fromCache ? 'cache' : 'live fill'}
-          </div>
-        </div>
-
-        <div className="rounded border border-border bg-background/50 px-2 py-1">
-          <div className="text-type-2xs text-muted-foreground">Alpha Vantage</div>
-          <div className="text-sm font-semibold tabular-nums">
-            {av?.price != null ? av.price.toFixed(2) : '—'}
-          </div>
-          <div className="text-type-2xs text-muted-foreground">
-            {av?.latest_trading_day || (av?.error ? String(av.error).slice(0, 24) : '—')}
-          </div>
-        </div>
-
-        <div className="rounded border border-border bg-background/50 px-2 py-1">
-          <div className="text-type-2xs text-muted-foreground">TradingView</div>
-          <div className="text-sm font-semibold tabular-nums">
-            {tv?.price != null ? tv.price.toFixed(2) : '—'}
-          </div>
-          <div className="truncate text-type-2xs text-muted-foreground" title={tv?.note || ''}>
-            {tv?.error ? 'no endpoint / budget' : tv?.source ? 'ok' : '—'}
-          </div>
-        </div>
-      </div>
-
-      {lastBars.length > 2 && (
-        <div className="mt-1.5">
-          <div className="mb-0.5 text-type-2xs text-muted-foreground">
-            SPY daily (Alpha Vantage shared) · {bars.length} bars
-          </div>
-          <div className="flex h-8 items-end gap-px">
-            {lastBars.map((b, i) => (
-              <div
-                key={b.date || i}
-                className="min-w-[3px] flex-1 rounded-t bg-primary/70"
-                style={{ height: `${Math.max(8, ((b.close || 0) / maxC) * 100)}%` }}
-                title={`${b.date}: ${b.close}`}
-              />
-            ))}
-          </div>
-        </div>
-      )}
-
-      <div className="mt-1.5 flex flex-wrap gap-1">
-        <BudgetChip
-          label="AV day"
-          used={budgets?.alphavantage?.used}
-          cap={budgets?.alphavantage?.capDaily}
-        />
-        <BudgetChip
-          label="FH day"
-          used={budgets?.finnhub?.used}
-          cap={budgets?.finnhub?.capDailySoft}
-          warnAt={0.5}
-        />
-        <BudgetChip
-          label="TV mo"
-          used={budgets?.tradingview?.usedMonth}
-          cap={budgets?.tradingview?.capMonthly}
-        />
-      </div>
-
-      {(err || pack?.note) && (
-        <p className="mt-1 text-type-2xs text-muted-foreground">
-          {err || pack?.note}
-        </p>
       )}
     </div>
   );

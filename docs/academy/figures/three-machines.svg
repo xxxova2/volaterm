@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 420" role="img" aria-label="Three linked machines">
+  <rect width="960" height="420" fill="#0b1220"/>
+  <text x="48" y="52" fill="#e8edf5" font-family="Georgia, 'Times New Roman', serif" font-size="28" font-weight="700">Three linked machines</text>
+  <text x="48" y="86" fill="#9aa8bc" font-family="system-ui, sans-serif" font-size="18">Funding sets the fuel · Vol prices the insurance · Positioning moves the path</text>
+  <rect x="40" y="130" width="260" height="200" rx="12" fill="#121c2e" stroke="#3b82f6" stroke-width="3"/>
+  <text x="170" y="190" text-anchor="middle" fill="#60a5fa" font-family="system-ui, sans-serif" font-size="22" font-weight="700">1 · Plumbing</text>
+  <text x="170" y="230" text-anchor="middle" fill="#e8edf5" font-family="system-ui, sans-serif" font-size="18">Repo · SOFR</text>
+  <text x="170" y="258" text-anchor="middle" fill="#e8edf5" font-family="system-ui, sans-serif" font-size="18">RRP · basis</text>
+  <text x="170" y="300" text-anchor="middle" fill="#9aa8bc" font-family="system-ui, sans-serif" font-size="16">Can leverage fund?</text>
+  <path d="M310 230 H340" stroke="#64748b" stroke-width="4"/>
+  <polygon points="340,222 360,230 340,238" fill="#64748b"/>
+  <rect x="360" y="130" width="260" height="200" rx="12" fill="#121c2e" stroke="#c9a227" stroke-width="3"/>
+  <text x="490" y="190" text-anchor="middle" fill="#e6c35c" font-family="system-ui, sans-serif" font-size="22" font-weight="700">2 · Vol / Greeks</text>
+  <text x="490" y="230" text-anchor="middle" fill="#e8edf5" font-family="system-ui, sans-serif" font-size="18">IV · skew</text>
+  <text x="490" y="258" text-anchor="middle" fill="#e8edf5" font-family="system-ui, sans-serif" font-size="18">theta · gamma</text>
+  <text x="490" y="300" text-anchor="middle" fill="#9aa8bc" font-family="system-ui, sans-serif" font-size="16">What is insurance worth?</text>
+  <path d="M630 230 H660" stroke="#64748b" stroke-width="4"/>
+  <polygon points="660,222 680,230 660,238" fill="#64748b"/>
+  <rect x="680" y="130" width="240" height="200" rx="12" fill="#121c2e" stroke="#22c55e" stroke-width="3"/>
+  <text x="800" y="190" text-anchor="middle" fill="#4ade80" font-family="system-ui, sans-serif" font-size="22" font-weight="700">3 · Positioning</text>
+  <text x="800" y="230" text-anchor="middle" fill="#e8edf5" font-family="system-ui, sans-serif" font-size="18">GEX · DEX</text>
+  <text x="800" y="258" text-anchor="middle" fill="#e8edf5" font-family="system-ui, sans-serif" font-size="18">charm · walls</text>
+  <text x="800" y="300" text-anchor="middle" fill="#9aa8bc" font-family="system-ui, sans-serif" font-size="16">Who is forced to hedge?</text>
+  <text x="48" y="390" fill="#9aa8bc" font-family="system-ui, sans-serif" font-size="16">Read all three together. One desk alone is a partial picture.</text>
+</svg>

@@ -1,9 +1,7 @@
 /**
  * Bloomberg-style 3M SOFR futures yield strip:
  * white = live implied yield, blue = prior settlement yield.
- * X = delivery quarter (Sep24→Dec30), Y = yield %.
- * Live = yfinance; expired = FRED SOFR compound final settlement.
- * Visual twin of the uploaded dual-path chart (black field, dual dots).
+ * X = delivery quarter, Y = yield %.
  */
 import {
   CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
@@ -11,6 +9,8 @@ import {
 import {
   CHART, chartAxisTick, chartTooltipStyle, tightDomain,
 } from '../../../lib/chartTheme';
+import { DeskChartFrame, deskAxisLabel, deskDefaultMargin } from '../../desk/DeskChart';
+import { DESK_SERIES } from '../../desk/seriesGrammar';
 
 export type SofrCurvePoint = {
   x: string;
@@ -62,75 +62,74 @@ export function SofrFuturesCurve({
           Sep24→Dec30 · white = live · blue = prior · settled = FRED SOFR · USD %
         </span>
       </div>
-      <ResponsiveContainer width="100%" height={height}>
-        <LineChart data={rows} margin={{ top: 10, right: 18, left: 4, bottom: 8 }}>
-          <CartesianGrid stroke={CHART.grid} strokeDasharray="0" vertical horizontal />
-          <XAxis
-            dataKey="x"
-            tick={{ ...chartAxisTick, fontSize: 9 }}
-            interval={0}
-            angle={-40}
-            textAnchor="end"
-            height={48}
-            minTickGap={4}
-            axisLine={{ stroke: CHART.axisLine }}
-            tickLine={{ stroke: CHART.axisLine }}
-          />
-          <YAxis
-            tick={chartAxisTick}
-            width={42}
-            domain={yDomain}
-            tickFormatter={(v) => Number(v).toFixed(2)}
-            axisLine={{ stroke: CHART.axisLine }}
-            tickLine={{ stroke: CHART.axisLine }}
-            label={{
-              value: 'USD',
-              angle: -90,
-              position: 'insideLeft',
-              fill: CHART.axisMuted,
-              fontSize: 10,
-              fontFamily: 'JetBrains Mono',
-            }}
-          />
-          <Tooltip
-            contentStyle={chartTooltipStyle}
-            formatter={(v: number, name: string) => [
-              `${Number(v).toFixed(3)}%`,
-              name === 'rate' ? liveLabel : priorLabel,
-            ]}
-            labelFormatter={(l) => String(l)}
-          />
-          <Legend
-            wrapperStyle={{ fontSize: 11, fontFamily: 'JetBrains Mono', color: CHART.legend, paddingTop: 4 }}
-            formatter={(value) => (value === 'rate' ? liveLabel : priorLabel)}
-            iconType="circle"
-          />
-          {/* Blue = prior settlement (Bloomberg-style compare path) */}
-          <Line
-            type="monotone"
-            dataKey="prior"
-            name="prior"
-            stroke={CHART.series.compare}
-            strokeWidth={2.25}
-            dot={{ r: 3.5, fill: CHART.series.compare, stroke: CHART.series.compare }}
-            activeDot={{ r: 5 }}
-            connectNulls
-            isAnimationActive={false}
-          />
-          {/* White = live strip */}
-          <Line
-            type="monotone"
-            dataKey="rate"
-            name="rate"
-            stroke={CHART.series.live}
-            strokeWidth={2.25}
-            dot={{ r: 3.5, fill: CHART.series.live, stroke: CHART.series.live }}
-            activeDot={{ r: 5 }}
-            connectNulls
-            isAnimationActive={false}
-          />
-        </LineChart>
-      </ResponsiveContainer>
+      <DeskChartFrame
+        xTitle="Delivery"
+        yTitle="Yield (USD %)"
+        height={height}
+        className="border-0 bg-transparent"
+      >
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={rows} margin={{ ...deskDefaultMargin, bottom: 36, left: 10 }}>
+            <CartesianGrid stroke={CHART.grid} strokeDasharray="0" vertical horizontal />
+            <XAxis
+              dataKey="x"
+              tick={{ ...chartAxisTick, fontSize: 9 }}
+              interval={0}
+              angle={-40}
+              textAnchor="end"
+              height={48}
+              minTickGap={4}
+              axisLine={{ stroke: CHART.axisLine }}
+              tickLine={{ stroke: CHART.axisLine }}
+              label={deskAxisLabel('Delivery')}
+            />
+            <YAxis
+              tick={chartAxisTick}
+              width={48}
+              domain={yDomain}
+              tickFormatter={(v) => Number(v).toFixed(2)}
+              axisLine={{ stroke: CHART.axisLine }}
+              tickLine={{ stroke: CHART.axisLine }}
+              label={deskAxisLabel('Yield (USD %)', 'insideLeft')}
+            />
+            <Tooltip
+              contentStyle={chartTooltipStyle}
+              formatter={(v: number, name: string) => [
+                `${Number(v).toFixed(3)}%`,
+                name === 'rate' ? liveLabel : priorLabel,
+              ]}
+              labelFormatter={(l) => String(l)}
+            />
+            <Legend
+              wrapperStyle={{ fontSize: 11, fontFamily: 'JetBrains Mono', color: CHART.legend, paddingTop: 4 }}
+              formatter={(value) => (value === 'rate' ? liveLabel : priorLabel)}
+              iconType="circle"
+            />
+            <Line
+              type="monotone"
+              dataKey="prior"
+              name="prior"
+              stroke={DESK_SERIES.historyCompare}
+              strokeWidth={2.25}
+              dot={{ r: 3.5, fill: DESK_SERIES.historyCompare, stroke: DESK_SERIES.historyCompare }}
+              activeDot={{ r: 5 }}
+              connectNulls
+              isAnimationActive={false}
+            />
+            <Line
+              type="monotone"
+              dataKey="rate"
+              name="rate"
+              stroke={DESK_SERIES.historyLive}
+              strokeWidth={2.25}
+              dot={{ r: 3.5, fill: DESK_SERIES.historyLive, stroke: DESK_SERIES.historyLive }}
+              activeDot={{ r: 5 }}
+              connectNulls
+              isAnimationActive={false}
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      </DeskChartFrame>
     </div>
   );
 }

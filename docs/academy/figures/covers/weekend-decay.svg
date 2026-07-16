@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" role="img" aria-label="Weekends don't decay like weekdays">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0c0f14"/>
+      <stop offset="100%" stop-color="#151b24"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="80%" cy="20%" r="55%">
+      <stop offset="0%" stop-color="#c4a574" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#c4a574" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1200" height="800" fill="url(#g)"/>
+  <rect width="1200" height="800" fill="url(#glow)"/>
+  <rect x="0" y="0" width="8" height="800" fill="#c4a574"/>
+
+  <text x="48" y="72" fill="#9a9284" font-family="ui-sans-serif,system-ui" font-size="22" letter-spacing="4">OPTIONS</text>
+  <text x="48" y="140" fill="#f3efe6" font-family="Georgia,serif" font-size="52" font-weight="700">Weekends don&apos;t decay</text>
+  <text x="48" y="200" fill="#f3efe6" font-family="Georgia,serif" font-size="52" font-weight="700">like weekdays</text>
+  <text x="48" y="260" fill="#9a9284" font-family="ui-sans-serif,system-ui" font-size="24">Trading time vs calendar time</text>
+  <!-- calendar strip -->
+  <g transform="translate(48,340)">
+    <rect x="0" y="0" width="120" height="160" rx="10" fill="#141a22" stroke="#2a3340" stroke-width="2"/><rect x="140" y="0" width="120" height="160" rx="10" fill="#141a22" stroke="#2a3340" stroke-width="2"/><rect x="280" y="0" width="120" height="160" rx="10" fill="#141a22" stroke="#2a3340" stroke-width="2"/><rect x="420" y="0" width="120" height="160" rx="10" fill="#141a22" stroke="#2a3340" stroke-width="2"/><rect x="560" y="0" width="120" height="160" rx="10" fill="#141a22" stroke="#2a3340" stroke-width="2"/>
+    <text x="60" y="90" text-anchor="middle" fill="#5a9a72" font-family="ui-sans-serif" font-size="28" font-weight="700">F</text>
+    <text x="200" y="90" text-anchor="middle" fill="#9a9284" font-family="ui-sans-serif" font-size="28">S</text>
+    <text x="340" y="90" text-anchor="middle" fill="#9a9284" font-family="ui-sans-serif" font-size="28">S</text>
+    <text x="480" y="90" text-anchor="middle" fill="#c4a574" font-family="ui-sans-serif" font-size="28" font-weight="700">M</text>
+    <text x="620" y="90" text-anchor="middle" fill="#f3efe6" font-family="ui-sans-serif" font-size="28">T</text>
+    <text x="60" y="140" text-anchor="middle" fill="#9a9284" font-size="16">IV up</text>
+    <text x="340" y="140" text-anchor="middle" fill="#9a9284" font-size="16">gap risk</text>
+    <text x="480" y="140" text-anchor="middle" fill="#9a9284" font-size="16">open</text>
+  </g>
+
+</svg>

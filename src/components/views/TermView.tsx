@@ -1,30 +1,31 @@
 import { useMemo } from 'react';
 import {
-  AreaChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
+  AreaChart,
+  Area,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Legend,
 } from 'recharts';
-import { chartTooltipStyle, chartGridProps, CHART } from '../../lib/chartTheme';
+import { CHART } from '../../lib/chartTheme';
 import { useTerminalStore } from '../../store/terminalStore';
 import { Panel } from '../terminal/Panel';
 import { fmtPct, fmtSignedPct } from '../../lib/format';
 import { DiagnosticsStrip } from './DiagnosticsStrip';
-import { Explain } from '../common/Explain';
 import { realizedVolCloseToClose, volRiskPremium } from '../../lib/options/analytics';
-
-function Stat({ label, value, color, sub, term }: { label: string; value: string; color?: string; sub?: string; term?: string }) {
-  return (
-    <div className="flex flex-col">
-      <span className="text-type-xs text-muted-foreground font-mono">{term ? <Explain term={term}>{label}</Explain> : label}</span>
-      <span className="text-sm font-semibold font-mono tabular-nums" style={{ color: color ?? 'var(--foreground)' }}>{value}</span>
-      {sub && <span className="text-type-xs text-muted-foreground">{sub}</span>}
-    </div>
-  );
-}
+import { yearFractionFromSlice } from '../../lib/options/time';
+import { DeskChartFrame, deskChartChrome, deskAxisLabel } from '../desk/DeskChart';
+import { PrintStrip } from '../desk/PrintStrip';
+import { DESK_SERIES } from '../desk/seriesGrammar';
 
 export function TermView() {
-  const snapshot = useTerminalStore(s => s.snapshot);
-  const sviReadout = useTerminalStore(s => s.sviReadout);
-  const arbResult = useTerminalStore(s => s.arbResult);
-  const fmpHistory = useTerminalStore(s => s.fmpHistory);
+  const snapshot = useTerminalStore((s) => s.snapshot);
+  const sviReadout = useTerminalStore((s) => s.sviReadout);
+  const arbResult = useTerminalStore((s) => s.arbResult);
+  const fmpHistory = useTerminalStore((s) => s.fmpHistory);
 
   const rv = useMemo(() => {
     if (!fmpHistory?.length) return null;
@@ -34,7 +35,7 @@ export function TermView() {
   const chartData = useMemo(() => {
     if (!snapshot) return [];
     const hvPct = rv != null ? rv * 100 : null;
-    return snapshot.expiries.map(s => ({
+    return snapshot.expiries.map((s) => ({
       dte: s.dte,
       dteSqrt: Math.sqrt(s.dte),
       label: `${s.dte}d`,
@@ -48,7 +49,9 @@ export function TermView() {
   if (!snapshot || snapshot.expiries.length === 0) {
     return (
       <Panel title="Term Structure" className="h-full">
-        <div className="flex items-center justify-center h-full text-muted-foreground text-xs font-mono">No data</div>
+        <div className="flex h-full items-center justify-center font-mono text-xs text-muted-foreground">
+          No data
+        </div>
       </Panel>
     );
   }
@@ -59,10 +62,10 @@ export function TermView() {
   const isContango = termSlope > 0;
 
   const front = snapshot.expiries[0]!;
-  const mid = snapshot.expiries.find(e => e.dte >= 30) ?? front;
+  const mid = snapshot.expiries.find((e) => e.dte >= 30) ?? front;
   const back = snapshot.expiries[snapshot.expiries.length - 1]!;
-  const Tf = front.dte / 365;
-  const Tb = back.dte / 365;
+  const Tf = yearFractionFromSlice(front);
+  const Tb = yearFractionFromSlice(back);
   let fwdVol: number | null = null;
   if (Tb > Tf + 1e-9) {
     const wf = front.atmIV * front.atmIV * Tf;
@@ -72,62 +75,102 @@ export function TermView() {
   }
 
   const rr30 = (() => {
-    const calls = mid.calls.filter(c => c.delta != null && c.iv != null);
-    const puts = mid.puts.filter(p => p.delta != null && p.iv != null);
+    const calls = mid.calls.filter((c) => c.delta != null && c.iv != null);
+    const puts = mid.puts.filter((p) => p.delta != null && p.iv != null);
     if (!calls.length || !puts.length) return null;
-    const c25 = calls.reduce((b, q) => Math.abs((q.delta ?? 0) - 0.25) < Math.abs((b.delta ?? 0) - 0.25) ? q : b, calls[0]!);
-    const p25 = puts.reduce((b, q) => Math.abs((q.delta ?? 0) + 0.25) < Math.abs((b.delta ?? 0) + 0.25) ? q : b, puts[0]!);
+    const c25 = calls.reduce(
+      (b, q) => (Math.abs((q.delta ?? 0) - 0.25) < Math.abs((b.delta ?? 0) - 0.25) ? q : b),
+      calls[0]!,
+    );
+    const p25 = puts.reduce(
+      (b, q) => (Math.abs((q.delta ?? 0) + 0.25) < Math.abs((b.delta ?? 0) + 0.25) ? q : b),
+      puts[0]!,
+    );
     if (c25.iv == null || p25.iv == null) return null;
     return p25.iv - c25.iv;
   })();
 
   const midAtm = mid.atmIV;
   const vrp = volRiskPremium(midAtm, rv);
+  const chrome = deskChartChrome();
 
   return (
     <Panel title="Term Structure" className="h-full">
-      <div className="flex flex-col h-full">
-        <div className="flex flex-wrap gap-4 px-3 py-2 border-b border-border">
-          <Stat label="Front ATM IV" term="atmIV" value={fmtPct(frontIV)} color="var(--cyan)" />
-          <Stat label="Term Slope" term="termStructure" value={`${(termSlope * 100).toFixed(2)}%`} color={isContango ? 'var(--up)' : 'var(--down)'} sub={isContango ? 'Contango' : 'Backwardation'} />
-          <Stat label="Back ATM IV" term="atmIV" value={fmtPct(backIV)} sub={`${back.dte}d`} />
-          <Stat label="Fwd vol" term="termStructure" value={fwdVol != null ? fmtPct(fwdVol) : '—'} sub="front→back" />
-          <Stat label="~30d 25Δ RR" term="skew" value={rr30 != null ? `${(rr30 * 100).toFixed(2)}%` : '—'} sub="put−call" />
-          <Stat
-            label="HV (c2c)"
-            value={rv != null ? fmtPct(rv) : '—'}
-            sub={fmpHistory?.length ? `${fmpHistory.length} bars` : 'need history'}
-            color="var(--amber)"
-          />
-          <Stat
-            label="VRP"
-            value={vrp != null ? fmtSignedPct(vrp) : '—'}
-            sub="~30d IV−HV"
-            color={vrp != null && vrp > 0 ? 'var(--down)' : 'var(--up)'}
-          />
-          <Stat label="Expiries" term="termStructure" value={String(snapshot.expiries.length)} sub={`${front.dte}–${back.dte}d`} />
-        </div>
+      <div className="flex h-full min-h-0 flex-col gap-1">
+        <PrintStrip
+          className="mx-1 mt-1"
+          items={[
+            {
+              label: 'Front ATM IV',
+              value: fmtPct(frontIV),
+              title: 'Nearest expiry ATM IV',
+            },
+            {
+              label: 'Term Slope',
+              value: `${(termSlope * 100).toFixed(2)}%`,
+              tone: isContango ? 'up' : 'down',
+              title: isContango ? 'Contango (back > front)' : 'Backwardation (back < front)',
+            },
+            {
+              label: 'Back ATM IV',
+              value: fmtPct(backIV),
+              title: `${back.dte}d expiry`,
+            },
+            {
+              label: 'Fwd vol',
+              value: fwdVol != null ? fmtPct(fwdVol) : '—',
+              title: 'Forward vol front→back',
+            },
+            {
+              label: '~30d 25Δ RR',
+              value: rr30 != null ? `${(rr30 * 100).toFixed(2)}%` : '—',
+              title: 'Put − call 25Δ at ~30d',
+            },
+            {
+              label: 'HV (c2c)',
+              value: rv != null ? fmtPct(rv) : '—',
+              tone: 'default',
+              title: fmpHistory?.length ? `${fmpHistory.length} bars` : 'need history',
+            },
+            {
+              label: 'VRP',
+              value: vrp != null ? fmtSignedPct(vrp) : '—',
+              tone: vrp != null && vrp > 0 ? 'down' : 'up',
+              title: '~30d IV − HV',
+            },
+            {
+              label: 'Expiries',
+              value: String(snapshot.expiries.length),
+              title: `${front.dte}–${back.dte}d`,
+            },
+          ]}
+        />
+
         <DiagnosticsStrip sviReadout={sviReadout} arbResult={arbResult} data-testid="term-diagnostics" />
-        <div className="flex-1">
+
+        <DeskChartFrame xTitle="DTE (√ scale)" yTitle="ATM IV %" className="min-h-0 flex-1">
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={chartData} margin={{ top: 10, right: 20, bottom: 10, left: 20 }}>
-              <CartesianGrid {...chartGridProps} />
+            <AreaChart data={chartData} margin={chrome.margin}>
+              <CartesianGrid {...chrome.grid} />
               <XAxis
                 dataKey="dteSqrt"
-                tick={{ fontSize: 10, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }}
+                tick={chrome.tick}
                 tickLine={false}
+                stroke={chrome.axisLine}
                 tickFormatter={(v: number) => `${(v * v).toFixed(0)}d`}
-                label={{ value: 'DTE (sqrt scale)', position: 'bottom', fontSize: 10, fill: 'var(--muted-foreground)' }}
+                label={deskAxisLabel('DTE (√ scale)')}
               />
               <YAxis
-                tick={{ fontSize: 10, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }}
+                tick={chrome.tick}
                 tickLine={false}
+                stroke={chrome.axisLine}
                 tickFormatter={(v: number) => `${v.toFixed(1)}%`}
                 domain={['auto', 'auto']}
+                label={deskAxisLabel('ATM IV %', 'insideLeft')}
               />
               <Tooltip
-                contentStyle={chartTooltipStyle}
-                labelStyle={{ color: 'var(--foreground)' }}
+                contentStyle={chrome.tooltipStyle}
+                labelStyle={{ color: CHART.tooltipFg }}
                 formatter={(value: number, name: string) => [
                   `${Number(value).toFixed(2)}%`,
                   name === 'hv' ? 'HV (realized)' : 'ATM IV',
@@ -143,17 +186,25 @@ export function TermView() {
               />
               <defs>
                 <linearGradient id="ivGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="var(--primary)" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="var(--primary)" stopOpacity={0} />
+                  <stop offset="5%" stopColor={DESK_SERIES.historyLive} stopOpacity={0.28} />
+                  <stop offset="95%" stopColor={DESK_SERIES.historyLive} stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <Area type="monotone" dataKey="atmIV" name="atmIV" stroke="var(--primary)" strokeWidth={2} fill="url(#ivGrad)" />
+              <Area
+                type="monotone"
+                dataKey="atmIV"
+                name="atmIV"
+                stroke={DESK_SERIES.historyLive}
+                strokeWidth={2}
+                fill="url(#ivGrad)"
+                isAnimationActive={false}
+              />
               {rv != null && (
                 <Line
                   type="monotone"
                   dataKey="hv"
                   name="hv"
-                  stroke={CHART.series.amber}
+                  stroke={DESK_SERIES.spot}
                   strokeWidth={1.5}
                   strokeDasharray="5 3"
                   dot={false}
@@ -162,7 +213,7 @@ export function TermView() {
               )}
             </AreaChart>
           </ResponsiveContainer>
-        </div>
+        </DeskChartFrame>
       </div>
     </Panel>
   );

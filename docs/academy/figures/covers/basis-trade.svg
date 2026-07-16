@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" role="img" aria-label="Treasury basis trade">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0c0f14"/>
+      <stop offset="100%" stop-color="#151b24"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="80%" cy="20%" r="55%">
+      <stop offset="0%" stop-color="#c4a574" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#c4a574" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1200" height="800" fill="url(#g)"/>
+  <rect width="1200" height="800" fill="url(#glow)"/>
+  <rect x="0" y="0" width="8" height="800" fill="#c4a574"/>
+
+  <text x="48" y="72" fill="#9a9284" font-family="ui-sans-serif" font-size="22" letter-spacing="4">MACRO · REPO</text>
+  <text x="48" y="150" fill="#f3efe6" font-family="Georgia,serif" font-size="44" font-weight="700">The Treasury basis trade</text>
+  <text x="48" y="210" fill="#9a9284" font-size="26">Explained calmly — cash, futures, leverage, who flees first</text>
+  <g transform="translate(80,320)">
+    <rect x="0" y="40" width="320" height="280" rx="14" fill="#141a22" stroke="#5a9a72" stroke-width="3"/>
+    <text x="160" y="120" text-anchor="middle" fill="#5a9a72" font-size="26" font-weight="700">Long cash</text>
+    <text x="160" y="180" text-anchor="middle" fill="#f3efe6" font-size="20">CTD / bond</text>
+    <text x="160" y="240" text-anchor="middle" fill="#9a9284" font-size="18">financed in repo</text>
+    <text x="400" y="180" fill="#c4a574" font-size="48">⇄</text>
+    <rect x="480" y="40" width="320" height="280" rx="14" fill="#141a22" stroke="#c45c4a" stroke-width="3"/>
+    <text x="640" y="120" text-anchor="middle" fill="#c45c4a" font-size="26" font-weight="700">Short futures</text>
+    <text x="640" y="180" text-anchor="middle" fill="#f3efe6" font-size="20">TY / FV / WN</text>
+    <text x="640" y="240" text-anchor="middle" fill="#9a9284" font-size="18">basis = edge − risk</text>
+  </g>
+
+</svg>

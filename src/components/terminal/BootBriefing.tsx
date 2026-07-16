@@ -3,6 +3,7 @@ import {
   macrovolApi,
   type RatesSummary,
   type MacroSummary,
+  type MacroStressPack,
   type FxBoardData,
   type TreasuryAuctionsData,
   type CryptoSpotData,
@@ -31,13 +32,14 @@ export type BootBriefingProps = {
   onEnter: () => void;
 };
 
-/** Free, shared upstream APIs that back the briefing. Honest status only. */
-type BriefApiId = 'macrovol-rates' | 'fmp-macro' | 'fx' | 'auctions' | 'crypto-spot';
+/** Free, shared upstream APIs that back the briefing. Honest vendor names only. */
+type BriefApiId = 'fred-rates' | 'fred-macro' | 'fred-stress' | 'fx' | 'auctions' | 'crypto-spot';
 type BriefStatus = 'pending' | 'ok' | 'fail';
 
 const BRIEF_APIS: { id: BriefApiId; label: string; source: string }[] = [
-  { id: 'macrovol-rates', label: 'MacroVol rates', source: 'MacroVol' },
-  { id: 'fmp-macro', label: 'US macro', source: 'FRED' },
+  { id: 'fred-rates', label: 'Money markets', source: 'FRED · NYFed' },
+  { id: 'fred-macro', label: 'US macro', source: 'FRED' },
+  { id: 'fred-stress', label: 'Stress pack', source: 'FRED' },
   { id: 'fx', label: 'FX', source: 'Frankfurter' },
   { id: 'auctions', label: 'Auctions', source: 'FiscalData' },
   { id: 'crypto-spot', label: 'Crypto spot', source: 'CoinGecko' },
@@ -55,6 +57,7 @@ const HEAVY_APIS: { label: string; source: string }[] = [
 export function BootBriefing({ heavyReady, onEnter }: BootBriefingProps) {
   const [rates, setRates] = useState<RatesSummary | null>(null);
   const [macro, setMacro] = useState<MacroSummary | null>(null);
+  const [stress, setStress] = useState<MacroStressPack | null>(null);
   const [fx, setFx] = useState<FxBoardData | null>(null);
   const [auctions, setAuctions] = useState<TreasuryAuctionsData | null>(null);
   const [crypto, setCrypto] = useState<CryptoSpotData | null>(null);
@@ -63,8 +66,9 @@ export function BootBriefing({ heavyReady, onEnter }: BootBriefingProps) {
   const [loadingBrief, setLoadingBrief] = useState(true);
   const [eduIdx, setEduIdx] = useState(0);
   const [apiStatus, setApiStatus] = useState<Record<BriefApiId, BriefStatus>>({
-    'macrovol-rates': 'pending',
-    'fmp-macro': 'pending',
+    'fred-rates': 'pending',
+    'fred-macro': 'pending',
+    'fred-stress': 'pending',
     'fx': 'pending',
     'auctions': 'pending',
     'crypto-spot': 'pending',
@@ -85,9 +89,10 @@ export function BootBriefing({ heavyReady, onEnter }: BootBriefingProps) {
 
     (async () => {
       try {
-        const [r, m, f, a, c] = await Promise.all([
-          macrovolApi.ratesSummary().then((v) => { set('macrovol-rates', 'ok'); return v; }).catch(() => { set('macrovol-rates', 'fail'); return null; }),
-          macrovolApi.macroSummary().then((v) => { set('fmp-macro', 'ok'); return v; }).catch(() => { set('fmp-macro', 'fail'); return null; }),
+        const [r, m, st, f, a, c] = await Promise.all([
+          macrovolApi.ratesSummary().then((v) => { set('fred-rates', 'ok'); return v; }).catch(() => { set('fred-rates', 'fail'); return null; }),
+          macrovolApi.macroSummary().then((v) => { set('fred-macro', 'ok'); return v; }).catch(() => { set('fred-macro', 'fail'); return null; }),
+          macrovolApi.macroStress().then((v) => { set('fred-stress', 'ok'); return v; }).catch(() => { set('fred-stress', 'fail'); return null; }),
           macrovolApi.ratesFx().then((v) => { set('fx', 'ok'); return v; }).catch(() => { set('fx', 'fail'); return null; }),
           macrovolApi.ratesAuctions(8).then((v) => { set('auctions', 'ok'); return v; }).catch(() => { set('auctions', 'fail'); return null; }),
           macrovolApi.cryptoSpot().then((v) => { set('crypto-spot', 'ok'); return v; }).catch(() => { set('crypto-spot', 'fail'); return null; }),
@@ -95,6 +100,7 @@ export function BootBriefing({ heavyReady, onEnter }: BootBriefingProps) {
         if (cancelled) return;
         setRates(r);
         setMacro(m);
+        setStress(st);
         setFx(f);
         setAuctions(a);
         setCrypto(c);
@@ -147,6 +153,19 @@ export function BootBriefing({ heavyReady, onEnter }: BootBriefingProps) {
     { label: 'SOFR', value: fmtPct(rates?.sofr), sub: 'overnight funding' },
     { label: 'UST 10Y', value: fmtPct(rates?.usy10), sub: 'DGS10' },
     { label: '2s10s', value: fmtBpsFromPp(rates?.spread_2s10s), sub: 'curve steepness' },
+    {
+      label: 'VIXCLS',
+      value: stress?.vix != null ? stress.vix.toFixed(1) : '—',
+      sub: stress?.obs_dates?.vix
+        ? `FRED · ${stress.obs_dates.vix}`
+        : 'FRED VIXCLS · not ATM/RV',
+    },
+    {
+      label: 'HY OAS',
+      // FRED BAMLH0A0HYM2 is percent; desk convention shows bps.
+      value: stress?.hy_oas != null ? `${(stress.hy_oas * 100).toFixed(0)}bp` : '—',
+      sub: 'credit stress · FRED',
+    },
     { label: 'USDJPY', value: usdjpy != null ? usdjpy.toFixed(2) : '—', sub: 'Frankfurter / ECB' },
     {
       label: 'BTC',

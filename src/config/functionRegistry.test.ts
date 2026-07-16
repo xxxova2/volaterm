@@ -32,8 +32,11 @@ describe('functionRegistry', () => {
     expect(resolveFunctionId('GEX')?.functionId).toBe('positioning:pos-sub-chain');
     expect(resolveFunctionId('SOFR')?.functionId).toBe('rates:sec-stir');
     expect(resolveFunctionId('SMILE')?.functionId).toBe('vol:vol-sub-smile');
-    // 3D is mesh theme on Greeks desk (legacy id remapped in openFunction)
-    expect(resolveFunctionId('3D')?.functionId).toBe('desk:desk-ws-analyze');
+    // 3D is mesh theme on Vol · Greeks
+    expect(resolveFunctionId('3D')?.functionId).toBe('vol:vol-sub-greeks');
+    // Full Greeks single home = Vol
+    expect(resolveFunctionId('VGRK')?.functionId).toBe('vol:vol-sub-greeks');
+    expect(resolveFunctionId('GRK')?.functionId).toBe('vol:vol-sub-greeks');
     // Thalex-class Trade lab codes
     expect(resolveFunctionId('SIM')?.functionId).toBe('desk:desk-ws-sim');
     expect(resolveFunctionId('COMBO')?.functionId).toBe('desk:desk-ws-combo');
@@ -50,14 +53,14 @@ describe('functionRegistry', () => {
     expect(useTerminalStore.getState().setDeskSection).toHaveBeenCalledWith('pos-sub-chain');
   });
 
-  it('openFunction 3D sets mesh theme and Trade Analyze', async () => {
+  it('openFunction 3D sets mesh theme and Vol · Greeks', async () => {
     const { useTerminalStore } = await import('../store/terminalStore');
     const r = openFunction('3D');
     expect(r.ok).toBe(true);
     expect(localStorage.getItem('ui.greeks.surfaceTheme')).toBe('mesh');
-    expect(sessionStorage.getItem(DESK_JUMP_KEY)).toBe('desk-ws-analyze');
-    expect(useTerminalStore.getState().setActiveTab).toHaveBeenCalledWith('desk');
-    expect(useTerminalStore.getState().setDeskSection).toHaveBeenCalledWith('desk-ws-analyze');
+    expect(sessionStorage.getItem(DESK_JUMP_KEY)).toBe('vol-sub-greeks');
+    expect(useTerminalStore.getState().setActiveTab).toHaveBeenCalledWith('vol');
+    expect(useTerminalStore.getState().setDeskSection).toHaveBeenCalledWith('vol-sub-greeks');
   });
 
   it('searchFunctions finds SOFR', () => {

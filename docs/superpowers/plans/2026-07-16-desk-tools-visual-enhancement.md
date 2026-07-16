@@ -1147,10 +1147,10 @@ These implement **design §6 later waves** using the same kit. Write a dedicated
 | ID | Plan file (to create later) | Scope |
 |----|----------------------------|--------|
 | W2 | `docs/superpowers/plans/2026-XX-XX-flow-visual-kit.md` | Positioning Book + Tools density/heatmaps |
-| W3 | `…-vol-secondary-charts.md` | Smile · Term · Fit axes/ATM/ordinal |
-| W4 | `…-rates-curve-compare.md` | YieldCurveCompare: axis clarity + 1M/3M/6M/1Y chips |
-| W5 | `…-home-chrome-density.md` | Launchpad / DES / strips |
-| W6 | `…-academy-polish.md` | Publication tokens only |
+| W3 | `2026-07-16-vol-secondary-charts.md` | Smile · Term · Fit axes/ATM/ordinal ✅ |
+| W4 | `2026-07-16-rates-axes-compare.md` | YieldCurveCompare: axis clarity + 1M/3M/6M/1Y chips ✅ |
+| W5 | `2026-07-16-home-chrome-density.md` | Launchpad / DES / strips ✅ |
+| W6 | `2026-07-16-academy-polish.md` | Publication tokens only ✅ |
 
 **W4 sketch (for when started):** extend `YieldCurveCompare` with `compareWindow: '1M'|'3M'|'6M'|'1Y'|'custom'` prop; parent loads FRED history window; X label `Maturity`, Y label `Yield (%)`; live white / compare blue already partially there.
 

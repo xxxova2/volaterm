@@ -9,7 +9,7 @@ const SHORTCUTS = [
   { key: '5', action: 'Rates desk' },
   { key: 'M', action: 'Trade desk' },
   { key: 'V', action: 'Vol desk' },
-  { key: 'GRK', action: 'Trade · Analyze (Greeks 1.0)' },
+  { key: 'GRK', action: 'Vol · Greeks 1.0' },
   { key: '[ ]', action: 'Prev / next section' },
   { key: 'D', action: 'Toggle dense / readable' },
   { key: 'R', action: 'Refresh data' },

@@ -4,7 +4,7 @@
 |-------|--------|
 | **What this is** | Material **for you to read** — education threads, primers, and posts from the **links and accounts you already put on the research map** |
 | **What this is NOT** | Not a Bloomberg UX dump · not Hy3 pack code · not “files I need so I can build” · not a product roadmap |
-| **Companion build notes (ignore if you only want learning)** | `docs/MACROS_GREEKS_GEX_RESEARCH.md` maps these lessons → UI; skip that file if you only want education |
+| **Companion build notes (ignore if you only want learning)** | `docs/positioning/MACROS_GREEKS_GEX_RESEARCH.md` maps these lessons → UI; skip that file if you only want education |
 | **Sources** | OnlySOFRs primer, @bennpeifert, @MenthorQpro, @VolSignals / VS3D, @conksresearch / conks.plumbing, SpotGamma / MenthorQ chart language from your packs |
 | **Built** | 2026-07-13 |
 

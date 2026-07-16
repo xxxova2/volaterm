@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" role="img" aria-label="Dealer hedging">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0c0f14"/>
+      <stop offset="100%" stop-color="#151b24"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="80%" cy="20%" r="55%">
+      <stop offset="0%" stop-color="#c4a574" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#c4a574" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1200" height="800" fill="url(#g)"/>
+  <rect width="1200" height="800" fill="url(#glow)"/>
+  <rect x="0" y="0" width="8" height="800" fill="#c4a574"/>
+
+  <text x="48" y="72" fill="#9a9284" font-family="ui-sans-serif" font-size="22" letter-spacing="4">POSITIONING</text>
+  <text x="48" y="150" fill="#f3efe6" font-family="Georgia,serif" font-size="44" font-weight="700">How dealer hedging</text>
+  <text x="48" y="210" fill="#f3efe6" font-family="Georgia,serif" font-size="44" font-weight="700">actually works</text>
+  <g transform="translate(100,340)">
+    <rect x="0" y="0" width="280" height="220" rx="12" fill="#141a22" stroke="#2a3340" stroke-width="2"/>
+    <text x="140" y="100" text-anchor="middle" fill="#f3efe6" font-size="26">Client</text>
+    <text x="140" y="150" text-anchor="middle" fill="#9a9284" font-size="18">buys option</text>
+    <path d="M 300 110 L 420 110" stroke="#c4a574" stroke-width="4"/>
+    <rect x="440" y="0" width="280" height="220" rx="12" fill="#141a22" stroke="#c4a574" stroke-width="3"/>
+    <text x="580" y="100" text-anchor="middle" fill="#c4a574" font-size="26">Dealer</text>
+    <text x="580" y="150" text-anchor="middle" fill="#9a9284" font-size="18">short γ / hedges Δ</text>
+    <path d="M 740 110 L 860 110" stroke="#6a8fa8" stroke-width="4"/>
+    <rect x="880" y="0" width="200" height="220" rx="12" fill="#141a22" stroke="#6a8fa8" stroke-width="2"/>
+    <text x="980" y="110" text-anchor="middle" fill="#f3efe6" font-size="22">Tape</text>
+    <text x="980" y="155" text-anchor="middle" fill="#9a9284" font-size="16">futures / stock</text>
+  </g>
+
+</svg>

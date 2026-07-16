@@ -146,7 +146,8 @@ export type ActiveTab =
   | 'positioning'
   | 'desk'
   | 'crypto'
-  | 'rates';
+  | 'rates'
+  | 'academy';
 
 
 export interface GreeksProfile {
@@ -161,4 +162,40 @@ export interface SensitivityMatrix {
   gamma: number[];
   vega: number[];
   theta: number[];
+}
+
+// ── FlashAlpha types ────────────────────────────────────────
+
+export interface FALevelStack {
+  flip: number | null;
+  callWall: number | null;
+  putWall: number | null;
+  topOI: number | null;
+  mp: number | null;
+}
+
+export interface FALevels {
+  symbol: string;
+  as_of: string;
+  levelStack: FALevelStack;
+  netGEX: number | null;
+  dealerCushion: number | null;
+  flipDistancePct: number | null;
+  source: 'flashalpha';
+}
+
+export interface FAGexStrike {
+  strike: number;
+  callGEX: number;
+  putGEX: number;
+  netGEX: number;
+}
+
+export interface FAGexProfile {
+  symbol: string;
+  expiration: string;
+  strikes: FAGexStrike[];
+  totalGEX: number;
+  as_of: string;
+  source: 'flashalpha';
 }

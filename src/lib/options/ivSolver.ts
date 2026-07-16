@@ -56,6 +56,10 @@ export function impliedVol(
     if (Math.abs(diff) < 1e-8) return vol;
     if (Math.abs(bs.vega) < 1e-12) break;
     vol = vol - diff / bs.vega;
+    if (!Number.isFinite(vol)) {
+      vol = initialVolGuess(type, marketPrice, S, K, T, r, q);
+      break;
+    }
     if (vol < 0.001) { vol = 0.001; break; }
     if (vol > 5) { vol = 5; break; }
   }

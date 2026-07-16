@@ -1,11 +1,18 @@
 import { useMemo } from 'react';
 import type { SurfaceGrid } from '../../../lib/options/types';
 import type { NoArbResult } from '../../../lib/options/noarb';
+import type { SurfaceWingMode } from '../../../lib/options/synthetic';
 import { smileSlice, termSlice, exportSurfaceToCSV, exportSurfaceToJSON, type SVIReadout, type SmileSlice, type TermSlice } from '../../../lib/options/surfaceTools';
 import { useTerminalStore } from '../../../store/terminalStore';
 import { cn } from '../../../lib/utils';
 
 export type SliceMode = 'none' | 'smile' | 'term';
+
+const WING_MODES: { id: SurfaceWingMode; label: string }[] = [
+  { id: 'otm', label: 'OTM' },
+  { id: 'itm', label: 'ITM' },
+  { id: 'all', label: 'ALL' },
+];
 
 function downloadFile(name: string, content: string, type: string) {
   const blob = new Blob([content], { type });
@@ -50,11 +57,21 @@ export function SurfaceTools({
   selectedStrike: number | null;
 }) {
   const exports = useSurfaceExport(surface);
-  const { source, liveAvailable } = useTerminalStore();
+  const source = useTerminalStore(s => s.source);
+  const liveAvailable = useTerminalStore(s => s.liveAvailable);
+  const chainAvailable = useTerminalStore(s => s.chainAvailable);
+  const surfaceWingMode = useTerminalStore(s => s.surfaceWingMode);
+  const setSurfaceWingMode = useTerminalStore(s => s.setSurfaceWingMode);
 
-  // LIVE-only: Live when a real snapshot arrived, otherwise Waiting.
-  const sourceLabel = source === 'live' && liveAvailable ? 'Live' : 'Waiting';
-  const sourceDotClass = sourceLabel === 'Live' ? 'bg-up' : 'bg-amber';
+  // Live only when chain surface is available; quote-only is Spot only.
+  const sourceLabel =
+    source === 'live' && chainAvailable
+      ? 'Live'
+      : source === 'live' && liveAvailable
+        ? 'Spot only'
+        : 'Waiting';
+  const sourceDotClass =
+    sourceLabel === 'Live' ? 'bg-up' : sourceLabel === 'Spot only' ? 'bg-cyan' : 'bg-amber';
 
   return (
     <div className="absolute top-3 right-3 flex flex-col gap-2 w-56 text-type-xs font-mono">
@@ -64,6 +81,33 @@ export function SurfaceTools({
           <span className={cn('inline-block w-1.5 h-1.5 rounded-full', sourceDotClass)} />
           {sourceLabel}
         </div>
+      </div>
+
+      <div className="bg-card border border-border rounded p-2 flex flex-col gap-2" data-testid="wing-mode-panel">
+        <div className="text-muted-foreground uppercase tracking-wider">Chain side</div>
+        <div className="flex gap-1">
+          {WING_MODES.map(({ id, label }) => (
+            <button
+              key={id}
+              type="button"
+              data-testid={`wing-mode-${id}`}
+              onClick={() => setSurfaceWingMode(id)}
+              className={cn(
+                'flex-1 px-1 py-0.5 rounded border border-border text-type-2xs uppercase',
+                surfaceWingMode === id
+                  ? 'bg-muted text-foreground'
+                  : 'text-muted-foreground hover:bg-muted',
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <p className="text-type-2xs text-muted-foreground leading-snug">
+          {surfaceWingMode === 'otm' && 'Desk default: OTM puts below spot, OTM calls above.'}
+          {surfaceWingMode === 'itm' && 'ITM side: deep ITM IVs — often unstable near intrinsic.'}
+          {surfaceWingMode === 'all' && 'Average call+put IV when both quote; else whatever the API has.'}
+        </p>
       </div>
 
       <div className="bg-card border border-border rounded p-2 flex flex-col gap-2">

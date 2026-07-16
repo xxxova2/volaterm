@@ -5,8 +5,13 @@
  */
 
 import { useEffect, useRef } from 'react';
-import { useTerminalStore } from '../store/terminalStore';
+import { applySpotPatch, useTerminalStore } from '../store/terminalStore';
 import type { FmpQuote } from '../lib/data/types';
+import { perfTimeSync } from '../config/perfBudget';
+import {
+  extractSurfaceMetrics,
+  pushSurfaceMetrics,
+} from '../lib/options/surfaceMetrics';
 
 export interface SpotTick {
   symbol: string;
@@ -48,9 +53,13 @@ export function useSpotStream(symbol: string, enabled: boolean) {
 
     es.onmessage = (ev) => {
       try {
+        if (closed) return;
         const tick = JSON.parse(ev.data) as SpotTick & Partial<FmpQuote>;
         if (!tick || !(tick.price > 0)) return;
         if (tick.symbol && tick.symbol.toUpperCase() !== symbol.toUpperCase()) return;
+        // Effect symbol can lag store during setSymbol → teardown; never paint wrong underlier.
+        const storeSym = useTerminalStore.getState().symbol?.toUpperCase?.() ?? '';
+        if (storeSym && storeSym !== symbol.toUpperCase()) return;
 
         const now = Date.now();
         const set = useTerminalStore.setState;
@@ -87,12 +96,20 @@ export function useSpotStream(symbol: string, enabled: boolean) {
           streamConnected: true,
         });
 
-        // Patch spot onto the active snapshot without re-solving the full chain.
+        // Sticky-IV reprice greeks + surface at new spot (do not leave stale γ/δ).
         const snap = prev.snapshot;
         if (snap && tick.price > 0 && Math.abs(tick.price - snap.spot) / snap.spot > 0.00005) {
-          // Defer full surface rebuild to next chain cycle; only update spot label path.
+          const { patched, processed } = perfTimeSync('store.spotPatch.sse', () =>
+            applySpotPatch(snap, tick.price, now, prev.surfaceWingMode),
+          );
+          const metricsFrame = extractSurfaceMetrics(patched, 'sticky_spot', now);
           set({
-            snapshot: { ...snap, spot: tick.price, timestamp: now },
+            snapshot: patched,
+            surface: processed.surface,
+            sviReadout: processed.sviReadout,
+            arbResult: processed.arbResult,
+            lastSurfacePath: 'sticky_spot',
+            surfaceMetrics: pushSurfaceMetrics(prev.surfaceMetrics, metricsFrame),
           });
         }
       } catch {

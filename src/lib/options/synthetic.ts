@@ -2,6 +2,7 @@ import type { VolSnapshot, ExpirySlice, OptionQuote, SurfaceGrid } from './types
 import { computeGreeks } from './greeks';
 import { DATA_CONFIG } from '../../config/constants';
 import { interpolateSurface } from './interpolate';
+import { yearFractionFromSlice } from './time';
 
 const PRESETS = DATA_CONFIG.SYMBOL_PRESETS;
 
@@ -90,7 +91,7 @@ export function buildSnapshot(
   for (let ei = 0; ei < expiries.length; ei++) {
     const { expiry, dte } = expiries[ei]!;
     const atmIV = atmIVs[ei]!;
-    const T = dte / 365;
+    const T = yearFractionFromSlice({ expiry, dte });
     if (T <= 0) continue;
 
     const expStrikes = buildStrikes(spot);
@@ -141,23 +142,72 @@ export function buildSnapshot(
 }
 
 /**
- * Pick the OTM quote for surface construction:
- *  K ≥ S → call IV (OTM / ATM call)
- *  K < S → put IV  (OTM put)
+ * Which side of the chain feeds each strike on the surface mesh.
+ * - otm: desk default — call when K ≥ S, put when K < S
+ * - itm: opposite wing — put when K ≥ S, call when K < S
+ * - all: average call+put IV when both liquid; else whichever the API has
+ */
+export type SurfaceWingMode = 'otm' | 'itm' | 'all';
+
+export interface BuildSurfaceGridOptions {
+  wingMode?: SurfaceWingMode;
+}
+
+function blendQuotes(call: OptionQuote | null, put: OptionQuote | null): OptionQuote | null {
+  if (
+    call &&
+    put &&
+    call.iv != null &&
+    put.iv != null &&
+    call.iv > 0 &&
+    put.iv > 0 &&
+    isFinite(call.iv) &&
+    isFinite(put.iv)
+  ) {
+    return {
+      ...call,
+      iv: (call.iv + put.iv) / 2,
+      mid: (call.mid + put.mid) / 2,
+      bid: (call.bid + put.bid) / 2,
+      ask: (call.ask + put.ask) / 2,
+      last: (call.last + put.last) / 2,
+      delta:
+        call.delta != null && put.delta != null
+          ? (call.delta + put.delta) / 2
+          : (call.delta ?? put.delta),
+    };
+  }
+  return call ?? put;
+}
+
+/**
+ * Pick a quote for surface construction under the chosen wing mode.
  * Falls back to the other side when the preferred wing is missing.
  */
-function pickSurfaceQuote(
+export function pickSurfaceQuote(
   slice: ExpirySlice,
   strike: number,
   spot: number,
+  mode: SurfaceWingMode = 'otm',
 ): OptionQuote | null {
   const call = slice.calls.find(q => q.strike === strike) ?? null;
   const put = slice.puts.find(q => q.strike === strike) ?? null;
+  if (mode === 'all') return blendQuotes(call, put);
+  if (mode === 'itm') {
+    // ITM: put above/at spot, call below spot
+    if (strike >= spot) return put ?? call;
+    return call ?? put;
+  }
+  // OTM (default): call above/at spot, put below spot
   if (strike >= spot) return call ?? put;
   return put ?? call;
 }
 
-export function buildSurfaceGrid(snapshot: VolSnapshot): SurfaceGrid {
+export function buildSurfaceGrid(
+  snapshot: VolSnapshot,
+  opts: BuildSurfaceGridOptions = {},
+): SurfaceGrid {
+  const wingMode = opts.wingMode ?? 'otm';
   if (snapshot.expiries.length === 0) {
     return { expiries: [], dtes: [], strikes: [], iv: [], bid: [], ask: [], delta: [] };
   }
@@ -186,7 +236,7 @@ export function buildSurfaceGrid(snapshot: VolSnapshot): SurfaceGrid {
     const deltaRow: (number | null)[] = [];
 
     for (const strike of strikes) {
-      const q = pickSurfaceQuote(slice, strike, spot);
+      const q = pickSurfaceQuote(slice, strike, spot, wingMode);
       if (q && q.iv != null && isFinite(q.iv) && q.iv > 0) {
         ivRow.push(q.iv);
         bidRow.push(q.bid);

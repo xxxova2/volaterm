@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 480" role="img" aria-label="How to read GEX">
+  <rect width="960" height="480" fill="#0b1220"/>
+  <text x="40" y="48" fill="#e8edf5" font-family="Georgia, serif" font-size="28" font-weight="700">How to read a GEX chart</text>
+  <text x="40" y="82" fill="#9aa8bc" font-family="system-ui, sans-serif" font-size="18">Bars = estimated dealer gamma by strike · not a live order book</text>
+  <!-- axis -->
+  <line x1="120" y1="140" x2="120" y2="360" stroke="#64748b" stroke-width="2"/>
+  <line x1="120" y1="250" x2="880" y2="250" stroke="#64748b" stroke-width="2"/>
+  <text x="100" y="160" text-anchor="end" fill="#4ade80" font-family="system-ui" font-size="16">+ GEX</text>
+  <text x="100" y="350" text-anchor="end" fill="#f87171" font-family="system-ui" font-size="16">− GEX</text>
+  <!-- bars -->
+  <rect x="180" y="250" width="48" height="70" fill="#ef4444"/>
+  <rect x="260" y="200" width="48" height="50" fill="#22c55e"/>
+  <rect x="340" y="170" width="48" height="80" fill="#22c55e"/>
+  <rect x="420" y="140" width="56" height="110" fill="#22c55e"/>
+  <rect x="520" y="190" width="48" height="60" fill="#22c55e"/>
+  <rect x="600" y="250" width="48" height="55" fill="#ef4444"/>
+  <rect x="680" y="250" width="48" height="90" fill="#ef4444"/>
+  <rect x="760" y="210" width="48" height="40" fill="#22c55e"/>
+  <!-- spot -->
+  <line x1="448" y1="130" x2="448" y2="370" stroke="#e6c35c" stroke-width="3" stroke-dasharray="6 4"/>
+  <text x="448" y="120" text-anchor="middle" fill="#e6c35c" font-family="system-ui" font-size="18" font-weight="700">Spot</text>
+  <text x="200" y="400" fill="#e8edf5" font-family="system-ui" font-size="17">Green: dealers long gamma → dampen moves</text>
+  <text x="200" y="430" fill="#e8edf5" font-family="system-ui" font-size="17">Red: dealers short gamma → amplify moves</text>
+  <text x="200" y="460" fill="#9aa8bc" font-family="system-ui" font-size="16">Always check the sign convention on the chart you are using.</text>
+</svg>

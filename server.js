@@ -20,6 +20,7 @@ import {
   ALPHA_VANTAGE_FREE_DAILY,
   TRADINGVIEW_FREE_MONTHLY,
   FINNHUB_SOFT_DAILY,
+  FLASHALPHA_FREE_DAILY,
 } from './api/upstreamCache.js';
 import {
   alphaVantageGlobalQuote,
@@ -80,8 +81,8 @@ const DESK_WARM_SYMBOLS = ['SPY'];
 const DESK_WARM_CRYPTO = ['BTC'];
 
 // Restrict CORS to an explicit allowlist (comma-separated CORS_ORIGIN env var).
-// Defaults to localhost dev origins. Production also allows Railway public host
-// (ES module scripts always send Origin — without this the UI is a blank page).
+// Defaults to localhost dev origins. Production: set CORS_ORIGIN and/or rely on
+// RAILWAY_PUBLIC_DOMAIN exact match — never a wildcard on *.up.railway.app.
 const ALLOWED_ORIGINS = (process.env.CORS_ORIGIN || 'http://localhost:5173,http://localhost:3000,http://localhost:3001,http://localhost:3200,http://localhost:3201')
   .split(',')
   .map((o) => o.trim())
@@ -92,21 +93,37 @@ function isAllowedOrigin(origin) {
   if (ALLOWED_ORIGINS.includes(origin)) return true;
   try {
     const u = new URL(origin);
-    // Deployed Railway app (module scripts are CORS-mode)
-    if (u.hostname.endsWith('.up.railway.app')) return true;
     if (u.hostname === 'localhost' || u.hostname === '127.0.0.1') return true;
-    // Railway injects the public domain without scheme
+    // Exact Railway public host only (module scripts are CORS-mode)
     const pub = process.env.RAILWAY_PUBLIC_DOMAIN || process.env.RAILWAY_STATIC_URL || '';
-    if (pub && (origin === `https://${pub}` || origin === `http://${pub}` || origin === pub)) {
-      return true;
+    if (pub) {
+      const host = pub.replace(/^https?:\/\//, '').replace(/\/$/, '');
+      if (origin === `https://${host}` || origin === `http://${host}` || origin === host) {
+        return true;
+      }
     }
   } catch { /* ignore */ }
   return false;
 }
 
 const DERIBIT_BASE = 'https://www.deribit.com/api/v2/public';
-// MacroVol FastAPI (FRED rates / macro). Defined early for boot briefing + warmer.
-const MACROVOL_API_URL = (process.env.MACROVOL_API_URL || 'http://127.0.0.1:8765').replace(/\/$/, '');
+// MacroVol FastAPI (FRED rates / macro). Localhost only — never an open SSRF relay.
+function resolveMacrovolBase() {
+  const raw = (process.env.MACROVOL_API_URL || 'http://127.0.0.1:8765').replace(/\/$/, '');
+  try {
+    const u = new URL(raw);
+    if (u.hostname === '127.0.0.1' || u.hostname === 'localhost') {
+      return raw;
+    }
+    console.warn(
+      `WARN: MACROVOL_API_URL host "${u.hostname}" is not local — forcing http://127.0.0.1:8765`,
+    );
+  } catch {
+    console.warn('WARN: MACROVOL_API_URL invalid — forcing http://127.0.0.1:8765');
+  }
+  return 'http://127.0.0.1:8765';
+}
+const MACROVOL_API_URL = resolveMacrovolBase();
 
 const fastify = Fastify({ logger: false });
 
@@ -117,20 +134,55 @@ await fastify.register(cors, {
   },
 });
 
-// Rate limiting configuration.
-// NOTE: only the FMP proxy has an external cost (the API key quota), and it is
-// already protected by a 60s server-side + client-side cache, so it makes very
-// few outbound calls. The yfinance endpoints are local (Python) and the app
-// legitimately issues several requests per refresh — throttling them at a low
-// cap silently breaks live mode (chain fetch 429s -> empty fail-closed surface).
-// We therefore keep a generous local limit to absorb refresh bursts.
+// Basic hardening headers (edge TLS still owns HSTS in production).
+fastify.addHook('onSend', async (_request, reply, payload) => {
+  reply.header('X-Content-Type-Options', 'nosniff');
+  reply.header('X-Frame-Options', 'SAMEORIGIN');
+  reply.header('Referrer-Policy', 'no-referrer');
+  reply.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  return payload;
+});
+
+// Rate limiting (sync caps with src/config/constants.ts rateLimit).
+// Global SPA traffic needs headroom; key-bearing / scarce upstreams are tighter.
+// yfinance/options stay moderate — low caps 429 the live chain (fail-closed empty surface).
+const RL_GLOBAL = 600;
+const RL_UPSTREAM = 120; // FMP, Finnhub, Massive, macrovol, options, yf
+const RL_SCARCE = 30; // Alpha Vantage, TradingView free quotas
+
+function rateLimitMaxForUrl(url) {
+  const u = url || '';
+  if (u.startsWith('/api/alphavantage') || u.startsWith('/api/tradingview')) return RL_SCARCE;
+  if (
+    u.startsWith('/api/fmp') ||
+    u.startsWith('/api/finnhub') ||
+    u.startsWith('/api/massive') ||
+    u.startsWith('/api/flashalpha') ||
+    u.startsWith('/api/desk') ||
+    u.startsWith('/api/macrovol') ||
+    u.startsWith('/api/options') ||
+    u.startsWith('/api/yf') ||
+    u.startsWith('/api/deribit') ||
+    u.startsWith('/api/history')
+  ) {
+    return RL_UPSTREAM;
+  }
+  return RL_GLOBAL;
+}
+
 await fastify.register(rateLimit, {
-  max: 600,
+  max: (request) => rateLimitMaxForUrl(request.url),
   timeWindow: '1 minute',
   // Never throttle static SPA assets — browsers load many chunks in parallel.
   allowList: (request) => {
     const u = request.url || '';
-    return u.startsWith('/assets/') || u === '/favicon.svg' || u === '/favicon.ico';
+    return (
+      u.startsWith('/assets/') ||
+      u === '/favicon.svg' ||
+      u === '/favicon.ico' ||
+      u === '/' ||
+      (!u.startsWith('/api/') && !u.includes('.'))
+    );
   },
   errorResponseBuilder: (request, context) => ({
     code: 429,
@@ -152,10 +204,10 @@ function validateSymbol(symbol) {
   return sanitized;
 }
 
+// Public liveness only — do not disclose which API keys are configured.
 fastify.get('/api/health', async () => ({
   status: 'ok',
   timestamp: Date.now(),
-  keys: providerKeysStatus(),
 }));
 
 /** Shared cache stats + free-tier budgets (all visitors share one board). */
@@ -175,7 +227,8 @@ fastify.get('/api/cache/status', async () => ({
     used: getMonthBudgetUsed('tradingview'),
     cap: TRADINGVIEW_FREE_MONTHLY,
   },
-  keys: providerKeysStatus(),
+  // Boolean presence only when explicitly enabled (ops); default off to avoid recon.
+  ...(process.env.EXPOSE_KEY_STATUS === '1' ? { keys: providerKeysStatus() } : {}),
   desk: { equities: DESK_WARM_SYMBOLS, crypto: DESK_WARM_CRYPTO },
   ttlsMs: TTL,
   note: 'Shared desk: browsers never call Finnhub/AV/TV directly. Railway Node owns keys + refresh.',
@@ -192,17 +245,22 @@ fastify.get('/api/boot/briefing', async (request, reply) => {
       TTL.BRIEFING_MS,
       async () => {
         const base = MACROVOL_API_URL;
-        const [ratesRes, macroRes] = await Promise.all([
+        // One shared FRED batch for rates + macro + stress — N visitors share this key.
+        const [ratesRes, macroRes, stressRes] = await Promise.all([
           fetch(`${base}/api/rates/summary`, { signal: AbortSignal.timeout(20_000) }),
           fetch(`${base}/api/macro/summary`, { signal: AbortSignal.timeout(25_000) }),
+          fetch(`${base}/api/macro/stress`, { signal: AbortSignal.timeout(25_000) }),
         ]);
         const rates = ratesRes.ok ? await ratesRes.json() : null;
         const macro = macroRes.ok ? await macroRes.json() : null;
+        const stress = stressRes.ok ? await stressRes.json() : null;
         return {
           rates,
           macro,
+          stress,
           as_of: new Date().toISOString(),
           source: 'macrovol+fred',
+          note: 'Shared board · FRED stress pack included · not per-visitor upstream.',
         };
       },
       { allowStaleOnError: true },
@@ -367,13 +425,13 @@ fastify.get('/api/history/spy', async (request, reply) => {
       reply.code(502);
       return { error: 'No live SPY history (FMP/yfinance)', symbol: 'SPY', data: [], source: 'none' };
     }
-    // Inline same shape as FMP path (close + ret + RV proxy).
+    // Same shape as barsToSpyHistoryPayload: close + ret + RV20 (not VIX).
     const data = [];
     for (let i = 0; i < sorted.length; i++) {
       const close = sorted[i].close;
       const prev = i > 0 ? sorted[i - 1].close : close;
       const ret = prev > 0 ? (close - prev) / prev : 0;
-      let vix = 18;
+      let rv_20d_pct = 18;
       if (i >= 20) {
         let sum = 0;
         let sum2 = 0;
@@ -385,14 +443,14 @@ fastify.get('/api/history/spy', async (request, reply) => {
         }
         const mean = sum / 20;
         const var_ = Math.max(0, sum2 / 20 - mean * mean);
-        vix = Math.min(80, Math.max(8, Math.sqrt(var_ * 252) * 100));
+        rv_20d_pct = Math.min(80, Math.max(8, Math.sqrt(var_ * 252) * 100));
       }
       data.push({
         date: sorted[i].date,
         close: Math.round(close * 100) / 100,
         return: Math.round(ret * 100000) / 100000,
         logReturn: Math.round(Math.log(1 + ret) * 100000) / 100000,
-        vix: Math.round(vix * 10) / 10,
+        rv_20d_pct: Math.round(rv_20d_pct * 10) / 10,
       });
     }
     return { symbol: 'SPY', data, source: 'yfinance' };
@@ -739,7 +797,7 @@ fastify.get('/api/fmp/stable/*', async (request, reply) => {
   // Reject anything not in the allowlist before spending a request with our key.
   if (!isFmpEndpointAllowed(endpoint)) {
     reply.code(403);
-    return { error: 'Endpoint not allowed', allowed: [...FMP_ALLOWED_ENDPOINTS] };
+    return { error: 'Endpoint not allowed' };
   }
 
   // Shared cache + daily budget so many users don't burn FMP free tier (250/day).
@@ -1051,6 +1109,236 @@ fastify.get('/api/finnhub/quote', async (request, reply) => {
   }
 });
 
+/**
+ * Economic calendar — free-tier Finnhub when available.
+ * Shared 6h cache: one upstream pull for all website visitors.
+ */
+fastify.get('/api/finnhub/economic-calendar', async (request, reply) => {
+  const fromQ = String(request.query.from || '').slice(0, 10);
+  const toQ = String(request.query.to || '').slice(0, 10);
+  const today = finnhubDate();
+  const from = fromQ || today;
+  const toDefault = (() => {
+    const d = new Date();
+    d.setUTCDate(d.getUTCDate() + 14);
+    return finnhubDate(d);
+  })();
+  const to = toQ || toDefault;
+  const cacheKey = `finnhub:eco:${from}:${to}`;
+  try {
+    const { data, fromCache, ageMs } = await getOrFetch(
+      cacheKey,
+      TTL.FINNHUB_ECO_MS,
+      async () => {
+        let payload = null;
+        try {
+          payload = await finnhubGet('/calendar/economic', { from, to });
+        } catch (e) {
+          // Some free plans return 403 — fail-closed with empty list
+          return {
+            from,
+            to,
+            events: [],
+            count: 0,
+            as_of: new Date().toISOString(),
+            source: 'Finnhub',
+            error: e?.message || 'unavailable',
+            note: 'Economic calendar unavailable on this Finnhub plan. Fail-closed.',
+          };
+        }
+        const rows = Array.isArray(payload?.economicCalendar)
+          ? payload.economicCalendar
+          : Array.isArray(payload)
+            ? payload
+            : [];
+        const events = rows.slice(0, 40).map((r, i) => ({
+          id: r?.event ? `${r.event}-${r.time || r.date || i}` : `eco-${i}`,
+          country: r?.country || null,
+          event: r?.event || r?.name || null,
+          time: r?.time || r?.date || null,
+          impact: r?.impact || r?.importance || null,
+          actual: r?.actual ?? null,
+          estimate: r?.estimate ?? r?.consensus ?? null,
+          prev: r?.prev ?? r?.previous ?? null,
+          unit: r?.unit || null,
+        })).filter((e) => e.event);
+        return {
+          from,
+          to,
+          events,
+          count: events.length,
+          as_of: new Date().toISOString(),
+          source: 'Finnhub',
+          error: events.length ? null : 'empty',
+          note: 'Shared economic calendar · 6h TTL · one pull for all clients.',
+        };
+      },
+      { allowStaleOnError: true },
+    );
+    return { ...data, fromCache, ageMs };
+  } catch (err) {
+    if (err?.code === 'no_api_key' || String(err?.message || '').includes('not configured')) {
+      reply.code(503);
+      return { events: [], error: 'no_api_key', source: 'Finnhub', note: 'Set FINNHUB_API_KEY.' };
+    }
+    reply.code(502);
+    return { events: [], error: err.message, source: 'Finnhub', note: 'Eco calendar failed. Fail-closed.' };
+  }
+});
+
+/** Analyst recommendation trends — free Finnhub; 24h shared cache. */
+fastify.get('/api/finnhub/recommendation', async (request, reply) => {
+  const symbol = validateSymbol(String(request.query.symbol || 'SPY')) || 'SPY';
+  const cacheKey = `finnhub:rec:${symbol}`;
+  try {
+    const { data, fromCache, ageMs } = await getOrFetch(
+      cacheKey,
+      TTL.FINNHUB_META_MS,
+      async () => {
+        const rows = await finnhubGet('/stock/recommendation', { symbol });
+        const list = Array.isArray(rows) ? rows : [];
+        const latest = list[0] || null;
+        return {
+          symbol,
+          latest: latest
+            ? {
+                period: latest.period || null,
+                strongBuy: latest.strongBuy ?? null,
+                buy: latest.buy ?? null,
+                hold: latest.hold ?? null,
+                sell: latest.sell ?? null,
+                strongSell: latest.strongSell ?? null,
+              }
+            : null,
+          history_count: list.length,
+          as_of: new Date().toISOString(),
+          source: 'Finnhub',
+          error: latest ? null : 'empty',
+          note: 'Shared recommendation pack · 24h TTL · context only, not a signal.',
+        };
+      },
+      { allowStaleOnError: true },
+    );
+    return { ...data, fromCache, ageMs };
+  } catch (err) {
+    if (err?.code === 'no_api_key' || String(err?.message || '').includes('not configured')) {
+      reply.code(503);
+      return { symbol, latest: null, error: 'no_api_key', source: 'Finnhub' };
+    }
+    reply.code(502);
+    return { symbol, latest: null, error: err.message, source: 'Finnhub', note: 'Fail-closed.' };
+  }
+});
+
+/** Company peers — free Finnhub; 24h shared cache. */
+fastify.get('/api/finnhub/peers', async (request, reply) => {
+  const symbol = validateSymbol(String(request.query.symbol || 'SPY')) || 'SPY';
+  const cacheKey = `finnhub:peers:${symbol}`;
+  try {
+    const { data, fromCache, ageMs } = await getOrFetch(
+      cacheKey,
+      TTL.FINNHUB_META_MS,
+      async () => {
+        const rows = await finnhubGet('/stock/peers', { symbol });
+        const peers = (Array.isArray(rows) ? rows : [])
+          .map((p) => String(p || '').toUpperCase())
+          .filter((p) => p && p !== symbol)
+          .slice(0, 12);
+        return {
+          symbol,
+          peers,
+          count: peers.length,
+          as_of: new Date().toISOString(),
+          source: 'Finnhub',
+          error: peers.length ? null : 'empty',
+          note: 'Shared peers · 24h TTL · one pull for all clients.',
+        };
+      },
+      { allowStaleOnError: true },
+    );
+    return { ...data, fromCache, ageMs };
+  } catch (err) {
+    if (err?.code === 'no_api_key' || String(err?.message || '').includes('not configured')) {
+      reply.code(503);
+      return { symbol, peers: [], error: 'no_api_key', source: 'Finnhub' };
+    }
+    reply.code(502);
+    return { symbol, peers: [], error: err.message, source: 'Finnhub', note: 'Fail-closed.' };
+  }
+});
+
+/**
+ * Massive (Polygon-compatible) previous daily bar — free-tier stock backup.
+ * Shared 1h cache. Used only when FMP/YF history path is empty (optional).
+ */
+fastify.get('/api/massive/prev/:symbol', async (request, reply) => {
+  const symbol = validateSymbol(request.params.symbol);
+  if (!symbol) {
+    reply.code(400);
+    return { error: 'Invalid symbol' };
+  }
+  const key = process.env.MASSIVE_API_KEY || process.env.POLYGON_API_KEY || null;
+  if (!key) {
+    reply.code(503);
+    return {
+      symbol,
+      error: 'no_api_key',
+      source: 'Massive',
+      note: 'Set MASSIVE_API_KEY for free prev-bar backup. Fail-closed.',
+    };
+  }
+  try {
+    const { data, fromCache, ageMs } = await getOrFetch(
+      `massive:prev:${symbol}`,
+      TTL.MASSIVE_PREV_MS,
+      async () => {
+        const url = new URL(`https://api.massive.com/v2/aggs/ticker/${symbol}/prev`);
+        url.searchParams.set('adjusted', 'true');
+        url.searchParams.set('apiKey', key);
+        let res = await fetch(url.toString(), {
+          headers: { Accept: 'application/json' },
+          signal: AbortSignal.timeout(15_000),
+        });
+        // Polygon-compatible host fallback
+        if (!res.ok) {
+          const u2 = new URL(`https://api.polygon.io/v2/aggs/ticker/${symbol}/prev`);
+          u2.searchParams.set('adjusted', 'true');
+          u2.searchParams.set('apiKey', key);
+          res = await fetch(u2.toString(), {
+            headers: { Accept: 'application/json' },
+            signal: AbortSignal.timeout(15_000),
+          });
+        }
+        if (!res.ok) {
+          throw new Error(`Massive HTTP ${res.status}`);
+        }
+        const json = await res.json();
+        const row = Array.isArray(json?.results) ? json.results[0] : null;
+        const close = row?.c != null ? Number(row.c) : null;
+        return {
+          symbol,
+          open: row?.o != null ? Number(row.o) : null,
+          high: row?.h != null ? Number(row.h) : null,
+          low: row?.l != null ? Number(row.l) : null,
+          close: close > 0 ? close : null,
+          volume: row?.v != null ? Number(row.v) : null,
+          vwap: row?.vw != null ? Number(row.vw) : null,
+          ts: row?.t != null ? Number(row.t) : null,
+          as_of: new Date().toISOString(),
+          source: 'Massive',
+          error: close > 0 ? null : 'empty',
+          note: 'Shared prev bar · free stock backup · not OPRA live.',
+        };
+      },
+      { allowStaleOnError: true },
+    );
+    return { ...data, fromCache, ageMs };
+  } catch (err) {
+    reply.code(502);
+    return { symbol, error: err.message, source: 'Massive', note: 'Fail-closed. No synthetic bar.' };
+  }
+});
+
 // ── Alpha Vantage (shared, daily budget ~25) ───────────────────
 fastify.get('/api/alphavantage/quote', async (request, reply) => {
   const raw = String(request.query.symbol || 'SPY').toUpperCase();
@@ -1153,20 +1441,43 @@ fastify.get('/api/tradingview/snapshot', async (request, reply) => {
   }
 });
 
+/** Realized vol (ann. %) from daily closes — zero extra API calls. */
+function realizedVolFromBars(bars, window = 20) {
+  if (!Array.isArray(bars) || bars.length < window + 1) return null;
+  const closes = bars
+    .map((b) => (b?.close != null ? Number(b.close) : null))
+    .filter((c) => c != null && c > 0);
+  if (closes.length < window + 1) return null;
+  const slice = closes.slice(-window - 1);
+  const rets = [];
+  for (let i = 1; i < slice.length; i++) {
+    rets.push(Math.log(slice[i] / slice[i - 1]));
+  }
+  if (!rets.length) return null;
+  const mean = rets.reduce((a, b) => a + b, 0) / rets.length;
+  const var_ = rets.reduce((a, r) => a + (r - mean) ** 2, 0) / rets.length;
+  const daily = Math.sqrt(var_);
+  const ann = daily * Math.sqrt(252) * 100;
+  return Number.isFinite(ann) ? Math.round(ann * 100) / 100 : null;
+}
+
 /** Combined shared desk pack for Home — prefer cache; never stampede scarce APIs. */
 fastify.get('/api/desk/pack', async (request, reply) => {
   const symbol = validateSymbol(String(request.query.symbol || 'SPY')) || 'SPY';
   try {
     const base = `http://127.0.0.1:${PORT}`;
-    // Finnhub is generous — always warm quote + short news.
-    // AV/TV: serve from cache when present; only fill on miss if budget allows (warmer owns slow fills).
+    // AV/TV: serve from cache when present; warmer owns scarce fills.
     const avQuotePeek = peek(`av:quote:${symbol}`);
     const avDailyPeek = peek(`av:daily:${symbol}:40`) || peek(`av:daily:${symbol}:60`);
+    const avOverviewPeek = peek(`av:overview:${symbol}`);
     const tvPeek = peek(`tv:snap:${symbol}`) || peek('tv:snap:SPY');
 
-    const [fhQuote, fhNews, cache] = await Promise.all([
+    const [fhQuote, fhNews, fhEco, fhRec, fhPeers, cache] = await Promise.all([
       fetch(`${base}/api/finnhub/quote?symbol=${symbol}`).then((r) => r.json()).catch((e) => ({ error: e.message })),
       fetch(`${base}/api/finnhub/news?symbol=${symbol}&limit=6`).then((r) => r.json()).catch((e) => ({ error: e.message })),
+      fetch(`${base}/api/finnhub/economic-calendar`).then((r) => r.json()).catch((e) => ({ error: e.message, events: [] })),
+      fetch(`${base}/api/finnhub/recommendation?symbol=${symbol}`).then((r) => r.json()).catch((e) => ({ error: e.message })),
+      fetch(`${base}/api/finnhub/peers?symbol=${symbol}`).then((r) => r.json()).catch((e) => ({ error: e.message, peers: [] })),
       fetch(`${base}/api/cache/status`).then((r) => r.json()).catch(() => null),
     ]);
 
@@ -1175,6 +1486,9 @@ fastify.get('/api/desk/pack', async (request, reply) => {
       : null;
     let avDaily = avDailyPeek
       ? { ...avDailyPeek.data, fromCache: true, ageMs: Date.now() - avDailyPeek.timestamp }
+      : null;
+    let avOverview = avOverviewPeek
+      ? { ...avOverviewPeek.data, fromCache: true, ageMs: Date.now() - avOverviewPeek.timestamp }
       : null;
     let tv = tvPeek
       ? { ...tvPeek.data, fromCache: true, ageMs: Date.now() - tvPeek.timestamp }
@@ -1187,7 +1501,6 @@ fastify.get('/api/desk/pack', async (request, reply) => {
         .catch((e) => ({ error: e.message, source: 'Alpha Vantage' }));
     }
     if (!tv && process.env.RAPIDAPI_KEY) {
-      // Do not force TV on every pack — only if never cached (warmer fills slowly).
       tv = {
         price: null,
         error: 'awaiting_warmer',
@@ -1196,17 +1509,30 @@ fastify.get('/api/desk/pack', async (request, reply) => {
       };
     }
 
+    const bars = avDaily?.bars || [];
+    const realized_vol_20d = realizedVolFromBars(bars, 20);
+
     return {
       symbol,
       finnhub_quote: fhQuote,
       alphavantage_quote: avQuote,
       alphavantage_daily: avDaily,
+      alphavantage_overview: avOverview,
       finnhub_news: fhNews,
+      finnhub_economic_calendar: fhEco,
+      finnhub_recommendation: fhRec,
+      finnhub_peers: fhPeers,
+      derived: {
+        realized_vol_20d_pct: realized_vol_20d,
+        realized_vol_note: realized_vol_20d != null
+          ? '20d log-return ann. vol from shared AV daily bars · zero extra API calls'
+          : 'Need warmer AV daily bars',
+      },
       tradingview: tv,
       budgets: cache?.budgets || null,
       keys: cache?.keys || providerKeysStatus(),
       as_of: new Date().toISOString(),
-      note: 'Shared desk pack · Finnhub live-cached · AV/TV from server board (warmer-owned).',
+      note: 'Shared desk pack · free APIs · server-owned refresh · browsers only read cache.',
     };
   } catch (err) {
     reply.code(502);
@@ -1214,26 +1540,40 @@ fastify.get('/api/desk/pack', async (request, reply) => {
   }
 });
 
-// ── MacroVol API proxy ─────────────────────────────────────────
-// Forwards /api/macrovol/* → MacroVol FastAPI (FRED rates/macro + yfinance greeks/surface).
+// ── Local rates/greeks pipe proxy ──────────────────────────────
+// Forwards /api/macrovol/* → local FastAPI on :8765 (FRED/NYFed/yfinance/… — not a market vendor).
 // Lightweight rates/macro paths are shared-cached so page loads do not stampede FRED.
 
 const MACRO_LIGHT_TTL_MS = TTL.BRIEFING_MS;
 const MACRO_LIGHT_PREFIXES = [
   '/rates/summary',
   '/macro/summary',
+  '/macro/stress',
+  '/macro/primary',
   '/rates/curve',
   '/rates/shape',
   '/rates/basis',
+  '/rates/basis-history',
+  '/rates/curve-history',
   '/rates/plumbing',
   '/rates/fx',
   '/rates/auctions',
+  '/rates/correlations',
   '/crypto/spot',
+  '/rates/global-yields',
+  // STIR is yfinance-heavy cold; cache shared so Rates tab is not 10s every visitor.
+  '/stir/strip',
 ];
 
 function isMacroLightPath(suffix) {
   const path = (suffix.split('?')[0] || '').replace(/\/$/, '') || '/';
   return MACRO_LIGHT_PREFIXES.some((p) => path === p || path.startsWith(`${p}?`));
+}
+
+/** Block debug/admin MacroVol paths at the public edge (never forward). */
+function isMacroDebugPath(suffix) {
+  const path = (suffix.split('?')[0] || '').replace(/\/$/, '') || '/';
+  return path === '/debug' || path.startsWith('/debug/');
 }
 
 fastify.route({
@@ -1243,9 +1583,18 @@ fastify.route({
     const raw = request.url || '';
     // /api/macrovol/rates/summary → /api/rates/summary
     const suffix = raw.replace(/^\/api\/macrovol/, '') || '/';
+    if (isMacroDebugPath(suffix)) {
+      reply.code(404);
+      return { error: 'Not found' };
+    }
     const target = `${MACROVOL_API_URL}/api${suffix.startsWith('/') ? suffix : `/${suffix}`}`;
     const light = request.method === 'GET' && isMacroLightPath(suffix);
+    // Greeks re-pull yfinance chain — share Node cache at OPTIONS_MS (same as equity chain).
+    const greeksPath = (suffix.split('?')[0] || '').replace(/\/$/, '');
+    const greeksHeavy = request.method === 'GET'
+      && (greeksPath.startsWith('/greeks/') || greeksPath.startsWith('/surface/'));
     try {
+      const cacheIf2xx = (d) => d && typeof d.status === 'number' && d.status >= 200 && d.status < 300;
       const loader = async () => {
         const res = await fetch(target, {
           method: request.method === 'OPTIONS' ? 'GET' : request.method,
@@ -1257,31 +1606,168 @@ fastify.route({
         try {
           body = JSON.parse(text);
         } catch {
-          body = { error: 'Invalid JSON from MacroVol API', raw: text.slice(0, 300) };
+          body = { error: 'Invalid JSON from rates pipe', raw: text.slice(0, 300) };
+        }
+        // Do not treat 4xx/5xx as cacheable success — sticky error bodies freeze the desk.
+        if (res.status < 200 || res.status >= 300) {
+          const err = new Error(`MacroVol upstream ${res.status}`);
+          err.status = res.status;
+          err.body = body;
+          throw err;
         }
         return { status: res.status, body };
       };
 
       const result = light
-        ? await getOrFetch(`macrovol:${suffix}`, MACRO_LIGHT_TTL_MS, loader, { allowStaleOnError: true })
-        : { data: await loader(), fromCache: false, ageMs: 0 };
+        ? await getOrFetch(`macrovol:${suffix}`, MACRO_LIGHT_TTL_MS, loader, {
+            allowStaleOnError: true,
+            cacheIf: cacheIf2xx,
+          })
+        : greeksHeavy
+          ? await getOrFetch(`macrovol:${suffix}`, TTL.OPTIONS_MS, loader, {
+              allowStaleOnError: true,
+              cacheIf: cacheIf2xx,
+            })
+          : { data: await loader(), fromCache: false, ageMs: 0, stale: false };
 
       const { status, body } = result.data;
-      reply.code(status).header('X-MacroVol-Upstream', MACROVOL_API_URL);
-      if (light) {
+      reply.code(status);
+      // Internal URL is for ops only — do not expose to every browser client.
+      if (process.env.EXPOSE_KEY_STATUS === '1' || process.env.EXPOSE_MACROVOL_UPSTREAM === '1') {
+        reply.header('X-MacroVol-Upstream', MACROVOL_API_URL);
+      }
+      if (light || greeksHeavy) {
         reply.header('X-Cache', result.fromCache ? 'HIT' : 'MISS');
-        reply.header('X-Cache-Age-Ms', String(result.ageMs));
+        reply.header('X-Cache-Age-Ms', String(result.ageMs ?? 0));
+        if (result.stale) reply.header('X-Cache-Stale', '1');
       }
       return body;
     } catch (err) {
+      if (err && err.body != null && err.status) {
+        reply.code(err.status);
+        return err.body;
+      }
       reply.code(502);
       return {
-        error: 'MacroVol API unavailable',
+        error: 'Rates/greeks pipe unavailable',
         detail: err.message || String(err),
-        hint: `Start macrovol-api on ${MACROVOL_API_URL} (cd macrovol-api && python3 -m uvicorn main:app --host 0.0.0.0 --port 8765)`,
+        hint: `Start local rates pipe on ${MACROVOL_API_URL} (FRED/NYFed/yfinance; e.g. npm run macrovol-api)`,
       };
     }
   },
+});
+
+// ── FlashAlpha Lab (GEX / levels) ───────────────────────────
+// Free tier: ~5 calls/day TOTAL across all symbols (not per-symbol).
+// Server-side cache ≥6h; never expose the api key to browser.
+const FLASHALPHA_API_KEY = process.env.FLASHALPHA_API_KEY || null;
+const FA_DAILY_CAP = FLASHALPHA_FREE_DAILY;
+/** Global free-tier budget key — must not include symbol. */
+const FA_BUDGET_KEY = 'flashalpha';
+const FA_CACHE_TTL = 6 * 60 * 60_000; // 6h
+
+if (!FLASHALPHA_API_KEY) {
+  console.warn('WARN: FLASHALPHA_API_KEY not set — FlashAlpha GEX/levels disabled.');
+}
+
+fastify.get('/api/flashalpha/exposure/levels/:symbol', async (request, reply) => {
+  const symbol = String(request.params.symbol || '').toUpperCase().replace(/[^A-Z0-9.-]/g, '') || 'AAPL';
+  if (!FLASHALPHA_API_KEY) {
+    reply.code(503);
+    return { error: 'FLASHALPHA_API_KEY not configured' };
+  }
+  // Cache hit never burns budget; only cold upstream does.
+  if (!budgetAllows(FA_BUDGET_KEY, FA_DAILY_CAP, 0.80)) {
+    const stale = peek(`fa:levels:${symbol}`);
+    if (stale) {
+      reply.header('X-Cache', 'STALE-BUDGET');
+      return stale.data;
+    }
+    reply.code(429);
+    return {
+      error: 'FlashAlpha daily budget exhausted',
+      cap: FA_DAILY_CAP,
+      used: getBudgetUsed(FA_BUDGET_KEY),
+      note: 'Global free-tier cap (all symbols share 5/day). Cache TTL 6h.',
+    };
+  }
+
+  try {
+    const { data, fromCache } = await getOrFetch(
+      `fa:levels:${symbol}`,
+      FA_CACHE_TTL,
+      async () => {
+        recordBudget(FA_BUDGET_KEY, 1);
+        const res = await fetch(
+          `https://lab.flashalpha.com/v1/exposure/levels/${symbol}`,
+          { headers: { 'X-Api-Key': FLASHALPHA_API_KEY }, signal: AbortSignal.timeout(15_000) },
+        );
+        if (!res.ok) {
+          const err = new Error(`FlashAlpha HTTP ${res.status}`);
+          err.status = res.status;
+          throw err;
+        }
+        return res.json();
+      },
+      { allowStaleOnError: true },
+    );
+    reply.header('X-Cache', fromCache ? 'HIT' : 'MISS');
+    return data;
+  } catch (err) {
+    reply.code(err.status === 429 ? 429 : 502);
+    return { error: 'FlashAlpha fetch failed', detail: err.message };
+  }
+});
+
+fastify.get('/api/flashalpha/exposure/gex/:symbol', async (request, reply) => {
+  const symbol = String(request.params.symbol || '').toUpperCase().replace(/[^A-Z0-9.-]/g, '') || 'AAPL';
+  const expiration = String(request.query.expiration || '').replace(/[^0-9-]/g, '');
+  if (!FLASHALPHA_API_KEY) {
+    reply.code(503);
+    return { error: 'FLASHALPHA_API_KEY not configured' };
+  }
+  if (!budgetAllows(FA_BUDGET_KEY, FA_DAILY_CAP, 0.80)) {
+    const stale = peek(`fa:gex:${symbol}:${expiration}`);
+    if (stale) {
+      reply.header('X-Cache', 'STALE-BUDGET');
+      return stale.data;
+    }
+    reply.code(429);
+    return {
+      error: 'FlashAlpha daily budget exhausted',
+      cap: FA_DAILY_CAP,
+      used: getBudgetUsed(FA_BUDGET_KEY),
+      note: 'Global free-tier cap (all symbols share 5/day). Cache TTL 6h.',
+    };
+  }
+
+  try {
+    const { data, fromCache } = await getOrFetch(
+      `fa:gex:${symbol}:${expiration}`,
+      FA_CACHE_TTL,
+      async () => {
+        recordBudget(FA_BUDGET_KEY, 1);
+        const url = new URL(`https://lab.flashalpha.com/v1/exposure/gex/${symbol}`);
+        if (expiration) url.searchParams.set('expiration', expiration);
+        const res = await fetch(url.toString(), {
+          headers: { 'X-Api-Key': FLASHALPHA_API_KEY },
+          signal: AbortSignal.timeout(15_000),
+        });
+        if (!res.ok) {
+          const err = new Error(`FlashAlpha HTTP ${res.status}`);
+          err.status = res.status;
+          throw err;
+        }
+        return res.json();
+      },
+      { allowStaleOnError: true },
+    );
+    reply.header('X-Cache', fromCache ? 'HIT' : 'MISS');
+    return data;
+  } catch (err) {
+    reply.code(err.status === 429 ? 429 : 502);
+    return { error: 'FlashAlpha fetch failed', detail: err.message };
+  }
 });
 
 // ── OPRA skeleton (PR-10) ─────────────────────────────────────
@@ -1351,6 +1837,19 @@ try {
   console.error('static register failed', err);
 }
 
+// Serve /docs/* markdown files for the Academy reader
+try {
+  await fastify.register(fastifyStatic, {
+    root: join(__dirname, 'docs'),
+    prefix: '/docs/',
+    decorateReply: false,
+    wildcard: false,
+    maxAge: '1d',
+  });
+} catch (err) {
+  console.warn('docs static failed', err?.message || err);
+}
+
 fastify.setNotFoundHandler((request, reply) => {
   const path = (request.url || '').split('?')[0];
   // Missing build assets must 404 (not return HTML) so the browser surfaces the real error
@@ -1376,12 +1875,34 @@ async function warmSharedCaches(mode = 'fast') {
   try {
     await fetch(`${base}/api/boot/briefing`).catch(() => null);
     await fetch(`${base}/api/options/SPY`).catch(() => null);
+    // Warm greeks for SPY so Vol·GRK is not a cold yfinance re-fetch after chain.
+    await fetch(`${base}/api/macrovol/greeks/SPY`).catch(() => null);
     await fetch(`${base}/api/deribit/market/BTC`).catch(() => null);
+    // Light FRED core — first Rates tab paint should hit Node cache.
+    await fetch(`${base}/api/macrovol/rates/summary`).catch(() => null);
 
-    // Finnhub — high free allowance; keep SPY news + quote warm for all users
+    // Finnhub — high free allowance; keep SPY board warm for all users
     for (const sym of DESK_WARM_SYMBOLS) {
       await fetch(`${base}/api/finnhub/quote?symbol=${sym}`).catch(() => null);
       await fetch(`${base}/api/finnhub/news?symbol=${sym}&limit=8`).catch(() => null);
+      // 24h-TTL meta: only every ~2h of warm ticks (tick ≈ 3 min → 40 ticks)
+      if (warmTick % 40 === 0) {
+        await fetch(`${base}/api/finnhub/recommendation?symbol=${sym}`).catch(() => null);
+        await fetch(`${base}/api/finnhub/peers?symbol=${sym}`).catch(() => null);
+      }
+    }
+    // Economic calendar once per slow cycle / ~6h (TTL owns the rest)
+    if (mode === 'slow' || warmTick % 100 === 0) {
+      await fetch(`${base}/api/finnhub/economic-calendar`).catch(() => null);
+    }
+    // Macro stress pack (FRED free) — light path already TTL'd via briefing
+    if (mode === 'slow' || warmTick % 10 === 0) {
+      await fetch(`${base}/api/macrovol/macro/stress`).catch(() => null);
+      await fetch(`${base}/api/macrovol/macro/primary`).catch(() => null);
+    }
+    // STIR strip — cold yfinance ~10s; keep shared Node cache warm for Rates tab
+    if (mode === 'slow' || warmTick % 20 === 0) {
+      await fetch(`${base}/api/macrovol/stir/strip`).catch(() => null);
     }
 
     // Alpha Vantage — scarce daily + 5/min: one call per slow cycle, staggered

@@ -1,25 +1,45 @@
 import { useMemo, useState } from 'react';
-import { Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ComposedChart } from 'recharts';
+import {
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  ComposedChart,
+  ReferenceLine,
+} from 'recharts';
 import { useTerminalStore } from '../../store/terminalStore';
 import { Panel } from '../terminal/Panel';
 import { fmtPct } from '../../lib/format';
-import { cn } from '../../lib/utils';
 import { DiagnosticsStrip } from './DiagnosticsStrip';
 import { fitSVI, svi } from '../../lib/options/svi';
+import { yearFractionFromSlice } from '../../lib/options/time';
 import type { OptionQuote } from '../../lib/options/types';
 import { Explain } from '../common/Explain';
-import { CHART, CHART_SERIES_ORDINAL, chartAxisTick, chartGridProps, chartTooltipStyle } from '../../lib/chartTheme';
+import { CHART, CHART_SERIES_ORDINAL } from '../../lib/chartTheme';
+import { DeskChartFrame, deskChartChrome, deskAxisLabel } from '../desk/DeskChart';
+import { PrintStrip } from '../desk/PrintStrip';
+import { DESK_SERIES } from '../desk/seriesGrammar';
+import { DeskModeBar, deskModeChipClass } from '../terminal/DeskModeBar';
+import { cn } from '../../lib/utils';
 
 type XMode = 'moneyness' | 'strike' | 'delta';
 
+const X_MODE_ITEMS = [
+  { id: 'moneyness', label: 'Moneyness' },
+  { id: 'strike', label: 'Strike' },
+  { id: 'delta', label: 'Delta' },
+] as const;
+
 function interpolateIV(quotes: OptionQuote[], targetDelta: number): number | null {
   const sorted = [...quotes]
-    .filter(q => q.delta != null && q.iv != null)
+    .filter((q) => q.delta != null && q.iv != null)
     .sort((a, b) => (a.delta ?? 0) - (b.delta ?? 0));
   if (sorted.length < 2) return null;
 
-  const deltas = sorted.map(q => q.delta!);
-  const ivs = sorted.map(q => q.iv!);
+  const deltas = sorted.map((q) => q.delta!);
+  const ivs = sorted.map((q) => q.iv!);
 
   if (targetDelta <= deltas[0]!) return ivs[0]!;
   if (targetDelta >= deltas[deltas.length - 1]!) return ivs[ivs.length - 1]!;
@@ -33,26 +53,31 @@ function interpolateIV(quotes: OptionQuote[], targetDelta: number): number | nul
   return null;
 }
 
-function computeSkewMetrics(snapshot: ReturnType<typeof useTerminalStore.getState>['snapshot'], expiryIdx: number) {
+function computeSkewMetrics(
+  snapshot: ReturnType<typeof useTerminalStore.getState>['snapshot'],
+  expiryIdx: number,
+) {
   if (!snapshot) return null;
   const slice = snapshot.expiries[expiryIdx];
   if (!slice) return null;
 
-  const allQuotes = [...slice.calls, ...slice.puts].filter(q => q.iv != null && q.delta != null);
+  const allQuotes = [...slice.calls, ...slice.puts].filter((q) => q.iv != null && q.delta != null);
   if (allQuotes.length < 5) return null;
 
-  const atmQuote = allQuotes.reduce((best, q) =>
-    Math.abs(q.strike - snapshot.spot) < Math.abs(best.strike - snapshot.spot) ? q : best
-  , allQuotes[0]!);
+  const atmQuote = allQuotes.reduce(
+    (best, q) =>
+      Math.abs(q.strike - snapshot.spot) < Math.abs(best.strike - snapshot.spot) ? q : best,
+    allQuotes[0]!,
+  );
 
   const atmIV = atmQuote.iv!;
-  const callQuotes = slice.calls.filter(q => q.delta != null && q.delta > 0 && q.iv != null);
-  const putQuotes = slice.puts.filter(q => q.delta != null && q.delta < 0 && q.iv != null);
+  const callQuotes = slice.calls.filter((q) => q.delta != null && q.delta > 0 && q.iv != null);
+  const putQuotes = slice.puts.filter((q) => q.delta != null && q.delta < 0 && q.iv != null);
 
   const iv25c = interpolateIV(callQuotes, 0.25);
-  const iv10c = interpolateIV(callQuotes, 0.10);
+  const iv10c = interpolateIV(callQuotes, 0.1);
   const iv25p = interpolateIV(putQuotes, -0.25);
-  const iv10p = interpolateIV(putQuotes, -0.10);
+  const iv10p = interpolateIV(putQuotes, -0.1);
 
   // Equity desk convention: RR = put wing − call wing (rich puts → positive RR).
   // Fly = average wing − ATM (smile curvature).
@@ -78,12 +103,23 @@ interface SVICurvePoint {
   sviIv: number;
 }
 
+function xModeTitle(mode: XMode): string {
+  if (mode === 'moneyness') return 'Log-m (%)';
+  if (mode === 'delta') return 'Delta';
+  return 'Strike';
+}
+
+function atmX(mode: XMode, spot: number): number | null {
+  if (mode === 'moneyness') return 0;
+  if (mode === 'strike') return spot;
+  return null; // delta: ATM straddles ~ ±0.5; single line is misleading
+}
+
 export function SmileView() {
-  const snapshot = useTerminalStore(s => s.snapshot);
-  const surface = useTerminalStore(s => s.surface);
-  const sviReadout = useTerminalStore(s => s.sviReadout);
-  const arbResult = useTerminalStore(s => s.arbResult);
-  const spot = snapshot?.spot ?? 100; void spot;
+  const snapshot = useTerminalStore((s) => s.snapshot);
+  const surface = useTerminalStore((s) => s.surface);
+  const sviReadout = useTerminalStore((s) => s.sviReadout);
+  const arbResult = useTerminalStore((s) => s.arbResult);
   const [xMode, setXMode] = useState<XMode>('moneyness');
   const [showBidAsk, setShowBidAsk] = useState(false);
   const [selectedExpiryIdx, setSelectedExpiryIdx] = useState<number>(0);
@@ -92,23 +128,29 @@ export function SmileView() {
     if (!snapshot) return [];
     return snapshot.expiries.slice(0, 6).map((slice, i) => {
       const calls: DataPoint[] = slice.calls
-        .filter(q => q.iv != null && q.iv > 0)
+        .filter((q) => q.iv != null && q.iv > 0)
         .sort((a, b) => a.strike - b.strike)
-        .map(q => ({
-          x: xMode === 'moneyness' ? Math.log(q.strike / snapshot.spot) * 100
-            : xMode === 'delta' ? (q.delta ?? 0)
-            : q.strike,
+        .map((q) => ({
+          x:
+            xMode === 'moneyness'
+              ? Math.log(q.strike / snapshot.spot) * 100
+              : xMode === 'delta'
+                ? (q.delta ?? 0)
+                : q.strike,
           iv: q.iv! * 100,
           type: 'call' as const,
           strike: q.strike,
         }));
       const puts: DataPoint[] = slice.puts
-        .filter(q => q.iv != null && q.iv > 0)
+        .filter((q) => q.iv != null && q.iv > 0)
         .sort((a, b) => a.strike - b.strike)
-        .map(q => ({
-          x: xMode === 'moneyness' ? Math.log(q.strike / snapshot.spot) * 100
-            : xMode === 'delta' ? (q.delta ?? 0)
-            : q.strike,
+        .map((q) => ({
+          x:
+            xMode === 'moneyness'
+              ? Math.log(q.strike / snapshot.spot) * 100
+              : xMode === 'delta'
+                ? (q.delta ?? 0)
+                : q.strike,
           iv: q.iv! * 100,
           type: 'put' as const,
           strike: q.strike,
@@ -120,25 +162,23 @@ export function SmileView() {
         visible: i === selectedExpiryIdx,
         calls,
         puts,
-        // Combined for backward compat + bid-ask computation.
         all: [...calls, ...puts].sort((a, b) => a.x - b.x),
       };
     });
   }, [snapshot, xMode, selectedExpiryIdx]);
 
-  // SVI fitted curve for the selected expiry.
   const sviCurve = useMemo(() => {
     if (!surface || !snapshot) return null;
     const expiryIdx = selectedExpiryIdx;
     const row = surface.iv[expiryIdx];
     if (!row) return null;
     const dte = surface.dtes[expiryIdx] ?? 30;
-    const T = Math.max(dte / 365, 1e-8);
-    // Fit SVI on total variance w = IV²·T for this expiry.
+    const expiry = surface.expiries[expiryIdx] ?? snapshot.expiries[expiryIdx]?.expiry ?? '';
+    const T = yearFractionFromSlice({ expiry, dte });
     const fit = fitSVI(surface.strikes, row, snapshot.spot, T);
     if (!fit) return null;
 
-    const kStrikes = surface.strikes.map(s => Math.log(s / snapshot.spot));
+    const kStrikes = surface.strikes.map((s) => Math.log(s / snapshot.spot));
     const minK = Math.min(...kStrikes);
     const maxK = Math.max(...kStrikes);
     const points: SVICurvePoint[] = [];
@@ -152,9 +192,8 @@ export function SmileView() {
       if (xMode === 'moneyness') {
         x = k * 100;
       } else if (xMode === 'delta') {
-        // Estimate delta for a straddle-like reference.
-        const d1 = (k + (0 + T * 0.5 * iv * iv)) / (iv * Math.sqrt(T));
-        const nd = 0.5 * (1 + (d1 / Math.sqrt(2)) * (1 - d1 * d1 / 6)); // approx normCDF
+        const d1 = (k + T * 0.5 * iv * iv) / (iv * Math.sqrt(T));
+        const nd = 0.5 * (1 + (d1 / Math.sqrt(2)) * (1 - (d1 * d1) / 6));
         x = nd * 2 - 1;
       } else {
         x = strike;
@@ -164,139 +203,205 @@ export function SmileView() {
     return { points, params: fit.params, rmse: fit.rmse };
   }, [surface, snapshot, selectedExpiryIdx, xMode]);
 
-  const skewMetrics = useMemo(() => {
-    return computeSkewMetrics(snapshot, selectedExpiryIdx);
-  }, [snapshot, selectedExpiryIdx]);
-
-  const xLabel = xMode === 'moneyness' ? 'Log-Moneyness (%)'
-    : xMode === 'delta' ? 'Delta'
-    : 'Strike';
+  const skewMetrics = useMemo(
+    () => computeSkewMetrics(snapshot, selectedExpiryIdx),
+    [snapshot, selectedExpiryIdx],
+  );
 
   if (!snapshot) {
     return (
       <Panel title="IV Smile / Skew" className="h-full">
-        <div className="flex items-center justify-center h-full text-muted-foreground text-xs font-mono">No data</div>
+        <div className="flex h-full items-center justify-center font-mono text-xs text-muted-foreground">
+          No data
+        </div>
       </Panel>
     );
   }
 
   const colors = CHART_SERIES_ORDINAL;
+  const chrome = deskChartChrome();
+  const xTitle = xModeTitle(xMode);
+  const atm = atmX(xMode, snapshot.spot);
+
+  const printItems = [
+    {
+      label: 'ATM',
+      value: skewMetrics
+        ? `${(skewMetrics.atmIV * 100).toFixed(1)}%`
+        : fmtPct(snapshot.expiries[selectedExpiryIdx]?.atmIV ?? 0),
+      title: 'ATM IV for selected expiry',
+    },
+    {
+      label: '25Δ RR',
+      value:
+        skewMetrics?.rr25 != null
+          ? `${skewMetrics.rr25 > 0 ? '+' : ''}${(skewMetrics.rr25 * 100).toFixed(2)}%`
+          : '—',
+      tone:
+        skewMetrics?.rr25 != null
+          ? skewMetrics.rr25 > 0
+            ? ('up' as const)
+            : ('down' as const)
+          : ('muted' as const),
+      title: 'RR = IV(25Δ put) − IV(25Δ call); + = put wing richer',
+    },
+    {
+      label: '25Δ Fly',
+      value: skewMetrics?.fly25 != null ? `${(skewMetrics.fly25 * 100).toFixed(2)}%` : '—',
+      title: 'Smile curvature (avg wing − ATM)',
+    },
+    {
+      label: '10Δ RR',
+      value:
+        skewMetrics?.rr10 != null
+          ? `${skewMetrics.rr10 > 0 ? '+' : ''}${(skewMetrics.rr10 * 100).toFixed(2)}%`
+          : '—',
+      tone:
+        skewMetrics?.rr10 != null
+          ? skewMetrics.rr10 > 0
+            ? ('up' as const)
+            : ('down' as const)
+          : ('muted' as const),
+      title: 'RR = IV(10Δ put) − IV(10Δ call)',
+    },
+    ...(sviCurve
+      ? [
+          {
+            label: 'SVI RMSE',
+            value: `${(sviCurve.rmse * 100).toFixed(3)}%`,
+            title: 'SVI fit RMSE on selected expiry',
+          },
+        ]
+      : []),
+  ];
 
   return (
     <Panel title="IV Smile / Skew" className="h-full">
-      <div className="flex flex-col h-full">
-        <div className="flex items-center gap-2 px-2 py-1 border-b border-border">
+      <div className="flex h-full min-h-0 flex-col gap-1">
+        <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border px-2 py-1">
+          <DeskModeBar
+            items={[...X_MODE_ITEMS]}
+            activeId={xMode}
+            onSelect={(id) => setXMode(id as XMode)}
+          />
           <button
-            onClick={() => setXMode('moneyness')}
-            className={cn('px-2 py-0.5 text-type-xs font-mono rounded', xMode === 'moneyness' ? 'bg-secondary text-foreground ring-1 ring-border' : 'text-muted-foreground')}
-          >
-            Moneyness
-          </button>
-          <button
-            onClick={() => setXMode('strike')}
-            className={cn('px-2 py-0.5 text-type-xs font-mono rounded', xMode === 'strike' ? 'bg-secondary text-foreground ring-1 ring-border' : 'text-muted-foreground')}
-          >
-            Strike
-          </button>
-          <button
-            onClick={() => setXMode('delta')}
-            className={cn('px-2 py-0.5 text-type-xs font-mono rounded', xMode === 'delta' ? 'bg-secondary text-foreground ring-1 ring-border' : 'text-muted-foreground')}
-          >
-            Delta
-          </button>
-          <button
-            onClick={() => setShowBidAsk(s => !s)}
-            className={cn('px-2 py-0.5 text-type-xs font-mono rounded', showBidAsk ? 'bg-secondary text-foreground ring-1 ring-border' : 'text-muted-foreground')}
+            type="button"
+            onClick={() => setShowBidAsk((s) => !s)}
+            className={deskModeChipClass(showBidAsk)}
           >
             Bid-Ask
           </button>
           <div className="flex-1" />
-          <span className="text-type-xs text-muted-foreground font-mono"><Explain term="atmIV">ATM IV</Explain>: {fmtPct(snapshot.expiries[selectedExpiryIdx]?.atmIV ?? 0)}</span>
+          <span className="font-mono text-type-xs text-muted-foreground">
+            <Explain term="atmIV">ATM IV</Explain>:{' '}
+            {fmtPct(snapshot.expiries[selectedExpiryIdx]?.atmIV ?? 0)}
+          </span>
         </div>
 
-        {skewMetrics && (
-          <div className="flex gap-3 px-3 py-1 border-b border-border text-type-xs font-mono items-center">
-            <span className="text-muted-foreground"><Explain term="atmIV">ATM</Explain>: <span className="text-foreground">{(skewMetrics.atmIV * 100).toFixed(1)}%</span></span>
-            <span className="text-border">|</span>
-            <span className="text-muted-foreground" title="RR = IV(25Δ put) − IV(25Δ call); + = put wing richer">
-              <Explain term="riskReversal">25Δ RR</Explain>:
-              <span className={skewMetrics.rr25 != null ? (skewMetrics.rr25 > 0 ? ' text-up' : ' text-down') : ' text-muted'}>
-                {skewMetrics.rr25 != null ? `${skewMetrics.rr25 > 0 ? '+' : ''}${(skewMetrics.rr25 * 100).toFixed(2)}%` : ' —'}
-              </span>
-            </span>
-            <span className="text-border">|</span>
-            <span className="text-muted-foreground"><Explain term="butterfly">25Δ Fly</Explain>: <span className="text-purple">{skewMetrics.fly25 != null ? `${(skewMetrics.fly25 * 100).toFixed(2)}%` : '—'}</span></span>
-            <span className="text-border">|</span>
-            <span className="text-muted-foreground" title="RR = IV(10Δ put) − IV(10Δ call)">
-              <Explain term="riskReversal">10Δ RR</Explain>:
-              <span className={skewMetrics.rr10 != null ? (skewMetrics.rr10 > 0 ? ' text-up' : ' text-down') : ' text-muted'}>
-                {skewMetrics.rr10 != null ? `${skewMetrics.rr10 > 0 ? '+' : ''}${(skewMetrics.rr10 * 100).toFixed(2)}%` : ' —'}
-              </span>
-            </span>
-          </div>
-        )}
+        <PrintStrip items={printItems} className="mx-1" />
 
-        <DiagnosticsStrip sviReadout={sviReadout} arbResult={arbResult} data-testid="smile-diagnostics" />
+        <DiagnosticsStrip
+          sviReadout={sviReadout}
+          arbResult={arbResult}
+          data-testid="smile-diagnostics"
+        />
 
-        <div className="flex-1">
+        <DeskChartFrame xTitle={xTitle} yTitle="IV %" className="min-h-0 flex-1">
           <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart margin={{ top: 10, right: 20, bottom: 10, left: 20 }}>
-              <CartesianGrid {...chartGridProps} />
+            <ComposedChart margin={chrome.margin}>
+              <CartesianGrid {...chrome.grid} />
               <XAxis
                 dataKey="x"
-                tick={chartAxisTick}
-                tickLine={false}
-                label={{ value: xLabel, position: 'bottom', fontSize: 10, fill: CHART.axisMuted }}
-                domain={['auto', 'auto']}
                 type="number"
+                domain={['auto', 'auto']}
+                tick={chrome.tick}
+                tickLine={false}
+                stroke={chrome.axisLine}
+                label={deskAxisLabel(xTitle)}
               />
               <YAxis
-                tick={chartAxisTick}
+                tick={chrome.tick}
                 tickLine={false}
+                stroke={chrome.axisLine}
                 tickFormatter={(v: number) => `${v.toFixed(1)}%`}
                 domain={['auto', 'auto']}
+                label={deskAxisLabel('IV %', 'insideLeft')}
               />
               <Tooltip
-                contentStyle={chartTooltipStyle}
+                contentStyle={chrome.tooltipStyle}
                 labelStyle={{ color: CHART.tooltipFg }}
               />
 
-              {/* Calls — solid lines */}
+              {atm != null && (
+                <ReferenceLine
+                  x={atm}
+                  stroke={DESK_SERIES.spot}
+                  strokeDasharray="3 3"
+                  label={{
+                    value: 'ATM',
+                    position: 'top',
+                    fill: DESK_SERIES.spot,
+                    fontSize: 9,
+                    fontFamily: 'JetBrains Mono',
+                  }}
+                />
+              )}
+
               {chartData.map((slice, i) => (
                 <Line
                   key={`call-${slice.expiry}`}
                   data={slice.calls}
                   type="monotone"
                   dataKey="iv"
-                  stroke={i === selectedExpiryIdx ? CHART.series.selected : colors[i % colors.length]}
+                  stroke={
+                    i === selectedExpiryIdx ? CHART.series.selected : colors[i % colors.length]
+                  }
                   strokeWidth={i === selectedExpiryIdx ? 2.5 : 1}
                   strokeOpacity={i === selectedExpiryIdx ? 1 : 0.3}
-                  dot={i === selectedExpiryIdx ? { r: 3, fill: CHART.tooltipBg, stroke: CHART.series.selected, strokeWidth: 1.5 } : false}
+                  dot={
+                    i === selectedExpiryIdx
+                      ? {
+                          r: 3,
+                          fill: CHART.tooltipBg,
+                          stroke: CHART.series.selected,
+                          strokeWidth: 1.5,
+                        }
+                      : false
+                  }
                   name={`${slice.label} Calls`}
                   connectNulls
-                  points={undefined}
+                  isAnimationActive={false}
                 />
               ))}
 
-              {/* Puts — dashed lines */}
               {chartData.map((slice, i) => (
                 <Line
                   key={`put-${slice.expiry}`}
                   data={slice.puts}
                   type="monotone"
                   dataKey="iv"
-                  stroke={i === selectedExpiryIdx ? CHART.series.selected : colors[i % colors.length]}
+                  stroke={
+                    i === selectedExpiryIdx ? CHART.series.selected : colors[i % colors.length]
+                  }
                   strokeWidth={i === selectedExpiryIdx ? 2 : 0.8}
                   strokeOpacity={i === selectedExpiryIdx ? 0.8 : 0.2}
                   strokeDasharray={i === selectedExpiryIdx ? '6 3' : '3 3'}
-                  dot={i === selectedExpiryIdx ? { r: 2.5, fill: CHART.tooltipBg, stroke: CHART.series.selected, strokeWidth: 1 } : false}
+                  dot={
+                    i === selectedExpiryIdx
+                      ? {
+                          r: 2.5,
+                          fill: CHART.tooltipBg,
+                          stroke: CHART.series.selected,
+                          strokeWidth: 1,
+                        }
+                      : false
+                  }
                   name={`${slice.label} Puts`}
                   connectNulls
-                  points={undefined}
+                  isAnimationActive={false}
                 />
               ))}
 
-              {/* SVI fitted curve overlay */}
               {sviCurve && (
                 <Line
                   data={sviCurve.points}
@@ -312,24 +417,32 @@ export function SmileView() {
               )}
             </ComposedChart>
           </ResponsiveContainer>
-        </div>
+        </DeskChartFrame>
 
         {sviCurve && (
-          <div className="flex gap-3 px-3 py-0.5 border-t border-border text-type-2xs font-mono text-muted-foreground">
-            <span>SVI: a={sviCurve.params.a.toFixed(4)} b={sviCurve.params.b.toFixed(4)} ρ={sviCurve.params.rho.toFixed(3)} m={sviCurve.params.m.toFixed(4)} σ={sviCurve.params.sigma.toFixed(4)}</span>
-            <span className="text-purple"><Explain term="sviRmse">RMSE</Explain> {(sviCurve.rmse * 100).toFixed(3)}%</span>
+          <div className="flex shrink-0 gap-3 border-t border-border px-3 py-0.5 font-mono text-type-2xs text-muted-foreground">
+            <span>
+              SVI: a={sviCurve.params.a.toFixed(4)} b={sviCurve.params.b.toFixed(4)} ρ=
+              {sviCurve.params.rho.toFixed(3)} m={sviCurve.params.m.toFixed(4)} σ=
+              {sviCurve.params.sigma.toFixed(4)}
+            </span>
+            <span className="text-purple">
+              <Explain term="sviRmse">RMSE</Explain> {(sviCurve.rmse * 100).toFixed(3)}%
+            </span>
           </div>
         )}
 
-        <div className="flex flex-wrap gap-1 px-2 py-1 border-t border-border">
+        <div className="flex shrink-0 flex-wrap gap-1 border-t border-border px-2 py-1">
           {chartData.map((slice, i) => (
             <button
               key={slice.expiry}
+              type="button"
               onClick={() => setSelectedExpiryIdx(i)}
-              className={cn('px-1.5 py-0.5 text-type-xs font-mono rounded transition-colors',
-                i === selectedExpiryIdx ? 'bg-secondary text-foreground ring-1 ring-border' : 'bg-muted text-muted-foreground hover:text-foreground'
+              className={cn(
+                deskModeChipClass(i === selectedExpiryIdx),
+                'border-l-2',
               )}
-              style={{ borderLeft: `2px solid ${colors[i % colors.length]}` }}
+              style={{ borderLeftColor: colors[i % colors.length] }}
             >
               {slice.label}
             </button>

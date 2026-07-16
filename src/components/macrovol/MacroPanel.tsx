@@ -65,6 +65,17 @@ export function MacroPanel() {
         if (cancelled) return;
         setMeta({ as_of: summary.as_of, source: summary.source });
 
+        // Paint summary values immediately — series trends enhance in background.
+        const fromSummary: Record<string, CardState> = {};
+        for (const ind of INDICATORS) {
+          fromSummary[ind.key] = {
+            value: (summary as MacroSummary)[ind.key] ?? null,
+            trend: 'flat',
+            changeLabel: '',
+          };
+        }
+        setCards(fromSummary);
+
         const entries = await Promise.all(
           INDICATORS.map(async (ind) => {
             const limit = ind.key === 'fed_balance_sheet' ? 30 : 24;

@@ -1,5 +1,6 @@
 import type { SurfaceGrid, SVIParams, SVIFit } from './types';
 import { fitSVI } from './svi';
+import { yearFractionFromSlice } from './time';
 
 export interface SmileSlice {
   expiry: string;
@@ -80,7 +81,7 @@ export function sviReadout(grid: SurfaceGrid, spot: number): SVIReadout | null {
   let best: SVIFit & { expiry: string } | null = null;
   for (let r = 0; r < grid.iv.length; r++) {
     const dte = grid.dtes?.[r] ?? dteFromExpiry(grid.expiries[r]!);
-    const T = Math.max(dte / 365, 1e-8);
+    const T = yearFractionFromSlice({ expiry: grid.expiries[r]!, dte });
     // RMSE is in total-variance units; prefer denser near-term smiles by sample count then RMSE.
     const fit = fitSVI(grid.strikes, grid.iv[r]!, spot, T);
     if (fit && (!best || fit.samples > best.samples || (fit.samples === best.samples && fit.rmse < best.rmse))) {

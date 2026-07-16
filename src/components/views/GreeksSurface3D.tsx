@@ -309,7 +309,7 @@ export function GreeksSurface3D({
       <EmptyState
         kind="no-data"
         title="No surface for 3D mesh"
-        body="Load MacroVol greeks or a LIVE chain to render the mesh."
+        body="Load yfinance greeks or a LIVE chain to render the mesh."
         className="h-full"
       />
     );
@@ -320,7 +320,7 @@ export function GreeksSurface3D({
       <EmptyState
         kind="no-data"
         title="Building mesh…"
-        body={macrovolGrid ? 'MacroVol grid not dense enough yet; waiting for desk chain…' : 'Need ≥2 expiries on the chain.'}
+        body={macrovolGrid ? 'Greeks grid not dense enough yet; waiting for desk chain…' : 'Need ≥2 expiries on the chain.'}
         className="h-full"
       />
     );
@@ -331,7 +331,7 @@ export function GreeksSurface3D({
   const rSrc = macrovolMeta?.r_source;
   const provLabel =
     info.source === 'macrovol'
-      ? `MacroVol OTM grid · same API as Plotly`
+      ? `yfinance OTM grid · same API as Plotly`
       : `desk LIVE chain · fallback`;
 
   return (
@@ -355,7 +355,7 @@ export function GreeksSurface3D({
         {q != null && Number.isFinite(q) && <span>q={(q * 100).toFixed(2)}%</span>}
         {info.source === 'desk' && snapshot && (
           <span className="text-muted-foreground/80">
-            {snapshot.symbol} · may differ vs MacroVol when r/q/IV source differ
+            {snapshot.symbol} · may differ vs greeks API when r/q/IV source differ
           </span>
         )}
       </div>

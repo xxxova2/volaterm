@@ -39,7 +39,11 @@ export function GreeksSensitivityView() {
 
   return (
     <div className="flex h-full gap-2">
-      <Panel title="Spot Sensitivity" subtitle="Greeks under ±5% spot shift" className="flex-1">
+      <Panel
+        title="Spot Sensitivity"
+        subtitle="Listed unit Σ under ±5% spot (not a book)"
+        className="flex-1"
+      >
         <div className="h-full p-2">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={spotChartData} margin={{ top: 8, right: 12, bottom: 18, left: 10 }}>
@@ -70,7 +74,11 @@ export function GreeksSensitivityView() {
         </div>
       </Panel>
 
-      <Panel title="IV Sensitivity" subtitle="Greeks under ±20% IV shift" className="flex-1">
+      <Panel
+        title="IV Sensitivity"
+        subtitle="Listed unit Σ under ±20% IV (not a book)"
+        className="flex-1"
+      >
         <div className="h-full p-2">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={ivChartData} margin={{ top: 8, right: 12, bottom: 18, left: 10 }}>

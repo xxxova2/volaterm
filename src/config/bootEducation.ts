@@ -1,6 +1,6 @@
 /**
  * Short educational cards shown on first-open boot while chains load.
- * Distilled from docs/EDUCATION_OPTIONS_MACROS_RATES.md (public teaching sources).
+ * Distilled from docs/options/EDUCATION_OPTIONS_MACROS_RATES.md (public teaching sources).
  * Educational only — not trade signals.
  */
 
@@ -83,14 +83,22 @@ export const BOOT_EDUCATION: BootEduCard[] = [
     title: '2s10s & front end',
     body:
       'Curve steepness (2s10s, 3m10y) frames risk appetite and policy path. STIR / SOFR futures price near-term cuts or holds that options vol often co-moves with.',
-    source: 'FRED · MacroVol rates',
+    source: 'FRED · NYFed rates',
   },
   {
     id: 'vrp',
     topic: 'market',
     title: 'VRP is not free either',
     body:
-      'Implied vol usually sits above realized — sellers of premium earn a risk premium only if they survive γ/vanna path risk and costs. Short weekly straddles harvest VRP with more γ risk.',
+      'Implied vol usually sits above realized — sellers of premium earn a risk premium only if they survive γ/vanna path risk and costs. Compare ATM IV to RV20, not to VIXCLS (that is index basis, not VRP).',
     source: 'Common VRP discussions · Benn',
+  },
+  {
+    id: 'surface-shape',
+    topic: 'market',
+    title: 'Surface shape can move without vol moving',
+    body:
+      'Between chain refreshes we reprice greeks at sticky IV. Spot moves → moneyness grid shifts → 3D shape can change while fixed-strike IV is frozen. Check VOL strip path: sticky-IV vs full-chain, and ΔATM vs ΔRR25.',
+    source: 'Academy · sticky strike / desk practice',
   },
 ];

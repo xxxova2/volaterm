@@ -95,6 +95,50 @@ describe('upstreamCache', () => {
     expect(s.budgets.finnhub).toBeTruthy();
   });
 
+  it('cacheIf false skips persist so next call reloads', async () => {
+    let calls = 0;
+    const key = `test:cacheif:${Date.now()}`;
+    const r1 = await getOrFetch(
+      key,
+      60_000,
+      async () => {
+        calls += 1;
+        return { status: 503, body: { error: 'upstream' } };
+      },
+      { cacheIf: (d) => d.status >= 200 && d.status < 300 },
+    );
+    const r2 = await getOrFetch(
+      key,
+      60_000,
+      async () => {
+        calls += 1;
+        return { status: 200, body: { ok: true } };
+      },
+      { cacheIf: (d) => d.status >= 200 && d.status < 300 },
+    );
+    expect(r1.data.status).toBe(503);
+    expect(r2.data.status).toBe(200);
+    expect(calls).toBe(2);
+    expect(r1.fromCache).toBe(false);
+  });
+
+  it('stale:true when loader throws and prior hit exists', async () => {
+    const key = `test:stale:${Date.now()}`;
+    await getOrFetch(key, 1, async () => ({ v: 1 })); // cache then expire
+    await new Promise((r) => setTimeout(r, 5));
+    const r = await getOrFetch(
+      key,
+      1,
+      async () => {
+        throw new Error('boom');
+      },
+      { allowStaleOnError: true },
+    );
+    expect(r.data).toEqual({ v: 1 });
+    expect(r.stale).toBe(true);
+    expect(r.fromCache).toBe(true);
+  });
+
   it('exports TTLs used by options and Deribit routes', () => {
     expect(TTL.OPTIONS_MS).toBeGreaterThan(0);
     expect(TTL.DERIBIT_MS).toBeGreaterThan(0);

@@ -22,7 +22,8 @@ const TENOR_YEARS: { key: keyof FmpTreasuryRate; years: number }[] = [
 /**
  * Interpolate continuously-compounded-equivalent simple yield (decimal)
  * from the FMP treasury curve for a given year fraction T.
- * Falls back to DATA_CONFIG.market.RISK_FREE_RATE when curve missing.
+ * Falls back to DATA_CONFIG.market.RISK_FREE_RATE (static) when curve missing —
+ * prefer liveRFR / SOFR when available at the call site.
  */
 export function termRiskFreeRate(
   rates: FmpTreasuryRate | FmpTreasuryRate[] | null | undefined,
@@ -61,7 +62,8 @@ export function termRiskFreeRate(
 /**
  * Estimate continuous dividend yield.
  * Prefer explicit lastDivAnnual / price when present on profile-like objects;
- * else fall back to symbol preset or global default.
+ * else fall back to symbol preset or DATA_CONFIG.market.DIVIDEND_YIELD (static).
+ * Live path should pass FMP/yfinance profile when available.
  */
 export function estimateDividendYield(
   symbol: string,

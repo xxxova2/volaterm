@@ -26,7 +26,7 @@ export type DeskNavItem = {
  * Deep-link ids (sec-stir, sec-mm-strip, …) still map to modes in RatesView.
  */
 export const RATES_SECTIONS: DeskNavItem[] = [
-  { id: 'rates-mode-funding', label: 'Funding', short: 'Fund', apis: ['FRED', 'NYFed', 'MacroVol'] },
+  { id: 'rates-mode-funding', label: 'Funding', short: 'Fund', apis: ['FRED', 'NYFed'] },
   { id: 'rates-mode-ust', label: 'UST', short: 'UST', apis: ['FRED', 'FiscalData'] },
   { id: 'rates-mode-stir', label: 'STIR', short: 'STIR', apis: ['yfinance', 'NYFed', 'FRED'] },
   { id: 'rates-mode-world', label: 'World', short: 'World', apis: ['FRED', 'Frankfurter', 'MoF'] },
@@ -58,43 +58,80 @@ export const RATES_SECTION_TO_MODE: Record<string, 'funding' | 'ust' | 'stir' | 
   'sec-asset-corr': 'world',
 };
 
+/** Vol = surface structure + Greeks 1.0 (single home for full greeks). */
 export const VOL_SECTIONS: DeskNavItem[] = [
   { id: 'vol-sub-surface', label: 'Surface', short: 'Surf' },
   { id: 'vol-sub-smile', label: 'Smile', short: 'Smile' },
   { id: 'vol-sub-term', label: 'Term', short: 'Term' },
-  { id: 'vol-sub-greeks', label: 'Greeks', short: 'GRK' },
+  { id: 'vol-sub-greeks', label: 'Greeks', short: 'GRK', apis: ['yfinance', 'FRED'] },
   { id: 'vol-sub-quality', label: 'Surface Fit', short: 'Fit' },
 ];
 
 /**
- * Trade desk sections — Thalex-class lab tools + Analyze (Greeks 1.0).
- * Ids match DeskView tool chrome (`desk-ws-*`).
+ * Trade desk — 3 red-bar modes (not 12 tool chips).
+ * Internal tool pickers live inside DeskView; legacy `desk-ws-*` ids still deep-link.
+ * Combo Greeks = multi-leg portfolio tool, not the Greeks 1.0 surface (Vol).
  */
 export const TRADE_SECTIONS: DeskNavItem[] = [
-  { id: 'desk-ws-sim', label: 'Simulator', short: 'SIM', apis: ['yfinance', 'Deribit'] },
-  { id: 'desk-ws-combo', label: 'Combo Greeks', short: 'COMBO', apis: ['yfinance', 'Deribit'] },
-  { id: 'desk-ws-grid', label: 'Option Grid', short: 'GRID', apis: ['yfinance', 'Deribit'] },
-  { id: 'desk-ws-combopnl', label: 'Combo PnL', short: 'CPNL', apis: ['yfinance', 'FMP'] },
-  { id: 'desk-ws-optionpnl', label: 'Option PnL', short: 'OPNL', apis: ['yfinance', 'FMP'] },
-  { id: 'desk-ws-straddle', label: 'Straddle', short: 'STRD', apis: ['yfinance'] },
-  { id: 'desk-ws-breakeven', label: 'Break-even', short: 'BE', apis: ['yfinance'] },
-  { id: 'desk-ws-subjective', label: 'Subjective', short: 'SUBJ', apis: ['yfinance'] },
-  { id: 'desk-ws-hedge', label: 'Hedging', short: 'HDG', apis: ['yfinance'] },
-  { id: 'desk-ws-dfollow', label: 'Δ Follower', short: 'DFOL', apis: ['yfinance'] },
-  { id: 'desk-ws-basis', label: 'Basis', short: 'BAS', apis: ['yfinance', 'Deribit'] },
-  { id: 'desk-ws-roll', label: 'Roll PnL', short: 'ROLL', apis: ['yfinance', 'Deribit'] },
-  { id: 'desk-ws-analyze', label: 'Analyze', short: 'GRK', apis: ['MacroVol', 'yfinance'] },
+  { id: 'trade-sub-structure', label: 'Structure', short: 'STR', apis: ['yfinance', 'Deribit'] },
+  { id: 'trade-sub-pnl', label: 'PnL', short: 'PnL', apis: ['yfinance', 'FMP'] },
+  { id: 'trade-sub-risk', label: 'Hedge', short: 'HDG', apis: ['yfinance', 'Deribit'] },
 ];
 
-/** @deprecated Legacy id map — prefer TRADE_SECTIONS / desk-ws-analyze */
+/** Legacy / function-code tool id → red-bar mode. */
+export const TRADE_TOOL_TO_MODE: Record<string, string> = {
+  'desk-ws-sim': 'trade-sub-structure',
+  'desk-ws-combo': 'trade-sub-structure',
+  'desk-ws-grid': 'trade-sub-structure',
+  'desk-ws-combopnl': 'trade-sub-pnl',
+  'desk-ws-optionpnl': 'trade-sub-pnl',
+  'desk-ws-straddle': 'trade-sub-pnl',
+  'desk-ws-breakeven': 'trade-sub-pnl',
+  'desk-ws-subjective': 'trade-sub-pnl',
+  'desk-ws-backtest': 'trade-sub-pnl',
+  'desk-ws-hedge': 'trade-sub-risk',
+  'desk-ws-dfollow': 'trade-sub-risk',
+  'desk-ws-basis': 'trade-sub-risk',
+  'desk-ws-roll': 'trade-sub-risk',
+  'desk-ws-analyze': 'trade-sub-structure',
+};
+
+/** Map any desk section id (mode or legacy tool) → red-bar mode id. */
+export function resolveTradeModeSection(sectionId: string | null | undefined): string {
+  if (!sectionId) return 'trade-sub-structure';
+  if (
+    sectionId === 'trade-sub-structure'
+    || sectionId === 'trade-sub-pnl'
+    || sectionId === 'trade-sub-risk'
+  ) {
+    return sectionId;
+  }
+  return TRADE_TOOL_TO_MODE[sectionId] ?? 'trade-sub-structure';
+}
+
+/** @deprecated Legacy — full Greeks live on Vol · Greeks */
 export const GREEKS_SECTIONS: DeskNavItem[] = [
-  { id: 'desk-ws-analyze', label: 'Analyze', short: 'GRK', apis: ['MacroVol', 'yfinance'] },
+  { id: 'vol-sub-greeks', label: 'Greeks', short: 'GRK', apis: ['yfinance', 'FRED'] },
 ];
 
 /** Flow: Book = chain+dealer split; Tools = levels+edge+strategy stacked. */
 export const POSITIONING_SECTIONS: DeskNavItem[] = [
   { id: 'pos-sub-chain', label: 'Book', short: 'Book' },
   { id: 'pos-sub-tools', label: 'Tools', short: 'Tools' },
+];
+
+/**
+ * Academy desk — Substack-style publication (docs/index.json).
+ * Education only: Home / Options / Macro / News / Glossary.
+ * Positioning is the POS desk product (not an Academy section).
+ * Engineering / Design / Tools tracks are not Academy chrome.
+ */
+export const ACADEMY_SECTIONS: DeskNavItem[] = [
+  { id: 'academy-sub-start', label: 'Home', short: 'HOME' },
+  { id: 'academy-sub-options', label: 'Options', short: 'OPT' },
+  { id: 'academy-sub-macro', label: 'Macro', short: 'MAC' },
+  { id: 'academy-sub-news', label: 'News', short: 'NEWS' },
+  { id: 'academy-sub-glossary', label: 'Glossary', short: 'GLOS' },
 ];
 
 /**
@@ -247,10 +284,11 @@ export const THALEX_LAB_TOOLS: {
 const TAB_LABELS: Record<string, string> = {
   vol: 'Vol',
   positioning: 'Flow',
-  greeks: 'Trade · Analyze', // legacy deep-links
+  greeks: 'Vol · Greeks', // legacy deep-links
   desk: 'Trade',
   crypto: 'Crypto',
   rates: 'Rates',
+  academy: 'Academy',
 };
 
 export { TAB_LABELS };
@@ -266,12 +304,15 @@ export function sectionsForTab(tab: ActiveTab | string): DeskNavItem[] {
     case 'vol':
       return VOL_SECTIONS;
     case 'desk':
-    case 'greeks': // legacy → Trade
       return TRADE_SECTIONS;
+    case 'greeks': // legacy → Vol · Greeks registry
+      return GREEKS_SECTIONS;
     case 'positioning':
       return POSITIONING_SECTIONS;
     case 'crypto':
       return CRYPTO_SECTIONS;
+    case 'academy':
+      return ACADEMY_SECTIONS;
     default:
       return [];
   }

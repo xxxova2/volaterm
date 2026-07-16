@@ -44,6 +44,7 @@ export function TerminalHeader({ onOpenShortcuts }: TerminalHeaderProps) {
     streamConnected,
     historyMode,
     historicalFrames,
+    lastSurfacePath,
     uiDensity,
     toggleUiDensity,
   } = useTerminalStore();
@@ -177,6 +178,9 @@ export function TerminalHeader({ onOpenShortcuts }: TerminalHeaderProps) {
                   ? ' · spot:fmp'
                   : ' · spot:synth'}
             {historyMode === 'live' ? ` · hist:buf:${historicalFrames.length}` : ' · hist:synth'}
+            {lastSurfacePath
+              ? ` · surf:${lastSurfacePath === 'sticky_spot' ? 'sticky' : 'chain'}`
+              : ''}
           </span>
         </div>
 

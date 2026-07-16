@@ -4,6 +4,7 @@
  */
 
 import { blackScholes, normCdf } from './black-scholes';
+import { yearFractionFromSlice } from './time';
 import type { VolSnapshot, OptionQuote } from './types';
 
 export interface SubjectiveParams {
@@ -54,7 +55,7 @@ export function evaluateSubjective(
 ): SubjectiveRow[] {
   const slice = snap.expiries[expiryIdx];
   if (!slice) return [];
-  const T = Math.max(1e-6, slice.dte / 365);
+  const T = yearFractionFromSlice(slice);
   const S = snap.spot;
   const q = snap.dividendYield;
   const r = snap.riskFreeRate;

@@ -11,6 +11,7 @@
 import { computeGreeks } from './greeks';
 import type { PortfolioLeg } from './portfolio';
 import { evaluateCombo } from './portfolio';
+import { yearFractionFromSlice } from './time';
 import type { VolSnapshot } from './types';
 
 export interface SpotBar {
@@ -70,9 +71,10 @@ function legVol(snap: VolSnapshot, leg: PortfolioLeg): number {
 }
 
 function legT0(snap: VolSnapshot, leg: PortfolioLeg): number {
-  if (!leg.expiry) return 30 / 365;
+  if (!leg.expiry) return yearFractionFromSlice({ expiry: '2099-01-01', dte: 30 });
   const slice = snap.expiries.find(e => e.expiry === leg.expiry);
-  return Math.max(1e-8, (slice?.dte ?? 30) / 365);
+  if (slice) return yearFractionFromSlice(slice);
+  return yearFractionFromSlice({ expiry: leg.expiry, dte: 30 });
 }
 
 /**

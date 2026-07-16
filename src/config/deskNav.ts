@@ -10,6 +10,7 @@ import {
   CRYPTO_SECTIONS,
   TRADE_SECTIONS,
   THALEX_LAB_TOOLS,
+  ACADEMY_SECTIONS,
   TAB_LABELS,
   tabLabel,
   sectionsForTab,
@@ -26,6 +27,7 @@ export {
   CRYPTO_SECTIONS,
   TRADE_SECTIONS,
   THALEX_LAB_TOOLS,
+  ACADEMY_SECTIONS,
   TAB_LABELS,
   tabLabel,
   sectionsForTab,
@@ -57,6 +59,7 @@ export function jumpDeskSection(tab: ActiveTab | string, direction: 1 | -1): str
     !next.startsWith('vol-sub-')
     && !next.startsWith('greeks-')
     && !next.startsWith('desk-ws-')
+    && !next.startsWith('trade-sub-')
     && !next.startsWith('pos-sub-')
   ) {
     document.getElementById(next)?.scrollIntoView({ behavior: 'smooth', block: 'start' });

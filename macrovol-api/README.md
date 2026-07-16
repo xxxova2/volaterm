@@ -38,6 +38,18 @@ Node `server.js`: `/api/macrovol/*` → `MACROVOL_API_URL` (default `http://127.
 - `GET /api/rates/dv01` — generic par-Treasury DV01 book + key-rate scenario
 - `GET /api/rates/term-structure?T=` — interpolated r(T) decimal
 - `GET /api/macro/summary` · `/api/macro/series/{id}`
+- `GET /api/macro/stress` — FRED risk pack (VIXCLS, credit, BEI, …)
+- `GET /api/macro/primary` — keyless OFR BGCR/TGCR/SOFR + ECB DFR (1h TTL)
 - `GET /api/greeks/{ticker}` · `/api/greeks/{ticker}/history` (default r = term structure)
 - `GET /api/surface/{ticker}` (default r = term structure)
 - `GET /api/stir/strip` — strip + path chart vs SOFR
+
+## Optional QuantLib oracle (dev/CI only)
+
+```bash
+pip install QuantLib   # or QuantLib-Python
+python3 services/test_quantlib_oracle.py
+```
+
+Does **not** run in production. Compares our BS greeks to QuantLib AnalyticEuropeanEngine.
+Do **not** install `gs-quant` for market data — Marquee credentials required (institutional).

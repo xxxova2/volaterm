@@ -33,4 +33,10 @@ describe('SofrFuturesCurve', () => {
     render(<SofrFuturesCurve data={[{ x: 'Jun 26', rate: 3.67 }]} />);
     expect(screen.getByText(/Awaiting live 3M SOFR futures strip/i)).toBeTruthy();
   });
+
+  it('shows Delivery and Yield axis captions', () => {
+    render(<SofrFuturesCurve data={EXTENDED_STRIP} />);
+    expect(screen.getAllByText('Delivery').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/Yield/).length).toBeGreaterThanOrEqual(1);
+  });
 });

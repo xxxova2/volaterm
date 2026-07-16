@@ -6,7 +6,15 @@ from pathlib import Path
 # Allow `python -m pytest services/test_greeks_calculator.py` from macrovol-api/
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from services.greeks_calculator import compute_greeks, otm_points
+from datetime import datetime, timezone
+
+from services.greeks_calculator import (
+    compute_greeks,
+    compute_gex_flip,
+    otm_points,
+    year_fraction_to_expiry,
+    _POST_CLOSE_T,
+)
 
 
 def test_theta_charm_per_day_vega_per_vol_point():
@@ -41,3 +49,53 @@ def test_golden_atm_call():
     assert abs(g["theta"] - (-0.0271)) < 1e-3
     assert abs(g["charm"] - (-0.000308)) < 1e-5
     assert abs(g["vanna"] - (-0.0984)) < 1e-3
+
+
+# Shared golden fixture with TS analytics.test.ts (flipFromSeries).
+# Cumulative: -100 → -150 → -140 → +60 → +110 → first −→≥0 cross at 105.
+_FLIP_GOLDEN = [
+    {"strike": 90, "gex": -100},
+    {"strike": 95, "gex": -50},
+    {"strike": 100, "gex": 10},
+    {"strike": 105, "gex": 200},
+    {"strike": 110, "gex": 50},
+]
+
+
+def test_gex_flip_cumulative_golden():
+    flip = compute_gex_flip(_FLIP_GOLDEN, spot=100)
+    assert flip is not None
+    assert flip["strike"] == 105
+    assert flip["method"] == "cumulative"
+    assert flip["spot_vs_flip"] == "below"  # spot 100 < flip 105
+    assert flip["net_gex"] == 110
+
+
+def test_gex_flip_all_positive_fallback_min_abs_run():
+    # No negative→positive cross; min |run| at first strike.
+    pts = [
+        {"strike": 90, "gex": 50},
+        {"strike": 100, "gex": 80},
+        {"strike": 110, "gex": 20},
+    ]
+    flip = compute_gex_flip(pts, spot=100)
+    assert flip is not None
+    assert flip["strike"] == 90
+
+
+def test_gex_flip_empty():
+    assert compute_gex_flip([], spot=100) is None
+
+
+def test_year_fraction_to_expiry_future_day():
+    # Far future close → T roughly days/365.25
+    now = datetime(2026, 1, 1, 15, 0, 0, tzinfo=timezone.utc)
+    T = year_fraction_to_expiry("2026-02-01", now=now)
+    assert T > 20 / 365.25
+    assert T < 40 / 365.25
+
+
+def test_year_fraction_to_expiry_expired_is_residual():
+    now = datetime(2026, 6, 1, 20, 0, 0, tzinfo=timezone.utc)
+    T = year_fraction_to_expiry("2020-01-01", now=now)
+    assert T <= _POST_CLOSE_T * 2

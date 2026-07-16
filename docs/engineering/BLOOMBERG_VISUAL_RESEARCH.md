@@ -68,7 +68,7 @@
 - Pass 2: more Launchpad / monitor screenshots; table cell spark patterns
 - Pass 3: options functions OMON/OVDV stills from public tutorials
 - Pass 4: token CSS proposal (amber fields, red desk bar) for Hy3 pack
-- **Parallel track:** SpotGamma/TRACE-style positioning visuals → `docs/POSITIONING_TRACE_RESEARCH.md` (Images #1–#10 kept; not BBG but same “levels that matter” desk job)
+- **Parallel track:** SpotGamma/TRACE-style positioning visuals → `docs/positioning/POSITIONING_TRACE_RESEARCH.md` (Images #1–#10 kept; not BBG but same “levels that matter” desk job)
 
 ### Utah BBG libguide (2026-07-13)
 

@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" role="img" aria-label="0DTE mechanics">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0c0f14"/>
+      <stop offset="100%" stop-color="#151b24"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="80%" cy="20%" r="55%">
+      <stop offset="0%" stop-color="#c4a574" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#c4a574" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1200" height="800" fill="url(#g)"/>
+  <rect width="1200" height="800" fill="url(#glow)"/>
+  <rect x="0" y="0" width="8" height="800" fill="#c4a574"/>
+
+  <text x="48" y="72" fill="#9a9284" font-family="ui-sans-serif" font-size="22" letter-spacing="4">OPTIONS</text>
+  <text x="48" y="160" fill="#f3efe6" font-family="Georgia,serif" font-size="64" font-weight="700">0DTE</text>
+  <text x="48" y="230" fill="#f3efe6" font-family="Georgia,serif" font-size="40" font-weight="700">What actually changes</text>
+  <text x="48" y="290" fill="#9a9284" font-size="24">Gamma densifies. Time dies. Path is the product.</text>
+  <!-- clock collapsing -->
+  <circle cx="900" cy="420" r="180" fill="none" stroke="#2a3340" stroke-width="8"/>
+  <circle cx="900" cy="420" r="140" fill="#141a22" stroke="#c45c4a" stroke-width="6"/>
+  <line x1="900" y1="420" x2="900" y2="300" stroke="#c4a574" stroke-width="8" stroke-linecap="round"/>
+  <line x1="900" y1="420" x2="1000" y2="420" stroke="#f3efe6" stroke-width="6" stroke-linecap="round"/>
+  <text x="900" y="520" text-anchor="middle" fill="#c45c4a" font-size="28" font-weight="700">T → 0</text>
+
+</svg>

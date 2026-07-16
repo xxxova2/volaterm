@@ -1,7 +1,7 @@
 /**
- * Greeks 1.0 — MacroVol-backed Greeks desk (surfaces, GEX, OI ladder, calendar).
- * IV surface is Vol Structure only — no peer IV tab here.
- * GEX / positions / calendar: dense VS3D/MenthorQ-style chrome (OI-inferred).
+ * Vol · Greeks — same underlier as the global header (no local multi-ticker mini-app).
+ * Surfaces / GEX from shared greeksCache (prefetched after terminal chain).
+ * FlashAlpha GEX levels live on Flow · Tools (single-name free tier, not SPY).
  */
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -11,7 +11,12 @@ import {
 import { dealerExposure } from '../../lib/options/analytics';
 import type { VolSnapshot } from '../../lib/options/types';
 import { fmtCompact, fmtPrice } from '../../lib/format';
-import { macrovolApi, type GreeksData, type HistoryData } from '../../lib/macrovol/api';
+import type { GreeksData, HistoryData } from '../../lib/macrovol/api';
+import {
+  loadGreeksPack,
+  peekGreeksCache,
+  peekGreeksCacheStale,
+} from '../../lib/macrovol/greeksCache';
 import {
   CHART,
   CHART_GREEK_EXT,
@@ -61,22 +66,13 @@ function saveSurfaceTheme(t: SurfaceTheme) {
 
 const MESH_GREEKS = new Set<string>(['delta', 'gamma', 'vega', 'theta', 'vanna', 'charm']);
 
-const TICKERS = [
-  { label: 'SPY', value: 'SPY' },
-  { label: 'QQQ', value: 'QQQ' },
-  { label: 'AAPL', value: 'AAPL' },
-  { label: 'NVDA', value: 'NVDA' },
-  { label: 'TSLA', value: 'TSLA' },
-  { label: 'SPX', value: '^GSPC' },
-];
-
 const GREEKS = [
   { key: 'delta', label: 'DELTA', desc: 'Rate of price change per $1 move in spot', formula: '∂V/∂S = Φ(d₁)', color: CHART_GREEK_EXT.delta },
   { key: 'gamma', label: 'GAMMA', desc: 'Rate of delta change. Peaks ATM', formula: '∂²V/∂S² = φ(d₁)/(S·σ·√T)', color: CHART_GREEK_EXT.gamma },
-  { key: 'vega', label: 'VEGA', desc: 'P&L per 1% IV move. Always positive', formula: '∂V/∂σ = S·φ(d₁)·√T', color: CHART_GREEK_EXT.vega },
-  { key: 'theta', label: 'THETA', desc: 'θ ≠ free income — pays for Γ/volga/vanna risk', formula: '∂V/∂t · Taylor: dV≈θdt+…', color: CHART_GREEK_EXT.theta },
-  { key: 'vanna', label: 'VANNA', desc: 'dVega/dSpot. How vega changes with spot', formula: '∂²V/∂S∂σ = −φ(d₁)·d₂/σ', color: CHART_GREEK_EXT.vanna },
-  { key: 'charm', label: 'CHARM', desc: 'dDelta/dTime. Delta decay per day', formula: '∂²V/∂S∂t', color: CHART_GREEK_EXT.charm },
+  { key: 'vega', label: 'VEGA', desc: 'P&L per 1% IV move. Always positive', formula: 'raw S·φ(d₁)·√T → desk ÷100 / vol pt', color: CHART_GREEK_EXT.vega },
+  { key: 'theta', label: 'THETA', desc: 'θ ≠ free income — pays for Γ/volga/vanna risk', formula: 'raw ∂V/∂T → desk ÷365 / day', color: CHART_GREEK_EXT.theta },
+  { key: 'vanna', label: 'VANNA', desc: 'dVega/dSpot. How vega changes with spot', formula: '∂²V/∂S∂σ = −φ(d₁)·d₂/σ (raw σ)', color: CHART_GREEK_EXT.vanna },
+  { key: 'charm', label: 'CHARM', desc: 'dDelta/dTime. Delta decay per day', formula: '∂²V/∂S∂t annual → desk ÷365 / day', color: CHART_GREEK_EXT.charm },
 ];
 
 export function Greeks10View() {
@@ -84,51 +80,33 @@ export function Greeks10View() {
   const snapshot = useTerminalStore((s) => s.snapshot);
   const setDeskSection = useTerminalStore((s) => s.setDeskSection);
   const setDeskContext = useTerminalStore((s) => s.setDeskContext);
-  const [ticker, setTicker] = useState(() => {
-    const s = storeSymbol || 'SPY';
-    return /^[A-Z.^]{1,12}$/i.test(s) ? s : 'SPY';
-  });
+
+  // One symbol only — global header underlier. No desk-local multi-ticker chips.
+  const ticker = /^[A-Z.^]{1,12}$/i.test(storeSymbol || '') ? storeSymbol : 'SPY';
+
   const [selectedGreek, setSelectedGreek] = useState('delta');
-  const [data, setData] = useState<GreeksData | null>(null);
-  const [ohlc, setOhlc] = useState<HistoryData['data']>([]);
-  const [loading, setLoading] = useState(false);
+  const [data, setData] = useState<GreeksData | null>(() => peekGreeksCacheStale(ticker)?.data ?? null);
+  const [ohlc, setOhlc] = useState<HistoryData['data']>(() => peekGreeksCacheStale(ticker)?.ohlc ?? []);
+  const [loading, setLoading] = useState(() => !peekGreeksCache(ticker));
   const [error, setError] = useState('');
   const [surfaceTheme, setSurfaceTheme] = useState<SurfaceTheme>(loadSurfaceTheme);
-  const [custom, setCustom] = useState('');
-  /** When true, follow terminal symbol so mesh + MacroVol share the underlier. */
-  const [followTerminal, setFollowTerminal] = useState(true);
-  /** Expand ticker chips only when user wants a desk-local override. */
-  const [symbolPickerOpen, setSymbolPickerOpen] = useState(false);
 
-  // Context chrome only — never rewrite section to legacy `greeks-desk`
-  // (not in VOL_SECTIONS / TRADE_SECTIONS → setDeskSection clears → Vol falls back to Surface).
+  // Single Greeks home = Vol · Greeks (not Trade).
   useEffect(() => {
     const tab = useTerminalStore.getState().activeTab;
-    const hostId =
-      tab === 'vol' || useTerminalStore.getState().deskSectionId === 'vol-sub-greeks'
-        ? 'vol-sub-greeks'
-        : 'desk-ws-analyze';
-
-    if (tab === 'desk') {
-      setDeskSection('desk-ws-analyze');
-      setDeskContext({
-        id: 'desk-ws-analyze',
-        label: 'Analyze',
-        apis: ['MacroVol', 'yfinance'],
-      });
-    } else if (tab === 'vol') {
-      // Keep vol-sub-greeks (parent already set it).
-      setDeskContext({
-        id: 'vol-sub-greeks',
-        label: 'Greeks',
-        apis: ['MacroVol', 'yfinance'],
-      });
+    if (tab === 'desk' || tab === 'greeks') {
+      useTerminalStore.getState().setActiveTab('vol');
     }
+    setDeskSection('vol-sub-greeks');
+    setDeskContext({
+      id: 'vol-sub-greeks',
+      label: 'Greeks',
+      apis: ['yfinance', 'FRED'],
+    });
 
     return () => {
       const cur = useTerminalStore.getState().deskSectionId;
-      // Do not stomp sibling Vol tabs (Smile/Term) on unmount.
-      if (cur === hostId || cur === 'greeks-desk') {
+      if (cur === 'vol-sub-greeks' || cur === 'desk-ws-analyze' || cur === 'greeks-desk') {
         setDeskContext({ id: null, label: null, apis: [] });
       }
     };
@@ -139,42 +117,53 @@ export function Greeks10View() {
     setSurfaceTheme(loadSurfaceTheme());
   }, []);
 
-  async function load(t: string) {
-    setLoading(true);
-    setError('');
-    setData(null);
-    setOhlc([]);
-    try {
-      // r omitted → MacroVol uses live SOFR / treasury term (not hardcoded 5%)
-      // q: prefer terminal snapshot dividend yield when comparing same symbol
-      const q =
-        snapshot && snapshot.symbol === t && Number.isFinite(snapshot.dividendYield)
-          ? snapshot.dividendYield
-          : 0.013;
-      const [greeksRes, ohlcRes] = await Promise.all([
-        macrovolApi.greeks(t, null, q),
-        macrovolApi.greeksHistory(t, '1mo').catch(() => ({ ticker: t, data: [] } as HistoryData)),
-      ]);
-      setData(greeksRes);
-      setOhlc(ohlcRes.data || []);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to fetch');
-    } finally {
+  // Shared cache + prefetch: never blank the board if we already have this underlier.
+  useEffect(() => {
+    let cancelled = false;
+    const fresh = peekGreeksCache(ticker);
+    if (fresh) {
+      setData(fresh.data);
+      setOhlc(fresh.ohlc);
       setLoading(false);
+      setError('');
+      return;
     }
-  }
-
-  useEffect(() => {
-    load(ticker);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- reload on ticker; q refreshed via load body
+    const stale = peekGreeksCacheStale(ticker);
+    if (stale) {
+      setData(stale.data);
+      setOhlc(stale.ohlc);
+      setLoading(true); // soft revalidate
+    } else {
+      setData(null);
+      setOhlc([]);
+      setLoading(true);
+    }
+    setError('');
+    const snap = useTerminalStore.getState().snapshot;
+    const q =
+      snap && snap.symbol === ticker && Number.isFinite(snap.dividendYield)
+        ? snap.dividendYield
+        : null;
+    void loadGreeksPack(ticker, q)
+      .then((pack) => {
+        if (cancelled) return;
+        setData(pack.data);
+        setOhlc(pack.ohlc);
+        setError('');
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        if (!stale) {
+          setError(e instanceof Error ? e.message : 'Failed to fetch');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [ticker]);
-
-  // Keep Greeks 1.0 underlier in lockstep with terminal when follow is on
-  useEffect(() => {
-    if (!followTerminal || !storeSymbol) return;
-    if (!/^[A-Z.^]{1,12}$/i.test(storeSymbol)) return;
-    if (storeSymbol !== ticker) setTicker(storeSymbol);
-  }, [storeSymbol, followTerminal, ticker]);
 
   const greek = GREEKS.find((g) => g.key === selectedGreek)!;
   const surfaceData = data?.surfaces?.[selectedGreek];
@@ -206,114 +195,39 @@ export function Greeks10View() {
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <div className="flex flex-wrap items-center gap-1.5 border-b border-border px-2 py-1">
-        <span className="text-type-xs font-mono font-bold tracking-wider text-foreground">GREEKS 1.0</span>
-        <span className="hidden text-type-2xs font-mono text-muted-foreground sm:inline">
-          MacroVol · BS · OTM
+        <span className="text-type-xs font-mono font-semibold text-foreground">{ticker}</span>
+        <span className="text-type-2xs font-mono text-muted-foreground">
+          Greeks · yfinance · FRED
           {data?.r != null && (
-            <> · r={(data.r * 100).toFixed(2)}% · q={((data.q ?? 0.013) * 100).toFixed(2)}%</>
+            <>
+              {' '}
+              · r={(data.r * 100).toFixed(2)}%
+              {data.r_source ? ` (${data.r_source})` : ''}
+              {data.q != null && (
+                <>
+                  {' '}
+                  · q={(data.q * 100).toFixed(2)}%
+                  {data.q_source ? ` (${data.q_source})` : ''}
+                </>
+              )}
+            </>
           )}
-          {' · '}θ/charm /day · ν /1vol · IV → Vol Structure
+          {loading && !data && ' · loading…'}
+          {loading && data && ' · refresh…'}
+        </span>
+        <span className="ml-auto hidden text-type-2xs text-muted-foreground sm:inline">
+          <Explain term="taylorGvv">Taylor / GVV</Explain>
+          {' · symbol = header only'}
         </span>
       </div>
 
       <div className="flex-1 overflow-y-auto">
           <div className="flex flex-col gap-3 p-2 font-mono">
-            {/* Benn / GVV framing — always one click via Explain */}
-            <div className="rounded-lg border border-border/70 bg-card/40 px-2.5 py-1.5 text-type-2xs leading-snug text-muted-foreground">
-              <Explain term="taylorGvv">
-                <span className="font-semibold text-foreground">Taylor / GVV</span>
-              </Explain>
-              {' · '}
-              dV ≈ θ dt + Δ dS + ν dσ + ½ Γ dS² + ½ Volga dσ² + Vanna dS dσ
-              {' · '}
-              <Explain term="theta">θ</Explain>
-              {' compensates expected second-order risk — short options are not free carry. '}
-              Surface shape (GVV) links to these risk factors — keep IV surface as gold standard.
-            </div>
-
-            {/* OI-weighted charm / vanna strike profiles from terminal chain */}
-            {snapshot && (
+            {/* OI-weighted charm / vanna from the same terminal chain (no second symbol). */}
+            {snapshot && snapshot.symbol === ticker && (
               <CharmVannaStrikeProfiles snapshot={snapshot} />
             )}
 
-            {/*
-              Symbol chrome: when following terminal (default), underlier is already
-              in the header — do not burn a full chip row. Expand only on Change.
-            */}
-            <div className="flex flex-wrap items-center gap-1.5 text-type-xs">
-              <span className="font-semibold text-foreground">{ticker}</span>
-              <span className="text-muted-foreground">
-                {followTerminal ? '· terminal' : '· desk override'}
-              </span>
-              {loading && (
-                <span className="text-muted-foreground" title="MacroVol option chain fetch">
-                  · chain…
-                </span>
-              )}
-              {!loading && data && (
-                <span className="text-muted-foreground">
-                  · spot {data.spot != null ? `$${data.spot.toFixed(2)}` : '—'}
-                </span>
-              )}
-              <button
-                type="button"
-                onClick={() => setSymbolPickerOpen((o) => !o)}
-                className="rounded border border-border px-1.5 py-0.5 text-muted-foreground hover:border-primary hover:text-foreground"
-              >
-                {symbolPickerOpen ? 'Hide' : 'Change'}
-              </button>
-              {!followTerminal && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setFollowTerminal(true);
-                    setSymbolPickerOpen(false);
-                    if (storeSymbol && /^[A-Z.^]{1,12}$/i.test(storeSymbol)) {
-                      setTicker(storeSymbol);
-                    }
-                  }}
-                  className="rounded border border-primary/40 bg-primary/10 px-1.5 py-0.5 text-foreground"
-                  title="Track terminal symbol (header underlier)"
-                >
-                  Follow terminal
-                </button>
-              )}
-            </div>
-            {symbolPickerOpen && (
-              <div className="flex flex-wrap gap-1.5">
-                {TICKERS.map((t) => (
-                  <button
-                    key={t.value}
-                    type="button"
-                    onClick={() => {
-                      setFollowTerminal(false);
-                      setTicker(t.value);
-                      setSymbolPickerOpen(false);
-                    }}
-                    className={`rounded border px-2 py-1 text-type-xs ${
-                      ticker === t.value
-                        ? 'border-primary bg-primary text-primary-foreground font-bold'
-                        : 'border-border text-muted-foreground hover:border-primary hover:text-foreground'
-                    }`}
-                  >
-                    {t.label}
-                  </button>
-                ))}
-                <input
-                  className="w-24 rounded border border-border bg-background px-2 py-1 text-type-xs outline-none"
-                  placeholder="Custom…"
-                  value={custom}
-                  onChange={(e) => setCustom(e.target.value.toUpperCase())}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && custom.trim()) {
-                      setFollowTerminal(false);
-                      setTicker(custom.trim());
-                      setSymbolPickerOpen(false);
-                    }
-                  }}
-                />
-              </div>
-            )}
             {data?.surface_note && (
               <p className="text-type-2xs leading-snug text-muted-foreground">{data.surface_note}</p>
             )}
@@ -321,13 +235,19 @@ export function Greeks10View() {
               <p className="text-type-2xs leading-snug text-muted-foreground">{data.charm_note}</p>
             )}
 
-            {error && (
+            {error && !data && (
               <div className="rounded border border-down/40 bg-down/15 px-3 py-2 text-xs text-down">
-                {error} — Try SPY if index options fail. Ensure MacroVol API is on :8765.
+                {error} — Check FRED SOFR + yfinance. Change underlier in the header (not here).
               </div>
             )}
 
-            {data && !loading && (
+            {loading && !data && (
+              <div className="rounded border border-border/60 bg-card/40 px-3 py-4 text-type-xs text-muted-foreground">
+                Loading Greeks surfaces for {ticker}… (prefetched after chain when possible)
+              </div>
+            )}
+
+            {data && (
               <>
                 {/* ATM snapshot — chips only; formulas live in Explain on greek labels */}
                 <div>
@@ -391,10 +311,10 @@ export function Greeks10View() {
                   </div>
                   <p className="mb-1 text-type-2xs text-muted-foreground">
                     {surfaceTheme === 'plotly'
-                      ? 'Plotly · MacroVol interpolated OTM field (same API as ATM cards)'
+                      ? 'Plotly · yfinance OTM field (same API as ATM cards)'
                       : surfaceData?.T_vals?.length
-                        ? '3D mesh · MacroVol grid (same numbers as Plotly) · OTM · θ/charm /day · ν /1vol'
-                        : '3D mesh · desk LIVE chain fallback until MacroVol grid loads · OTM · θ/charm /day'}
+                        ? '3D mesh · yfinance grid (same numbers as Plotly) · OTM · θ/charm /day · ν /1vol'
+                        : '3D mesh · desk LIVE chain fallback until greeks grid loads · OTM · θ/charm /day'}
                     {data?.r != null && (
                       <span className="ml-2 tabular-nums">
                         r={(data.r * 100).toFixed(2)}%
@@ -445,7 +365,7 @@ export function Greeks10View() {
                         </Suspense>
                       ) : (
                         <div className="p-4 text-center text-type-2xs text-muted-foreground">
-                          No MacroVol surface grid for {greek.label} yet.
+                          No yfinance surface grid for {greek.label} yet.
                         </div>
                       )
                     ) : (
@@ -514,7 +434,7 @@ export function Greeks10View() {
                   asOf={data.as_of}
                   source={[
                     data.source || 'yfinance',
-                    'MacroVol',
+                    'FRED',
                     data.r != null ? `r=${(data.r * 100).toFixed(2)}%` : null,
                     data.r_source ? `(${data.r_source})` : null,
                     data.q != null ? `q=${(data.q * 100).toFixed(2)}%` : null,
@@ -1027,7 +947,7 @@ function GexCalendarTable({
   );
 }
 
-/** Terminal-chain OI-weighted charm & vanna by strike (sister to MacroVol heatmaps). */
+/** Terminal-chain OI-weighted charm & vanna by strike (sister to greeks heatmaps). */
 function CharmVannaStrikeProfiles({ snapshot }: { snapshot: VolSnapshot }) {
   const chartData = useMemo(() => {
     const d = dealerExposure(snapshot, { weight: 'oi' });
@@ -1051,7 +971,7 @@ function CharmVannaStrikeProfiles({ snapshot }: { snapshot: VolSnapshot }) {
           <span className="font-semibold text-foreground">CHARM · VANNA STRIKE</span>
         </Explain>
         <span>OI-weighted $ exposure · terminal chain · ±12% spot</span>
-        <span className="text-muted-foreground/80">· not MacroVol grid (see heatmaps below)</span>
+        <span className="text-muted-foreground/80">· not greeks API grid (see heatmaps below)</span>
       </div>
       <ChartZoom title="Charm · Vanna by strike" bodyClassName="min-h-0" expandedHeightClass="h-[min(88vh,900px)]">
         <CharmVannaChart data={chartData} />

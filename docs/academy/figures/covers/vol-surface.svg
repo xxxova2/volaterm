@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" role="img" aria-label="Vol surface map">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0c0f14"/>
+      <stop offset="100%" stop-color="#151b24"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="80%" cy="20%" r="55%">
+      <stop offset="0%" stop-color="#c4a574" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#c4a574" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1200" height="800" fill="url(#g)"/>
+  <rect width="1200" height="800" fill="url(#glow)"/>
+  <rect x="0" y="0" width="8" height="800" fill="#c4a574"/>
+
+  <text x="48" y="72" fill="#9a9284" font-family="ui-sans-serif" font-size="22" letter-spacing="4">OPTIONS</text>
+  <text x="48" y="150" fill="#f3efe6" font-family="Georgia,serif" font-size="48" font-weight="700">The vol surface</text>
+  <text x="48" y="210" fill="#f3efe6" font-family="Georgia,serif" font-size="48" font-weight="700">as a map</text>
+  <text x="48" y="270" fill="#9a9284" font-size="24">Strike × tenor · term structure · wings</text>
+  <!-- grid surface -->
+  <g transform="translate(200,320)" stroke="#2a3340" stroke-width="1.5">
+    <path d="M 0 320 L 200 40" fill="none"/><path d="M 80 320 L 280 40" fill="none"/><path d="M 160 320 L 360 40" fill="none"/><path d="M 240 320 L 440 40" fill="none"/><path d="M 320 320 L 520 40" fill="none"/><path d="M 400 320 L 600 40" fill="none"/><path d="M 480 320 L 680 40" fill="none"/><path d="M 560 320 L 760 40" fill="none"/>
+    <path d="M 0 280 L 760 240" fill="none"/><path d="M 0 245 L 760 205" fill="none"/><path d="M 0 210 L 760 170" fill="none"/><path d="M 0 175 L 760 135" fill="none"/><path d="M 0 140 L 760 100" fill="none"/><path d="M 0 105 L 760 65" fill="none"/><path d="M 0 70 L 760 30" fill="none"/><path d="M 0 35 L 760 -5" fill="none"/>
+  </g>
+  <path d="M 220 600 Q 500 420 900 280" fill="none" stroke="#c4a574" stroke-width="4"/>
+  <path d="M 220 620 Q 520 500 900 380" fill="none" stroke="#6a8fa8" stroke-width="3" opacity="0.7"/>
+
+</svg>

@@ -2,6 +2,9 @@
 
 **Secrets:** never commit keys. Use Railway / local `.env` only. Keys pasted in chat should be **rotated**.
 
+**Landscape (2026-07):** free-API roundups, Trading Economics, QuantLib, gs-quant —  
+see `docs/engineering/API_LANDSCAPE_2026-07.md` (have / skip / P1 map).
+
 ---
 
 ## FlashAlpha Lab (`lab.flashalpha.com`)

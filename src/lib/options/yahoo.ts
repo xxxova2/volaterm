@@ -2,7 +2,7 @@ import type { VolSnapshot, ExpirySlice, OptionQuote } from './types';
 import { computeGreeks } from './greeks';
 import { impliedVol } from './ivSolver';
 import { fitSVI, sviIv } from './svi';
-import { VALIDATION_CONFIG } from '../../config/constants';
+import { DATA_CONFIG, VALIDATION_CONFIG } from '../../config/constants';
 import { yearFractionToExpiry, calendarDte } from './time';
 import { estimateParityDividend, blendDividendYield } from './parity';
 
@@ -394,8 +394,10 @@ export function getYahooChainCacheAgeMs(): number | null {
 export async function fetchYahooSnapshot(
   symbol: string,
   maxExpiries = 12,
-  r = 0.0525,
-  q = 0.013,
+  /** Prefer live treasury; DATA_CONFIG fallback only when caller has no curve. */
+  r = DATA_CONFIG.market.RISK_FREE_RATE,
+  /** Prefer profile/parity yield; DATA_CONFIG fallback only when caller has none. */
+  q = DATA_CONFIG.market.DIVIDEND_YIELD,
   opts?: Omit<BuildSnapshotOptions, 'maxExpiries' | 'now'>,
 ): Promise<VolSnapshot | null> {
   const key = `${symbol.toUpperCase()}:${maxExpiries}:${r.toFixed(5)}:${q.toFixed(5)}:${opts?.rateForT ? 'term' : 'flat'}`;

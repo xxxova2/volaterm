@@ -1,5 +1,6 @@
 /**
  * Home launchpad — registry-driven function codes.
+ * W5: denser black-field mono grid (Bloomberg-style function board).
  */
 import { useMemo } from 'react';
 import {
@@ -22,24 +23,27 @@ export function LaunchpadGrid({ className }: { className?: string }) {
   }, []);
 
   return (
-    <div className={cn('border border-border bg-card/60', className)}>
-      <div className="term-fn-bar justify-between">
+    <div
+      data-testid="launchpad-grid"
+      className={cn('rounded border border-border bg-black/40', className)}
+    >
+      <div className="flex items-center justify-between border-b border-border/60 px-2 py-0.5 font-mono text-type-2xs">
         <span>
-          <span className="term-code">LPAD</span>
+          <span className="font-bold tracking-wider text-amber-500/90">LPAD</span>
           <span className="ml-1.5 text-muted-foreground">function codes</span>
         </span>
-        <span className="normal-case tracking-normal text-muted-foreground">Ctrl/Cmd+K</span>
+        <span className="text-muted-foreground">Ctrl/Cmd+K</span>
       </div>
-      <div className="grid grid-cols-3 gap-px bg-border sm:grid-cols-4 md:grid-cols-7">
+      <div className="grid grid-cols-3 gap-px bg-border/80 sm:grid-cols-4 md:grid-cols-7">
         {items.map((it) => (
           <button
             key={it.code}
             type="button"
             onClick={() => openFunction(it.code)}
             title={it.label}
-            className="bg-card px-1.5 py-1 text-left font-mono transition-colors hover:bg-secondary"
+            className="bg-black/60 px-1.5 py-1 text-left font-mono transition-colors hover:bg-secondary/80"
           >
-            <div className="term-code text-type-xs">{it.code}</div>
+            <div className="text-type-xs font-semibold tracking-wide text-foreground">{it.code}</div>
             <div className="truncate text-type-2xs text-muted-foreground">{it.label}</div>
           </button>
         ))}

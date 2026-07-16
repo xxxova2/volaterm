@@ -3,6 +3,7 @@
  */
 
 import { blackScholes, normCdf } from './black-scholes';
+import { yearFractionFromSlice } from './time';
 import type { VolSnapshot } from './types';
 
 export interface GridCell {
@@ -60,7 +61,7 @@ export function buildOptionGrid(
 
   const cells: GridCell[][] = [];
   for (const sl of slices) {
-    const T = Math.max(1e-6, sl.dte / 365);
+    const T = yearFractionFromSlice(sl);
     const list = type === 'call' ? sl.calls : sl.puts;
     const row: GridCell[] = [];
     for (const K of useStrikes) {

@@ -13,7 +13,11 @@ import type { CurveShapeData, ImplyRead, RatesCurveHistory } from '../../../lib/
 import { ImplyChip } from '../../common/ImplyDrawer';
 import { Spark } from './Spark';
 import { SofrFuturesCurve } from './SofrFuturesCurve';
-import { YieldCurveCompare, type CurveComparePoint } from './YieldCurveCompare';
+import {
+  YieldCurveCompare,
+  type CurveComparePoint,
+  type CurveCompareWindowId,
+} from './YieldCurveCompare';
 import { AuctionCard } from './AuctionCard';
 
 export type CurvePoint = { label: string; yield: number | null };
@@ -142,6 +146,11 @@ export function CurvesBoard({
   shape,
   spreadHistory,
   onOpenImply,
+  compareWindow,
+  onCompareWindow,
+  customDays,
+  onCustomDays,
+  compareLoading,
 }: {
   curve: CurvePoint[];
   curveMeta: { as_of?: string; source?: string; note?: string };
@@ -152,6 +161,11 @@ export function CurvesBoard({
   shape: CurveShapeData | null;
   spreadHistory: SpreadHistoryPack;
   onOpenImply?: (i: ImplyRead) => void;
+  compareWindow?: CurveCompareWindowId | string;
+  onCompareWindow?: (id: CurveCompareWindowId) => void;
+  customDays?: number;
+  onCustomDays?: (days: number) => void;
+  compareLoading?: boolean;
 }) {
   const compareLive = curveComparePoints.filter((p) => p.today != null || p.historical != null);
   const sofrPath = stirChart.filter((p) => p.rate != null || p.prior != null);
@@ -173,7 +187,7 @@ export function CurvesBoard({
         </span>
       }
     >
-      {/* Bloomberg-style dual UST: white = today, blue = ~1Y ago */}
+      {/* Bloomberg-style dual UST: white = today, blue = compare window */}
       <YieldCurveCompare
         points={curveComparePoints.length ? curveComparePoints : curve.map((c) => ({
           label: c.label,
@@ -185,6 +199,11 @@ export function CurvesBoard({
         compareAsOf={compareDate}
         source={curveCompare?.source || curveMeta.source}
         height={280}
+        compareWindow={compareWindow}
+        onCompareWindow={onCompareWindow}
+        customDays={customDays}
+        onCustomDays={onCustomDays}
+        compareLoading={compareLoading}
       />
 
       {/* Bloomberg-style dual SOFR futures yield path */}

@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" role="img" aria-label="Greeks hierarchy">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0c0f14"/>
+      <stop offset="100%" stop-color="#151b24"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="80%" cy="20%" r="55%">
+      <stop offset="0%" stop-color="#c4a574" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#c4a574" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1200" height="800" fill="url(#g)"/>
+  <rect width="1200" height="800" fill="url(#glow)"/>
+  <rect x="0" y="0" width="8" height="800" fill="#c4a574"/>
+
+  <text x="48" y="72" fill="#9a9284" font-family="ui-sans-serif,system-ui" font-size="22" letter-spacing="4">OPTIONS</text>
+  <text x="48" y="150" fill="#f3efe6" font-family="Georgia,serif" font-size="48" font-weight="700">The greeks, in the</text>
+  <text x="48" y="210" fill="#f3efe6" font-family="Georgia,serif" font-size="48" font-weight="700">order that matters</text>
+  <g transform="translate(48,300)">
+    
+    <rect x="0" y="0" width="160" height="280" rx="12" fill="#141a22" stroke="#5a9a72" stroke-width="3"/>
+    <text x="80" y="80" text-anchor="middle" fill="#5a9a72" font-family="Georgia,serif" font-size="36" font-weight="700">Δ</text>
+    <text x="80" y="140" text-anchor="middle" fill="#f3efe6" font-family="ui-sans-serif" font-size="18">Direction</text>
+    <text x="80" y="200" text-anchor="middle" fill="#9a9284" font-family="ui-sans-serif" font-size="16">first risk</text>
+    
+    <rect x="180" y="0" width="160" height="280" rx="12" fill="#141a22" stroke="#c4a574" stroke-width="3"/>
+    <text x="260" y="80" text-anchor="middle" fill="#c4a574" font-family="Georgia,serif" font-size="36" font-weight="700">Γ</text>
+    <text x="260" y="140" text-anchor="middle" fill="#f3efe6" font-family="ui-sans-serif" font-size="18">Convexity</text>
+    <text x="260" y="200" text-anchor="middle" fill="#9a9284" font-family="ui-sans-serif" font-size="16">path</text>
+    
+    <rect x="360" y="0" width="160" height="280" rx="12" fill="#141a22" stroke="#6a8fa8" stroke-width="3"/>
+    <text x="440" y="80" text-anchor="middle" fill="#6a8fa8" font-family="Georgia,serif" font-size="36" font-weight="700">ν</text>
+    <text x="440" y="140" text-anchor="middle" fill="#f3efe6" font-family="ui-sans-serif" font-size="18">IV level</text>
+    <text x="440" y="200" text-anchor="middle" fill="#9a9284" font-family="ui-sans-serif" font-size="16">vega</text>
+    
+    <rect x="540" y="0" width="160" height="280" rx="12" fill="#141a22" stroke="#c45c4a" stroke-width="3"/>
+    <text x="620" y="80" text-anchor="middle" fill="#c45c4a" font-family="Georgia,serif" font-size="36" font-weight="700">θ</text>
+    <text x="620" y="140" text-anchor="middle" fill="#f3efe6" font-family="ui-sans-serif" font-size="18">Clock</text>
+    <text x="620" y="200" text-anchor="middle" fill="#9a9284" font-family="ui-sans-serif" font-size="16">last ego</text>
+    
+    <rect x="720" y="0" width="160" height="280" rx="12" fill="#141a22" stroke="#9a9284" stroke-width="3"/>
+    <text x="800" y="80" text-anchor="middle" fill="#9a9284" font-family="Georgia,serif" font-size="36" font-weight="700">νan</text>
+    <text x="800" y="140" text-anchor="middle" fill="#f3efe6" font-family="ui-sans-serif" font-size="18">Cross</text>
+    <text x="800" y="200" text-anchor="middle" fill="#9a9284" font-family="ui-sans-serif" font-size="16">crash</text>
+    
+  </g>
+
+</svg>

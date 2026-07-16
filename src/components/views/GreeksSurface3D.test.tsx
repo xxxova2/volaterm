@@ -212,7 +212,7 @@ describe('GreeksSurface3D component', () => {
     useTerminalStore.setState({ snapshot: null });
     render(<GreeksSurface3D />);
     expect(screen.getByText('No surface for 3D mesh')).toBeInTheDocument();
-    expect(screen.getByText(/MacroVol greeks or a LIVE chain/i)).toBeInTheDocument();
+    expect(screen.getByText(/yfinance greeks or a LIVE chain/i)).toBeInTheDocument();
     expect(screen.queryByText(/LIVE or demo/i)).toBeNull();
   });
 });

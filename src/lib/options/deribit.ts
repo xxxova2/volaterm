@@ -80,7 +80,11 @@ export function buildFuturesMarks(
         : index;
     if (!(idx > 0)) continue;
     const dte = parsed.expiry != null ? calendarDte(parsed.expiry, now) : null;
-    const T = dte != null && dte > 0 ? dte / 365 : null;
+    const T = parsed.expiry != null
+      ? yearFractionToExpiry(parsed.expiry, now)
+      : dte != null && dte > 0
+        ? dte / 365
+        : null;
     const basis = mark - idx;
     const annCarry = T != null && T > 0 ? (mark / idx - 1) / T : null;
     out.push({

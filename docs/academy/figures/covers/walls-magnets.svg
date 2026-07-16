@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" role="img" aria-label="Walls magnets dealer mode">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0c0f14"/><stop offset="100%" stop-color="#151b24"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="800" fill="url(#g)"/>
+  <rect x="0" y="0" width="8" height="800" fill="#c4a574"/>
+  <text x="48" y="72" fill="#9a9284" font-family="ui-sans-serif" font-size="22" letter-spacing="4">POSITIONING</text>
+  <text x="48" y="150" fill="#f3efe6" font-family="Georgia,serif" font-size="48" font-weight="700">Walls, magnets,</text>
+  <text x="48" y="210" fill="#f3efe6" font-family="Georgia,serif" font-size="48" font-weight="700">and dealer mode</text>
+  <text x="48" y="270" fill="#9a9284" font-size="24">Call wall · put wall · HVL · who is sticky</text>
+  <!-- price path between walls -->
+  <line x1="200" y1="380" x2="200" y2="700" stroke="#5a9a72" stroke-width="4"/>
+  <line x1="1000" y1="380" x2="1000" y2="700" stroke="#c45c4a" stroke-width="4"/>
+  <line x1="600" y1="380" x2="600" y2="700" stroke="#c4a574" stroke-width="3" stroke-dasharray="8 6"/>
+  <path d="M 220 620 Q 400 500 600 540 Q 800 580 980 450" fill="none" stroke="#6a8fa8" stroke-width="4"/>
+  <text x="200" y="360" text-anchor="middle" fill="#5a9a72" font-size="18">put wall</text>
+  <text x="600" y="360" text-anchor="middle" fill="#c4a574" font-size="18">HVL</text>
+  <text x="1000" y="360" text-anchor="middle" fill="#c45c4a" font-size="18">call wall</text>
+</svg>

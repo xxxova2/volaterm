@@ -356,16 +356,16 @@ function LadderPane({
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="flex h-full min-h-0 flex-col bg-black">
       <div className="flex flex-wrap items-center gap-x-2 border-b border-border/50 px-2 py-0.5">
         <span className="font-mono text-type-2xs font-semibold text-foreground">
           {mode === 'gex' ? 'GEX BY STRIKE' : 'POS BY STRIKE'}
         </span>
-        <span className="font-mono text-type-2xs text-muted-foreground">
+        <span className="font-mono text-type-2xs text-zinc-500">
           {mode === 'gex' ? '−γ ← · +γ →' : 'put ← · call →'}
         </span>
       </div>
-      <div className="relative min-h-0 flex-1 p-0.5">
+      <div className="relative min-h-0 flex-1 bg-black p-0.5">
         <ResponsiveContainer width="100%" height={barH}>
           <BarChart
             data={rows}
@@ -486,14 +486,17 @@ function FieldPane({
   zoneLabel: string | null;
 }) {
   return (
-    <div className="flex h-full min-h-0 min-w-0 flex-col rounded border border-border/60 bg-card/20">
-      <div className="flex flex-wrap items-center gap-x-2 border-b border-border/50 px-2 py-0.5">
-        <Explain term={term}>
-          <span className="font-mono text-type-2xs font-semibold text-foreground">{title}</span>
-        </Explain>
-        <span className="font-mono text-type-2xs text-muted-foreground">{blurb}</span>
+    <div className="flex h-full min-h-0 min-w-0 flex-col rounded border border-border bg-black">
+      <div className="flex flex-wrap items-center justify-between gap-x-2 border-b border-border/50 px-2 py-0.5">
+        <div className="flex flex-wrap items-center gap-x-2">
+          <Explain term={term}>
+            <span className="font-mono text-type-2xs font-semibold text-foreground">{title}</span>
+          </Explain>
+          <span className="font-mono text-type-2xs text-zinc-500">{blurb}</span>
+        </div>
+        <span className="font-mono text-type-2xs text-zinc-500">Strike ↑ · time →</span>
       </div>
-      <div className="relative min-h-0 flex-1">
+      <div className="relative min-h-0 flex-1 bg-black">
         <SessionFieldCanvas
           series={series}
           liveProfile={liveProfile}
@@ -551,7 +554,7 @@ function SessionTraceBody({
       style={zoomed ? undefined : { minHeight: INLINE_H }}
     >
       <div
-        className="min-h-[12rem] rounded border border-border/60 bg-card/20 md:row-span-2 xl:row-span-1"
+        className="min-h-[12rem] rounded border border-border bg-black md:row-span-2 xl:row-span-1"
         style={zoomed ? undefined : { height: INLINE_H }}
       >
         <LadderPane

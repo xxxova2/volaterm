@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 400" role="img" aria-label="Theta is not free money">
+  <rect width="960" height="400" fill="#0b1220"/>
+  <text x="40" y="48" fill="#e8edf5" font-family="Georgia, serif" font-size="28" font-weight="700">Theta is not free money</text>
+  <text x="40" y="84" fill="#9aa8bc" font-family="system-ui" font-size="18">Short options: you get paid for risk. You do not get a free income stream.</text>
+  <rect x="40" y="120" width="400" height="220" rx="12" fill="#121c2e" stroke="#22c55e" stroke-width="3"/>
+  <text x="240" y="170" text-anchor="middle" fill="#4ade80" font-family="system-ui" font-size="22" font-weight="700">What you collect</text>
+  <text x="240" y="220" text-anchor="middle" fill="#e8edf5" font-family="system-ui" font-size="20">Theta (time decay)</text>
+  <text x="240" y="260" text-anchor="middle" fill="#9aa8bc" font-family="system-ui" font-size="18">Premium that bleeds</text>
+  <text x="240" y="300" text-anchor="middle" fill="#9aa8bc" font-family="system-ui" font-size="18">if nothing bad happens</text>
+  <rect x="520" y="120" width="400" height="220" rx="12" fill="#121c2e" stroke="#ef4444" stroke-width="3"/>
+  <text x="720" y="170" text-anchor="middle" fill="#f87171" font-family="system-ui" font-size="22" font-weight="700">What you pay for</text>
+  <text x="720" y="220" text-anchor="middle" fill="#e8edf5" font-family="system-ui" font-size="20">Gamma · Vanna · Volga</text>
+  <text x="720" y="260" text-anchor="middle" fill="#9aa8bc" font-family="system-ui" font-size="18">Big moves and vol shocks</text>
+  <text x="720" y="300" text-anchor="middle" fill="#9aa8bc" font-family="system-ui" font-size="18">hit you harder than they help</text>
+</svg>

@@ -44,17 +44,19 @@ export function RatesPanel({
   const {
     summary, plumbing, basis, basisHist, stir, shape, curve, curveMeta,
     curveCompare, curveComparePoints, corr,
-    error, loading,
+    error, loading, stirLoading,
     stirChart, shapeHistoryCharts, basisChart,
+    compareWindow, setCompareWindow, customDays, setCustomDays, compareLoading,
   } = useRatesData();
   const [implyDrawer, setImplyDrawer] = useState<{ imply: ImplyRead; context?: string } | null>(null);
   const openImply = useCallback((i: ImplyRead) => setImplyDrawer({ imply: i }), []);
 
+  // Core FRED pack only — STIR never blocks Funding/UST first paint.
   if (loading) {
     return (
       <div className="p-1">
-        <EmptyState kind="loading" title="Loading rates…" body="FRED · NYFed · yfinance via MacroVol (:8765)" compact />
-        <SectionSkeleton rows={3} className="mt-1" />
+        <EmptyState kind="loading" title="Loading rates…" body="FRED · NYFed (shared cache)" compact />
+        <SectionSkeleton rows={2} className="mt-1" />
       </div>
     );
   }
@@ -125,7 +127,7 @@ export function RatesPanel({
             apis={['FRED']}
             defaultOpen
             storageKey="rates.sec.ust-curve-early"
-            subtitle="Live vs ~1Y ago · tight yield scale · full charts + auction pack sit lower on the desk"
+            subtitle="Live vs compare window · tight yield scale · full charts + auction pack sit lower on the desk"
           >
             <YieldCurveCompare
               points={curveComparePoints}
@@ -133,6 +135,11 @@ export function RatesPanel({
               compareAsOf={curveCompare?.compare_as_of}
               height={220}
               source={curveMeta?.source || 'FRED'}
+              compareWindow={compareWindow}
+              onCompareWindow={setCompareWindow}
+              customDays={customDays}
+              onCustomDays={setCustomDays}
+              compareLoading={compareLoading}
             />
           </CollapsibleSection>
         </div>
@@ -155,6 +162,11 @@ export function RatesPanel({
         shape={shape}
         spreadHistory={shapeHistoryCharts}
         onOpenImply={openImply}
+        compareWindow={compareWindow}
+        onCompareWindow={setCompareWindow}
+        customDays={customDays}
+        onCustomDays={setCustomDays}
+        compareLoading={compareLoading}
       />
       {shape && (
         <div id="sec-shape">
@@ -174,13 +186,27 @@ export function RatesPanel({
 
   const stirMode = (
     <>
-      <div id="sec-stir">
-        <StirSection stir={stir} stirChart={stirChart} onOpenImply={openImply} />
-      </div>
-      {stir?.nyfed?.ref_print && stir.nyfed.ref_print.length > 0 && (
-        <div id="sec-nyfed">
-          <NyFedBoard nyfed={stir.nyfed} />
+      {stirLoading && !stir ? (
+        <div className="p-1">
+          <EmptyState
+            kind="loading"
+            title="Loading STIR strip…"
+            body="yfinance SR3/SR1 · first load can take ~10s, then shared cache"
+            compact
+          />
+          <SectionSkeleton rows={2} className="mt-1" />
         </div>
+      ) : (
+        <>
+          <div id="sec-stir">
+            <StirSection stir={stir} stirChart={stirChart} onOpenImply={openImply} />
+          </div>
+          {stir?.nyfed?.ref_print && stir.nyfed.ref_print.length > 0 && (
+            <div id="sec-nyfed">
+              <NyFedBoard nyfed={stir.nyfed} />
+            </div>
+          )}
+        </>
       )}
     </>
   );

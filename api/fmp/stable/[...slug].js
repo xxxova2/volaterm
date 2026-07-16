@@ -5,7 +5,7 @@ export default async function handler(req, res) {
   const slug = url.pathname.replace(/^\/api\/fmp\/stable\/?/, '') || '';
 
   if (!isFmpEndpointAllowed(slug)) {
-    res.status(403).json({ error: 'Endpoint not allowed', allowed: [...FMP_ALLOWED_ENDPOINTS] });
+    res.status(403).json({ error: 'Endpoint not allowed' });
     return;
   }
 

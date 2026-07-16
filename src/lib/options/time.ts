@@ -69,6 +69,16 @@ export function expiryCloseUtc(expiry: string): number | null {
   return etWallTimeToUtc(p.y, p.m, p.d, 16, 0, 0);
 }
 
+/** Memo close-epoch per YYYY-MM-DD (stable calendar mapping). */
+const expiryCloseCache = new Map<string, number | null>();
+
+function cachedExpiryCloseUtc(expiry: string): number | null {
+  if (expiryCloseCache.has(expiry)) return expiryCloseCache.get(expiry)!;
+  const close = expiryCloseUtc(expiry);
+  expiryCloseCache.set(expiry, close);
+  return close;
+}
+
 /**
  * Continuous year fraction from `now` to the expiry close (16:00 ET).
  * Returns null if the expiry cannot be parsed.
@@ -76,11 +86,35 @@ export function expiryCloseUtc(expiry: string): number | null {
  * (callers should still filter expired slices).
  */
 export function yearFractionToExpiry(expiry: string, now: number = Date.now()): number | null {
-  const close = expiryCloseUtc(expiry);
+  const close = cachedExpiryCloseUtc(expiry);
   if (close == null) return null;
   const left = close - now;
   if (left <= 0) return 1 / (365.25 * 24 * 60 * 60); // ~1 second
   return left / MS_PER_YEAR;
+}
+
+/**
+ * Continuous T for pricing / greeks from an expiry slice.
+ * Prefer ACT/365.25 to 16:00 ET when that residual is still meaningful.
+ * After the close, yearFractionToExpiry returns ~1s residual — then use dte/365
+ * if the slice still carries a positive calendar dte (tests / delayed chain labels).
+ * Do not use bare `dte/365` alone for live 0DTE midday — continuous wins while open.
+ */
+export function yearFractionFromSlice(
+  slice: { expiry: string; dte: number },
+  now: number = Date.now(),
+): number {
+  const T = yearFractionToExpiry(slice.expiry, now);
+  // ~1 second residual after close (see yearFractionToExpiry)
+  const postCloseFloor = 1 / (365.25 * 24 * 60 * 60);
+  if (T != null && Number.isFinite(T) && T > postCloseFloor * 10) {
+    return T;
+  }
+  if (slice.dte > 0) {
+    return Math.max(1e-8, slice.dte / 365);
+  }
+  if (T != null && T > 0 && Number.isFinite(T)) return T;
+  return 1e-8;
 }
 
 /** Whole calendar days remaining (ceil), for display / DTE labels. */

@@ -8,6 +8,7 @@
  */
 
 import { blackScholes } from './black-scholes';
+import { yearFractionFromSlice } from './time';
 import type { VolSnapshot } from './types';
 
 export type HedgeMode = 'threshold' | 'tolerance' | 'period';
@@ -178,7 +179,7 @@ export function defaultHedgeFromSnapshot(snap: VolSnapshot): Partial<HedgeConfig
   return {
     type: 'call',
     strike: atm.strike,
-    T: Math.max(1 / 365, slice.dte / 365),
+    T: yearFractionFromSlice(slice),
     vol: atm.iv ?? slice.atmIV,
     realizedVol: slice.atmIV,
     drift: 0,
@@ -227,7 +228,7 @@ export function simulateDeltaFollower(
     periodSteps: 1,
     type: opts.type,
     strike: qte.strike,
-    T: Math.max(1 / 365, slice.dte / 365),
+    T: yearFractionFromSlice(slice),
     vol: qte.iv ?? slice.atmIV,
     realizedVol: opts.realizedVol,
     drift: opts.drift,

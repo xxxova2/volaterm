@@ -2423,7 +2423,7 @@ These are **not** Bloomberg sources. They show how the *aesthetic* is mimicked i
 
 * Living research log (tokens, gaps, deliver matrix): `docs/BLOOMBERG_VISUAL_RESEARCH.md`
 * Orchestration / Hy3 handoff: `docs/ORCHESTRATION_BBG_HOME.md`
-* Shell redesign constraints: `docs/BLOOMBERG_SHELL_REDESIGN.md`
+* Shell redesign constraints: `docs/engineering/BLOOMBERG_SHELL_REDESIGN.md`
 
 **Remembered operating model (do not forget):**
 * You paste packs → Hy3 implements → you bring report → Grok reviews / next pack.

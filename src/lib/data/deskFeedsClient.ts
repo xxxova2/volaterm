@@ -38,6 +38,57 @@ export interface DeskPack {
     fromCache?: boolean;
     error?: string | null;
   };
+  alphavantage_overview?: {
+    overview?: {
+      name?: string | null;
+      sector?: string | null;
+      industry?: string | null;
+      market_cap?: number | null;
+      pe?: number | null;
+      beta?: number | null;
+      dividend_yield?: number | null;
+      week52_high?: number | null;
+      week52_low?: number | null;
+      description?: string | null;
+    } | null;
+    as_of?: string;
+    fromCache?: boolean;
+    error?: string | null;
+    source?: string;
+  };
+  finnhub_news?: unknown;
+  finnhub_economic_calendar?: {
+    events?: {
+      id?: string;
+      country?: string | null;
+      event?: string | null;
+      time?: string | null;
+      impact?: string | null;
+    }[];
+    count?: number;
+    error?: string | null;
+    note?: string;
+  };
+  finnhub_recommendation?: {
+    latest?: {
+      period?: string | null;
+      strongBuy?: number | null;
+      buy?: number | null;
+      hold?: number | null;
+      sell?: number | null;
+      strongSell?: number | null;
+    } | null;
+    error?: string | null;
+  };
+  finnhub_peers?: {
+    peers?: string[];
+    count?: number;
+    error?: string | null;
+  };
+  derived?: {
+    realized_vol_20d_pct?: number | null;
+    realized_vol_note?: string;
+  };
   tradingview?: {
     price?: number | null;
     change_pct?: number | null;

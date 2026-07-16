@@ -41,7 +41,9 @@ const CODE_MAP: Record<string, FunctionId> = {
   SKEW: 'vol:vol-sub-smile',
   TERM: 'vol:vol-sub-term',
   FIT: 'vol:vol-sub-quality',
+  /** Full Greeks on Vol (not Trade). */
   VGRK: 'vol:vol-sub-greeks',
+  GRK: 'vol:vol-sub-greeks',
   HIVG: 'vol:vol-sub-term',
   HVT: 'vol',
   POS: 'positioning',
@@ -55,7 +57,6 @@ const CODE_MAP: Record<string, FunctionId> = {
   STRAT: 'positioning:pos-sub-tools',
   TOOLS: 'positioning:pos-sub-tools',
   OVME: 'positioning:pos-sub-tools',
-  GRK: 'desk:desk-ws-analyze',
   DESK: 'desk:desk-ws-sim',
   /** Thalex-class Trade lab */
   SIM: 'desk:desk-ws-sim',
@@ -71,12 +72,12 @@ const CODE_MAP: Record<string, FunctionId> = {
   ROLL: 'desk:desk-ws-roll',
   /** IV surface lives on Vol (legacy Greeks IV tab removed). */
   IVG: 'vol:vol-sub-surface',
-  /** Legacy codes → Trade Analyze (HEAT/PROF/…) or mesh theme (3D). */
-  HEAT: 'desk:desk-ws-analyze',
-  PROF: 'desk:desk-ws-analyze',
-  SENS: 'desk:desk-ws-analyze',
-  EXP: 'desk:desk-ws-analyze',
-  '3D': 'desk:desk-ws-analyze',
+  /** Legacy codes → Vol · Greeks (HEAT/PROF/…) or mesh theme (3D). */
+  HEAT: 'vol:vol-sub-greeks',
+  PROF: 'vol:vol-sub-greeks',
+  SENS: 'vol:vol-sub-greeks',
+  EXP: 'vol:vol-sub-greeks',
+  '3D': 'vol:vol-sub-greeks',
   MM: 'desk:desk-ws-sim',
   BTC: 'crypto',
   ETH: 'crypto',
@@ -94,6 +95,17 @@ const CODE_MAP: Record<string, FunctionId> = {
   JGB: 'rates:sec-japan',
   HELP: '__shell:help',
   WL: '__shell:watchlist',
+  ACAD: 'academy',
+  ACADSTART: 'academy:academy-sub-start',
+  ACADOPT: 'academy:academy-sub-options',
+  ACADMAC: 'academy:academy-sub-macro',
+  ACADPOS: 'academy:academy-sub-start',
+  ACADNEWS: 'academy:academy-sub-news',
+  ACADTLS: 'academy:academy-sub-start', // legacy Tools track → Home
+  ACADENG: 'academy:academy-sub-start',
+  ACADGLOS: 'academy:academy-sub-glossary',
+  FA: 'positioning:pos-sub-tools',
+  FALVL: 'positioning:pos-sub-tools',
 };
 
 /**
@@ -106,12 +118,14 @@ const STUDY_ALIAS_KEYWORDS: Record<string, string[]> = {
   'vol:vol-sub-smile': ['skew', 'vol smile', 'risk reversal'],
   'positioning:pos-sub-chain': ['omon', 'option monitor', 'chain monitor'],
   'vol:vol-sub-term': ['hivg', 'historical implied vol', 'term structure'],
-  'vol:vol-sub-greeks': ['greeks', 'delta gamma', 'vol risk', 'vgrk'],
+  'vol:vol-sub-greeks': ['greeks', 'delta gamma', 'vol risk', 'vgrk', 'analyze', 'grk'],
   vol: [
     'hvt', 'historical vol', 'hist vol', 'realized vol',
     'des', 'description', 'security description', 'home',
   ],
-  'positioning:pos-sub-tools': ['ovme', 'option payoff', 'scenario', 'strategy builder', 'levels', 'parity'],
+  'positioning:pos-sub-tools': ['ovme', 'option payoff', 'scenario', 'strategy builder', 'levels', 'parity', 'flashalpha', 'fa'],
+  academy: ['learn', 'education', 'training', 'docs', 'curriculum'],
+  'academy:academy-sub-glossary': ['terms', 'definitions', 'dictionary'],
 };
 
 function buildRegistry(): FunctionDescriptor[] {
@@ -309,20 +323,23 @@ export function openFunction(
   }
 
   if (d) {
-    // Legacy 3D / greeks-* → mesh theme + Trade Analyze
+    // Legacy Trade Analyze / greeks-* → Vol · Greeks (single home)
     let sectionId = d.sectionId;
+    let tab = d.tab;
     if (
       sectionId === 'greeks-sub-surface3d'
       || sectionId === 'greeks-mesh'
       || sectionId === 'greeks-desk'
       || sectionId === 'greeks-iv'
+      || sectionId === 'desk-ws-analyze'
     ) {
       if (sectionId === 'greeks-sub-surface3d' || sectionId === 'greeks-mesh') {
         try {
           localStorage.setItem('ui.greeks.surfaceTheme', 'mesh');
         } catch { /* ignore */ }
       }
-      sectionId = 'desk-ws-analyze';
+      sectionId = 'vol-sub-greeks';
+      tab = 'vol';
     }
     // 3D mnemonic still sets mesh even when CODE_MAP already points at analyze
     if (input.trim().toUpperCase() === '3D') {
@@ -331,13 +348,13 @@ export function openFunction(
       } catch { /* ignore */ }
     }
     if (sectionId) setDeskJump(sectionId);
-    useTerminalStore.getState().setActiveTab(d.tab);
+    useTerminalStore.getState().setActiveTab(tab);
     if (d.symbol) {
       useTerminalStore.getState().setSymbol(d.symbol);
     }
     if (sectionId) {
       useTerminalStore.getState().setDeskSection(sectionId);
-      const meta = findSectionMeta(sectionId, d.tab);
+      const meta = findSectionMeta(sectionId, tab);
       if (meta) {
         useTerminalStore.getState().setDeskContext({
           id: sectionId,

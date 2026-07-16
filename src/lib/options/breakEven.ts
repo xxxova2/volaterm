@@ -3,6 +3,7 @@
  */
 
 import { blackScholes, normCdf } from './black-scholes';
+import { yearFractionFromSlice } from './time';
 import type { VolSnapshot } from './types';
 import { breakEvenSpots, comboPayoffAtExpiry, type PortfolioLeg } from './portfolio';
 
@@ -28,7 +29,7 @@ export function breakEvenTable(
 ): BreakEvenRow[] {
   const slice = snap.expiries[expiryIdx];
   if (!slice) return [];
-  const T = Math.max(1e-6, slice.dte / 365);
+  const T = yearFractionFromSlice(slice);
   const S = snap.spot;
   const r = snap.riskFreeRate;
   const div = snap.dividendYield;

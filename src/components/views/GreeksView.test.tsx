@@ -6,6 +6,7 @@ import {
   buildSnapshot,
   buildSurfaceGrid,
 } from '../../lib/options/synthetic';
+import { invalidateGreeksCache } from '../../lib/macrovol/greeksCache';
 import { GreeksView } from './GreeksView';
 
 class ResizeObserverStub {
@@ -53,6 +54,7 @@ vi.mock('../../lib/macrovol/api', () => ({
 
 describe('GreeksView (Greeks 1.0 host)', () => {
   beforeEach(() => {
+    invalidateGreeksCache();
     const snapshot = buildSnapshot('SPY', Date.now(), 100, 0, 0);
     const surface = buildSurfaceGrid(snapshot);
     useTerminalStore.setState({
@@ -67,8 +69,8 @@ describe('GreeksView (Greeks 1.0 host)', () => {
       liveAvailable: true,
       loading: false,
       lastUpdate: Date.now(),
-      activeTab: 'desk',
-      deskSectionId: 'desk-ws-analyze',
+      activeTab: 'vol',
+      deskSectionId: 'vol-sub-greeks',
       displayMode: 'strike',
       selectedExpiry: null,
       playbackInterval: null,
@@ -76,13 +78,16 @@ describe('GreeksView (Greeks 1.0 host)', () => {
     });
   });
 
-  it('mounts Greeks 1.0 shell (not dual edition)', async () => {
+  it('mounts Vol · Greeks shell locked to header symbol (not dual edition)', async () => {
     render(<GreeksView />);
     await waitFor(() => {
-      expect(screen.getByText(/GREEKS 1\.0/i)).toBeInTheDocument();
+      expect(screen.getByText(/^SPY$/)).toBeInTheDocument();
     });
     expect(screen.queryByText('Terminal Greeks')).toBeNull();
     expect(screen.queryByText('Open Greeks 1.0 (MacroVol API)')).toBeNull();
+    // No desk-local multi-ticker chip row
+    expect(screen.queryByText('Change')).toBeNull();
+    expect(screen.queryByText('QQQ')).toBeNull();
   });
 
   it('exposes Plotly / 3D mesh theme toggle', async () => {

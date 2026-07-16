@@ -2,8 +2,46 @@ import yfinance as yf
 import numpy as np
 from scipy.stats import norm
 from scipy.interpolate import griddata
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 import math
+
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:  # pragma: no cover
+    ZoneInfo = None  # type: ignore
+
+_ET = ZoneInfo("America/New_York") if ZoneInfo else None
+_SEC_PER_YEAR = 365.25 * 24 * 3600
+_POST_CLOSE_T = 1.0 / _SEC_PER_YEAR  # ~1 second residual after 16:00 ET
+
+
+def year_fraction_to_expiry(exp_str: str, now: datetime | None = None) -> float:
+    """
+    Continuous year fraction to regular-session close (16:00 America/New_York).
+    Aligns with terminal `yearFractionToExpiry` (ACT/365.25) — not calendar days/365.
+    After the close, returns a tiny residual so callers can skip expired slices.
+    """
+    parts = exp_str.strip().split("-")
+    if len(parts) < 3:
+        return _POST_CLOSE_T
+    try:
+        y, m, d = int(parts[0]), int(parts[1]), int(parts[2])
+    except ValueError:
+        return _POST_CLOSE_T
+    if _ET is not None:
+        close = datetime(y, m, d, 16, 0, 0, tzinfo=_ET)
+        now_dt = now or datetime.now(timezone.utc)
+        if now_dt.tzinfo is None:
+            now_dt = now_dt.replace(tzinfo=timezone.utc)
+        left = (close - now_dt).total_seconds()
+    else:
+        # Fallback without zoneinfo: treat close as UTC-4 approximation (EDT).
+        close = datetime(y, m, d, 20, 0, 0, tzinfo=timezone.utc)
+        now_dt = now or datetime.now(timezone.utc)
+        left = (close - now_dt).total_seconds()
+    if left <= 0:
+        return _POST_CLOSE_T
+    return left / _SEC_PER_YEAR
 
 
 def bs_price(S, K, T, r, q, sigma, option_type="call"):
@@ -127,15 +165,14 @@ def build_greeks_surface(ticker: str, r: float = 0.05, q: float = 0.0, curve_poi
         hist = stock.history(period="1d")
         spot = float(hist["Close"].iloc[-1])
 
-    today = date.today()
     expiries = stock.options[:8]
 
     all_points = []
 
     for exp_str in expiries:
-        exp_date = datetime.strptime(exp_str, "%Y-%m-%d").date()
-        T = (exp_date - today).days / 365.0
-        if T < 3 / 365:
+        # Continuous T to 16:00 ET (include 0DTE / weeklies). Skip only after close.
+        T = year_fraction_to_expiry(exp_str)
+        if T <= _POST_CLOSE_T * 10:
             continue
         r_t = _r_for_T(T, r, curve_points)
         try:
@@ -250,36 +287,48 @@ def build_gex_strikes(points: list, spot: float) -> list:
 
 def compute_gex_flip(gex_list: list, spot: float) -> dict | None:
     """
-    Zero-crossing of strike-aggregated GEX nearest to spot (not first sign change in list).
-    Returns strike and side of spot.
+    Cumulative net-GEX zero-crossing (SpotGamma-style), aligned with terminal
+    `flipFromSeries` in src/lib/options/analytics.ts and the glossary.
+
+    Walk strikes low→high; flip = first strike where running sum crosses from
+    negative to ≥0. If no such cross, fall back to the strike of min |running sum|.
     """
-    if not gex_list or len(gex_list) < 2:
+    if not gex_list:
         return None
-    crossings = []
-    for i in range(1, len(gex_list)):
-        a, b = gex_list[i - 1], gex_list[i]
-        ga, gb = a["gex"], b["gex"]
-        if ga == 0:
-            crossings.append(a["strike"])
-        elif ga * gb < 0:
-            # linear interpolate zero
-            w = abs(ga) / (abs(ga) + abs(gb))
-            crossings.append(a["strike"] + w * (b["strike"] - a["strike"]))
-    if not crossings:
-        return None
-    flip = min(crossings, key=lambda k: abs(k - spot))
+    # Ensure low→high strike order (build_gex_strikes already sorts, but be safe).
+    ordered = sorted(gex_list, key=lambda g: g["strike"])
+    cumulative = 0.0
+    prev_cum = 0.0
+    flip = None
+    for p in ordered:
+        prev_cum = cumulative
+        cumulative += float(p["gex"])
+        if flip is None and prev_cum < 0 and cumulative >= 0:
+            flip = float(p["strike"])
+    if flip is None:
+        best = ordered[0]
+        run = 0.0
+        best_abs = float("inf")
+        for p in ordered:
+            run += float(p["gex"])
+            a = abs(run)
+            if a < best_abs:
+                best_abs = a
+                best = p
+        flip = float(best["strike"])
     return {
         "strike": round(flip, 2),
         "spot_vs_flip": "above" if spot > flip else "below" if spot < flip else "at",
-        "net_gex": round(sum(g["gex"] for g in gex_list), 2),
+        "net_gex": round(sum(float(g["gex"]) for g in ordered), 2),
+        "method": "cumulative",
     }
 
 
 def build_charm_exposure_grid(points: list, spot: float, n_T: int = 25, n_K: int = 35) -> dict:
     """
-    Charm exposure ≈ charm_per_day × OI × 100 × S
-    (dollar-delta change per day for 1% is NOT the right scale — this is Δ$ per day).
-    Call +, put − under same naive dealer sign convention as GEX.
+    Charm exposure ≈ BS-signed charm_per_day × OI × 100 × S
+    (dollar-delta change per day). Matches terminal analytics.ts — uses model-signed
+    charm; does NOT re-flip puts (GEX still uses call+/put− naive convention).
     """
     data = []
     for p in points:
@@ -287,9 +336,8 @@ def build_charm_exposure_grid(points: list, spot: float, n_T: int = 25, n_K: int
         oi = p.get("oi", 0)
         if c is None or not oi:
             continue
-        sign = 1 if p["type"] == "call" else -1
-        # Dollar-delta decay per calendar day
-        exposure = sign * c * oi * 100 * spot
+        # Dollar-delta decay per calendar day (BS-signed charm)
+        exposure = c * oi * 100 * spot
         if math.isfinite(exposure):
             data.append((p["T"], p["K"], exposure))
     if len(data) < 10:
@@ -321,18 +369,40 @@ def build_interpolated_surface(
     return _interpolate_grid(data, n_T, n_K, decimals=6)
 
 
-def _interpolate_grid(data: list, n_T: int, n_K: int, decimals: int = 4) -> dict:
+def _interpolate_grid(
+    data: list,
+    n_T: int,
+    n_K: int,
+    decimals: int = 4,
+    *,
+    value_min: float | None = None,
+    value_max: float | None = None,
+) -> dict:
+    """
+    Scatter → regular grid. Linear interior (no cubic overshoot) + nearest for
+    residual holes. Optional value band drops non-physical cells (e.g. IV).
+    """
     arr = np.array(data)
     T_vals = np.linspace(arr[:, 0].min(), arr[:, 0].max(), n_T)
     K_vals = np.linspace(arr[:, 1].min(), arr[:, 1].max(), n_K)
     T_grid, K_grid = np.meshgrid(T_vals, K_vals)
-    grid = griddata(arr[:, :2], arr[:, 2], (T_grid, K_grid), method="cubic")
-    grid_linear = griddata(arr[:, :2], arr[:, 2], (T_grid, K_grid), method="linear")
-    grid_nearest = griddata(arr[:, :2], arr[:, 2], (T_grid, K_grid), method="nearest")
-    mask = np.isnan(grid)
-    grid[mask] = grid_linear[mask]
-    mask2 = np.isnan(grid)
-    grid[mask2] = grid_nearest[mask2]
+    linear = griddata(arr[:, :2], arr[:, 2], (T_grid, K_grid), method="linear")
+    nearest = griddata(arr[:, :2], arr[:, 2], (T_grid, K_grid), method="nearest")
+
+    def in_band(a: np.ndarray) -> np.ndarray:
+        ok = np.isfinite(a)
+        if value_min is not None:
+            ok &= a >= value_min
+        if value_max is not None:
+            ok &= a <= value_max
+        return ok
+
+    grid = np.full_like(linear, np.nan, dtype=float)
+    m = in_band(linear)
+    grid[m] = linear[m]
+    m = ~np.isfinite(grid) & in_band(nearest)
+    grid[m] = nearest[m]
+
     return {
         "T_vals": [round(float(t), 4) for t in T_vals],
         "K_vals": [round(float(k), 2) for k in K_vals],

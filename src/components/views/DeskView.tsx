@@ -14,6 +14,7 @@ import { EmptyState } from '../common/EmptyState';
 import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
 import { FreshnessFromDomain } from '../common/Freshness';
 import { DeskChrome } from '../terminal/DeskChrome';
+import { DeskModeBar } from '../terminal/DeskModeBar';
 import { fmtPrice } from '../../lib/format';
 import { cn } from '../../lib/utils';
 import { UI_COPY } from '../../config/uiCopy';
@@ -21,6 +22,7 @@ import { isCryptoSymbol } from '../../lib/options/basis';
 import { inventoryByExpiry, portfolioGreeks } from '../../lib/options/analytics';
 import { DeskLoading } from '../common/Skeleton';
 import { consumeDeskJumpOnMount } from '../../lib/market/deskJump';
+import { resolveTradeModeSection } from '../../config/deskSections';
 import { SimTool } from '../desk/tools/SimTool';
 import { ComboGreeksTool } from '../desk/tools/ComboGreeksTool';
 import { GridTool } from '../desk/tools/GridTool';
@@ -138,23 +140,33 @@ const TOOL_TO_SECTION: Record<ToolId, string> = {
   backtest: 'desk-ws-backtest',
 };
 
-/** Quant workflow groups: structure → P&L → hedge → carry → analyze */
-const TOOLS: { id: ToolId; label: string; blurb: string; group: string }[] = [
-  { id: 'sim', label: 'Simulator', blurb: 'GBM path cloud + multi-leg PnL bands', group: 'structure' },
-  { id: 'combo', label: 'Combo Greeks', blurb: 'Multi-leg greeks vs spot', group: 'structure' },
-  { id: 'grid', label: 'Option Grid', blurb: 'Ω leverage · 1/N(d2)', group: 'structure' },
-  { id: 'analyze', label: 'Greeks', blurb: 'Greeks surfaces · GEX · OI (Thalex-class)', group: 'analyze' },
-  { id: 'combopnl', label: 'Combo PnL', blurb: 'Historical multi-leg PnL by greek', group: 'pnl' },
-  { id: 'optionpnl', label: 'Option PnL', blurb: 'Single-option historical mark PnL', group: 'pnl' },
-  { id: 'straddle', label: 'Straddle', blurb: 'Break-even + historical straddle PnL', group: 'pnl' },
-  { id: 'breakeven', label: 'Break Even', blurb: 'BE prices + N(d2)', group: 'pnl' },
-  { id: 'subjective', label: 'Subjective Valuation', blurb: 'Drift + VRP fair value (BS)', group: 'pnl' },
-  { id: 'backtest', label: 'Backtest', blurb: 'Weekly short-straddle Δ-hedged path', group: 'pnl' },
-  { id: 'hedge', label: 'Hedging', blurb: 'Threshold / tolerance / period Δ-hedge', group: 'hedge' },
-  { id: 'dfollow', label: 'Delta Follower', blurb: 'Track option delta with hedge', group: 'hedge' },
-  { id: 'basis', label: 'Basis', blurb: 'Forward basis + ann. carry', group: 'carry' },
-  { id: 'roll', label: 'Roll PnL', blurb: 'Funding/basis carry heatmap', group: 'carry' },
+/** Quant workflow: 3 red-bar modes; tools pick inside the workspace. */
+const TOOLS: { id: ToolId; label: string; blurb: string; mode: string }[] = [
+  { id: 'combo', label: 'Combo Greeks', blurb: 'Multi-leg greeks vs spot', mode: 'trade-sub-structure' },
+  { id: 'grid', label: 'Grid', blurb: 'Ω leverage · 1/N(d2)', mode: 'trade-sub-structure' },
+  { id: 'sim', label: 'Simulator', blurb: 'GBM path cloud + multi-leg PnL bands', mode: 'trade-sub-structure' },
+  { id: 'optionpnl', label: 'Option PnL', blurb: 'Single-option historical mark PnL', mode: 'trade-sub-pnl' },
+  { id: 'combopnl', label: 'Combo PnL', blurb: 'Historical multi-leg PnL by greek', mode: 'trade-sub-pnl' },
+  { id: 'straddle', label: 'Straddle', blurb: 'Break-even + historical straddle PnL', mode: 'trade-sub-pnl' },
+  { id: 'breakeven', label: 'Break Even', blurb: 'BE prices + N(d2)', mode: 'trade-sub-pnl' },
+  { id: 'subjective', label: 'Subjective', blurb: 'Drift + VRP fair value (BS)', mode: 'trade-sub-pnl' },
+  { id: 'backtest', label: 'Backtest', blurb: 'Weekly short-straddle Δ-hedged path', mode: 'trade-sub-pnl' },
+  { id: 'hedge', label: 'Hedging', blurb: 'Threshold / tolerance / period Δ-hedge', mode: 'trade-sub-risk' },
+  { id: 'dfollow', label: 'Δ Follower', blurb: 'Track option delta with hedge', mode: 'trade-sub-risk' },
+  { id: 'basis', label: 'Basis', blurb: 'Forward basis + ann. carry', mode: 'trade-sub-risk' },
+  { id: 'roll', label: 'Roll PnL', blurb: 'Funding/basis carry heatmap', mode: 'trade-sub-risk' },
+  { id: 'analyze', label: 'Greeks', blurb: 'Greeks surfaces · GEX · OI (Thalex-class)', mode: 'trade-sub-structure' },
 ];
+
+const MODE_DEFAULT_TOOL: Record<string, ToolId> = {
+  'trade-sub-structure': 'combo',
+  'trade-sub-pnl': 'optionpnl',
+  'trade-sub-risk': 'hedge',
+};
+
+function toolsForMode(mode: string) {
+  return TOOLS.filter((t) => t.mode === mode && t.id !== 'analyze');
+}
 
 function apiBadge(
   source: 'demo' | 'live',
@@ -193,27 +205,59 @@ export function DeskView({
   const symbol = useTerminalStore(s => s.symbol);
   const deskSectionId = useTerminalStore(s => s.deskSectionId);
   const setDeskContext = useTerminalStore(s => s.setDeskContext);
-  // Lab-first default (Thalex surface); red bar / codes override via deskSectionId
-  const [tool, setTool] = useState<ToolId>(chrome === 'thalex' ? 'sim' : 'sim');
+  // Lab-first default; red bar modes + function codes override via deskSectionId
+  const [tool, setTool] = useState<ToolId>(chrome === 'thalex' ? 'sim' : 'combo');
 
   useEffect(() => consumeDeskJumpOnMount(), []);
 
-  // Red bar / function codes → tool workspace
+  // Red bar (trade-sub-*) or legacy desk-ws-* function codes → tool workspace
   useEffect(() => {
     if (!deskSectionId) return;
-    const mapped = SECTION_TO_TOOL[deskSectionId];
-    if (!mapped) return;
-    setTool(mapped);
-    const meta = TOOLS.find((t) => t.id === mapped);
-    setDeskContext({
-      id: TOOL_TO_SECTION[mapped],
-      label: meta?.label ?? mapped,
-      apis:
-        mapped === 'analyze'
-          ? chrome === 'thalex' ? ['Deribit', 'MacroVol'] : ['MacroVol', 'yfinance']
-          : chrome === 'thalex' ? ['Deribit'] : ['yfinance', 'FMP', 'Deribit'],
-    });
+
+    const legacyTool = SECTION_TO_TOOL[deskSectionId];
+    if (legacyTool) {
+      setTool(legacyTool);
+      const meta = TOOLS.find((t) => t.id === legacyTool);
+      setDeskContext({
+        id: TOOL_TO_SECTION[legacyTool],
+        label: meta?.label ?? legacyTool,
+        apis:
+          legacyTool === 'analyze'
+            ? chrome === 'thalex' ? ['Deribit', 'MacroVol'] : ['MacroVol', 'yfinance']
+            : chrome === 'thalex' ? ['Deribit'] : ['yfinance', 'FMP', 'Deribit'],
+      });
+      return;
+    }
+
+    const mode = resolveTradeModeSection(deskSectionId);
+    if (
+      deskSectionId === 'trade-sub-structure'
+      || deskSectionId === 'trade-sub-pnl'
+      || deskSectionId === 'trade-sub-risk'
+    ) {
+      setTool((prev) => {
+        const inMode = toolsForMode(mode).some((t) => t.id === prev);
+        return inMode ? prev : (MODE_DEFAULT_TOOL[mode] ?? 'combo');
+      });
+      const modeLabel =
+        mode === 'trade-sub-pnl' ? 'PnL'
+          : mode === 'trade-sub-risk' ? 'Hedge'
+            : 'Structure';
+      setDeskContext({
+        id: mode,
+        label: modeLabel,
+        apis: chrome === 'thalex' ? ['Deribit'] : ['yfinance', 'FMP', 'Deribit'],
+      });
+    }
   }, [deskSectionId, setDeskContext, chrome]);
+
+  const activeMode = useMemo(() => {
+    const fromTool = TOOLS.find((t) => t.id === tool)?.mode;
+    if (fromTool) return fromTool;
+    return resolveTradeModeSection(deskSectionId);
+  }, [tool, deskSectionId]);
+
+  const modeTools = useMemo(() => toolsForMode(activeMode), [activeMode]);
 
   // Fail-closed: domain classification — never optimistic live without asOf age; re-ticks every 5s
   const chainMissing = !chainAvailable || chainUsed === 'none';
@@ -318,6 +362,17 @@ export function DeskView({
               </span>
             ))}
           </div>
+        )}
+        {modeTools.length > 1 && (
+          <DeskModeBar
+            items={modeTools.map((t) => ({
+              id: t.id,
+              label: t.label,
+              title: t.blurb,
+            }))}
+            activeId={tool}
+            onSelect={(id) => setTool(id as ToolId)}
+          />
         )}
       </div>
 

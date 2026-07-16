@@ -1,6 +1,6 @@
 /**
  * Vol desk — Focus (full panel) default; Split = surface + smile/term.
- * Greeks live on this desk (same Analyze surface as Trade). Fit is focus-only.
+ * Greeks 1.0 lives here (not Trade). Fit is focus-only.
  */
 import { useEffect, lazy, Suspense, useState, useCallback } from 'react';
 import { SmileView } from './SmileView';
@@ -86,7 +86,12 @@ export function VolStructureView() {
     setDeskContext({
       id: meta?.domId ?? null,
       label: meta?.label ?? 'Surface',
-      apis: chainUsed === 'deribit' ? ['Deribit'] : ['yfinance', 'FMP'],
+      apis:
+        sub === 'greeks'
+          ? ['yfinance', 'FRED']
+          : chainUsed === 'deribit'
+            ? ['Deribit']
+            : ['yfinance', 'FMP'],
     });
     return () => setDeskContext({ id: null, label: null, apis: [] });
   }, [sub, setDeskContext, chainUsed]);
@@ -114,7 +119,7 @@ export function VolStructureView() {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      {/* GEX strip + Split/Focus only — Surface/Smile/Term/Greeks live on the red bar (no duplicate chips). */}
+      {/* GEX strip + Split/Focus only — Surface/Smile/Term/Greeks/Fit on red bar. */}
       <div className="flex shrink-0 items-center gap-1 border-b border-border bg-card/30">
         <GexLevelsStrip compact showSpark className="min-w-0 flex-1 border-0 bg-transparent" />
         <div className="flex shrink-0 gap-0.5 px-1">
@@ -217,7 +222,7 @@ export function VolStructureView() {
             )}
             {focusSub === 'greeks' && (
               <SectionErrorBoundary name="Greeks">
-                <Suspense fallback={<DeskLoading message="Loading greeks…" />}>
+                <Suspense fallback={<DeskLoading message={UI_COPY.load.greeks} />}>
                   <GreeksView />
                 </Suspense>
               </SectionErrorBoundary>

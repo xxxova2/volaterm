@@ -5,6 +5,7 @@
  * For crypto (BTC): q ≈ −funding; we model perpetual premium as annualized carry.
  */
 
+import { yearFractionFromSlice } from './time';
 import type { VolSnapshot } from './types';
 
 export interface BasisPoint {
@@ -82,7 +83,7 @@ export function buildBasisCurve(
   let hasMarketMarks = false;
 
   const points: BasisPoint[] = snap.expiries.map(sl => {
-    const T = Math.max(1e-8, sl.dte / 365);
+    const T = yearFractionFromSlice(sl);
     const mkt = marks.length > 0 ? matchFuturesMark(sl.expiry, sl.dte, marks) : null;
     if (mkt) {
       hasMarketMarks = true;
@@ -121,7 +122,9 @@ export function buildBasisCurve(
     for (const m of marks) {
       if (m.isPerp || m.dte == null || m.dte <= 0) continue;
       hasMarketMarks = true;
-      const T = Math.max(1e-8, m.dte / 365);
+      const T = m.expiry
+        ? yearFractionFromSlice({ expiry: m.expiry, dte: m.dte })
+        : Math.max(1e-8, m.dte / 365);
       points.push({
         expiry: m.expiry ?? m.instrument,
         dte: m.dte,

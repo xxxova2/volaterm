@@ -18,6 +18,7 @@ import { PlaybackBar } from '../terminal/PlaybackBar';
 import { SymbolDialog } from '../terminal/SymbolDialog';
 import { SidePanel } from './SidePanel';
 import { WatchlistStrip } from '../common/WatchlistStrip';
+import { ThreeVolStrip } from '../common/ThreeVolStrip';
 import { sanitizeSymbol } from '../../lib/validation';
 import { TABS } from '../terminal/tabs';
 import { findSectionMeta, jumpDeskSection, sectionsForTab } from '../../config/deskNav';
@@ -70,24 +71,34 @@ export function TerminalLayout() {
     });
   }, []);
 
-  // Seed default baby section when a desk has none (rail / hotkeys / cold start).
+  // Seed default baby section when a desk has none, or when switching into Academy
+  // with a stale non-academy section (otherwise filters desync → wrong track).
   useEffect(() => {
     const s = useTerminalStore.getState();
-    if (s.deskSectionId) return;
     const first = sectionsForTab(activeTab)[0]?.id;
-    if (first) s.setDeskSection(first);
+    if (!first) return;
+    if (!s.deskSectionId) {
+      s.setDeskSection(first);
+      return;
+    }
+    if (activeTab === 'academy' && !s.deskSectionId.startsWith('academy-sub-')) {
+      s.setDeskSection(first);
+    }
   }, [activeTab]);
 
   // SSE spot ticks in live mode (Node/Docker server). No-ops if stream unavailable.
   useSpotStream(symbol, source === 'live');
 
   // Always boot into LIVE so desks never start on synthetic/demo market data.
+  // Only kick chain load once — StrictMode remount must not abort an in-flight fetch.
   useEffect(() => {
     const s = useTerminalStore.getState();
     if (s.source !== 'live') {
       void s.setSource('live');
     }
-    setSymbol('SPY');
+    if (!s.snapshot && s.lastChainUpdate === 0) {
+      void setSymbol(s.symbol || 'SPY');
+    }
   }, [setSymbol]);
 
   // Preload heavy Vol chunks during boot so Greeks is not a cold lazy hit after Enter.
@@ -214,10 +225,21 @@ export function TerminalLayout() {
         }}
         onOpenDisplay={toggleDisplayStrip}
       />
+      {/* Vol honesty strip only on option desks — not Rates/Crypto/Academy (VIX ≠ rates). */}
+      {(activeTab === 'vol' || activeTab === 'positioning' || activeTab === 'desk') && (
+        <div className="shrink-0 border-b border-border/60">
+          <ThreeVolStrip />
+        </div>
+      )}
+      {/* No Shared Desk / DES / HIVG under the red bar — those ate the function area.
+          Free-board data stays on Home/Feeds and server warmer; Academy needs full height. */}
       <main
-        className="min-h-0 flex-1 overflow-hidden p-0"
+        className={cn(
+          'min-h-0 flex-1 overflow-hidden p-0',
+          activeTab === 'academy' && 'academy-shell',
+        )}
         role="main"
-        aria-label="Function area"
+        aria-label={activeTab === 'academy' ? 'Academy publication' : 'Function area'}
         id={`panel-${activeTab}`}
       >
         {renderDeskView(activeTab, loading)}

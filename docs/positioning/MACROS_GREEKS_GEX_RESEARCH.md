@@ -7,7 +7,7 @@
 | **Product** | VOLATERM |
 | **Principle** | Enrich **what we already have** (Rates/Plumbing, Greeks desk, Positioning GEX, surface); do not clone MenthorQ/Conks brands; keep vol surface quality bar |
 
-Related: `docs/POSITIONING_TRACE_RESEARCH.md`, `docs/BLOOMBERG_VISUAL_RESEARCH.md`, `docs/API_PROVIDERS_EVAL.md`.
+Related: `docs/POSITIONING_TRACE_RESEARCH.md`, `docs/BLOOMBERG_VISUAL_RESEARCH.md`, `docs/engineering/API_PROVIDERS_EVAL.md`.
 
 ---
 
