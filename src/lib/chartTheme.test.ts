@@ -8,12 +8,18 @@ import {
   CHART_SCENARIO,
   CHART_SERIES_ORDINAL,
   CHART_SPREAD,
+  DESK_SERIES,
   PLOTLY_CS_GEX,
   PLOTLY_CS_IV,
   PLOTLY_LAYOUT_BASE,
   canvasCellColor,
+  chartAxisLabelStyle,
   chartCorrColors,
+  chartDayTick,
   chartGridProps,
+  chartPctTick,
+  chartPriceTick,
+  chartSignedTick,
   chartTooltipStyle,
   colorWithAlpha,
   cssVar,
@@ -182,5 +188,59 @@ describe('chartTheme', () => {
     expect(CHART_HEX.down).toBe(CHART_RESOLVED.down);
     expect(CHART_HEX.brand).toBe(CHART_RESOLVED.brand);
     expect(CHART_HEX.card).toBe(CHART_RESOLVED.card);
+  });
+});
+
+describe('DESK_SERIES', () => {
+  it('maps desk roles to CHART series tokens', () => {
+    expect(DESK_SERIES.combo).toBe(CHART.series.live);
+    expect(DESK_SERIES.long).toBe(CHART.series.info);
+    expect(DESK_SERIES.short).toBe(CHART.series.down);
+    expect(DESK_SERIES.spot).toBe(CHART.series.amber);
+    expect(DESK_SERIES.median).toBe(CHART.series.brand);
+    expect(DESK_SERIES.bandOuter).toBe(CHART.series.info);
+    expect(DESK_SERIES.bandInner).toBe(CHART.series.brand);
+    expect(DESK_SERIES.zero).toBe(CHART.series.muted);
+    expect(DESK_SERIES.historyLive).toBe(CHART.series.live);
+    expect(DESK_SERIES.historyCompare).toBe(CHART.series.compare);
+  });
+
+  it('keeps long and short visually distinct', () => {
+    expect(DESK_SERIES.long).not.toBe(DESK_SERIES.short);
+  });
+});
+
+describe('chart tick formatters', () => {
+  it('chartPriceTick formats by magnitude', () => {
+    expect(chartPriceTick(1234)).toBe('1234');
+    expect(chartPriceTick(12.34)).toBe('12.3');
+    expect(chartPriceTick(1.234)).toBe('1.23');
+    expect(chartPriceTick(NaN)).toBe('—');
+  });
+
+  it('chartPctTick formats fractions and raw percents', () => {
+    expect(chartPctTick(0.123)).toBe('12.3%');
+    expect(chartPctTick(12.3, false)).toBe('12.3%');
+    expect(chartPctTick(NaN)).toBe('—');
+  });
+
+  it('chartDayTick rounds to whole days', () => {
+    expect(chartDayTick(21.4)).toBe('21d');
+    expect(chartDayTick(NaN)).toBe('—');
+  });
+
+  it('chartSignedTick adds + for positive values', () => {
+    expect(chartSignedTick(-12.3)).toBe('-12.3');
+    expect(chartSignedTick(12.3)).toBe('+12.3');
+    expect(chartSignedTick(0)).toBe('0.0');
+    expect(chartSignedTick(NaN)).toBe('—');
+  });
+});
+
+describe('chartAxisLabelStyle', () => {
+  it('uses muted axis fill and mono font', () => {
+    expect(chartAxisLabelStyle.fill).toBe(CHART.axisMuted);
+    expect(chartAxisLabelStyle.fontSize).toBe(10);
+    expect(chartAxisLabelStyle.fontFamily).toMatch(/mono/);
   });
 });

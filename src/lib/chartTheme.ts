@@ -127,6 +127,50 @@ export const chartAxisTick = {
   fontFamily: 'var(--font-mono), ui-monospace, monospace',
 };
 
+/** Desk chart series roles (combo / long-short / bands / history). */
+export const DESK_SERIES = {
+  combo: CHART.series.live,
+  long: CHART.series.info,
+  short: CHART.series.down,
+  spot: CHART.series.amber,
+  median: CHART.series.brand,
+  bandOuter: CHART.series.info,
+  bandInner: CHART.series.brand,
+  zero: CHART.series.muted,
+  historyLive: CHART.series.live,
+  historyCompare: CHART.series.compare,
+} as const;
+
+export const chartAxisLabelStyle = {
+  fill: CHART.axisMuted,
+  fontSize: 10,
+  fontFamily: 'var(--font-mono), ui-monospace, monospace',
+} as const;
+
+export function chartPriceTick(v: number): string {
+  if (!Number.isFinite(v)) return '—';
+  if (Math.abs(v) >= 1000) return v.toFixed(0);
+  if (Math.abs(v) >= 10) return v.toFixed(1);
+  return v.toFixed(2);
+}
+
+export function chartPctTick(v: number, asFraction = true): string {
+  if (!Number.isFinite(v)) return '—';
+  const pct = asFraction ? v * 100 : v;
+  return `${pct.toFixed(1)}%`;
+}
+
+export function chartDayTick(v: number): string {
+  if (!Number.isFinite(v)) return '—';
+  return `${Math.round(v)}d`;
+}
+
+export function chartSignedTick(v: number, digits = 1): string {
+  if (!Number.isFinite(v)) return '—';
+  const sign = v > 0 ? '+' : '';
+  return `${sign}${v.toFixed(digits)}`;
+}
+
 export const chartGridProps = {
   stroke: CHART.grid,
   strokeDasharray: CHART.gridDash,
