@@ -1837,15 +1837,21 @@ try {
   console.error('static register failed', err);
 }
 
-// Serve /docs/* markdown files for the Academy reader
+// Serve /docs/* from repo docs/ (Academy). Do not also put docs under public/
+// — Vite would copy them into dist/ and @fastify/static would double-register
+// routes (HEAD /docs/index.json → crash).
 try {
-  await fastify.register(fastifyStatic, {
-    root: join(__dirname, 'docs'),
-    prefix: '/docs/',
-    decorateReply: false,
-    wildcard: false,
-    maxAge: '1d',
-  });
+  const docsRoot = join(__dirname, 'docs');
+  if (existsSync(docsRoot)) {
+    await fastify.register(fastifyStatic, {
+      root: docsRoot,
+      prefix: '/docs/',
+      decorateReply: false,
+      // wildcard true: one catch-all instead of per-file routes that collide with dist
+      wildcard: true,
+      maxAge: '1d',
+    });
+  }
 } catch (err) {
   console.warn('docs static failed', err?.message || err);
 }
