@@ -95,7 +95,7 @@ export function AcademyNews({
         ) : null}
         {filings.slice(0, 2).map((f) => (
           <div
-            key={`${f.form}-${f.filing_date}-${f.url || f.accession || ''}`}
+            key={`${f.form}-${f.filing_date}-${f.url || ''}`}
             className="academy-chip"
           >
             <span>
@@ -154,7 +154,7 @@ export function AcademyNews({
           <ul className="academy-filing-list">
             {filings.map((f) => (
               <li
-                key={`sec-${f.form}-${f.filing_date}-${f.url || f.accession || f.description}`}
+                key={`sec-${f.form}-${f.filing_date}-${f.url || f.description || ''}`}
                 className="academy-filing-item"
               >
                 <span>{f.form}</span>

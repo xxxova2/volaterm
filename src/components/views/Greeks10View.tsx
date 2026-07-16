@@ -94,7 +94,7 @@ export function Greeks10View() {
   // Single Greeks home = Vol · Greeks (not Trade).
   useEffect(() => {
     const tab = useTerminalStore.getState().activeTab;
-    if (tab === 'desk' || tab === 'greeks') {
+    if (tab === 'desk') {
       useTerminalStore.getState().setActiveTab('vol');
     }
     setDeskSection('vol-sub-greeks');

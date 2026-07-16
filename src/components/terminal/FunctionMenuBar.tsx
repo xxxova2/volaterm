@@ -117,9 +117,8 @@ export function FunctionMenuBar({
             const active =
               sectionId === s.id
               || (activeTab === 'desk' && resolveTradeModeSection(sectionId) === s.id);
-            // Academy + dense red bar: short codes so labels don't stack/clip
-            const label =
-              activeTab === 'academy' && s.short ? s.short : s.label;
+            // functionMenuSections already prefers DeskNavItem.short for label
+            const label = s.label;
             return (
               <button
                 key={s.id}

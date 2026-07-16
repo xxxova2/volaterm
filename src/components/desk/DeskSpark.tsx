@@ -46,7 +46,7 @@ export function DeskSpark({
       height={height}
       className={cn('shrink-0', className)}
       aria-hidden
-      title={title}
+      aria-label={title}
     >
       {area && <path d={area} fill={color} opacity={0.12} />}
       <polyline fill="none" stroke={color} strokeWidth="1.4" points={line} />

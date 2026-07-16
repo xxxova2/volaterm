@@ -395,9 +395,9 @@ export async function fetchYahooSnapshot(
   symbol: string,
   maxExpiries = 12,
   /** Prefer live treasury; DATA_CONFIG fallback only when caller has no curve. */
-  r = DATA_CONFIG.market.RISK_FREE_RATE,
+  r: number = DATA_CONFIG.market.RISK_FREE_RATE,
   /** Prefer profile/parity yield; DATA_CONFIG fallback only when caller has none. */
-  q = DATA_CONFIG.market.DIVIDEND_YIELD,
+  q: number = DATA_CONFIG.market.DIVIDEND_YIELD,
   opts?: Omit<BuildSnapshotOptions, 'maxExpiries' | 'now'>,
 ): Promise<VolSnapshot | null> {
   const key = `${symbol.toUpperCase()}:${maxExpiries}:${r.toFixed(5)}:${q.toFixed(5)}:${opts?.rateForT ? 'term' : 'flat'}`;

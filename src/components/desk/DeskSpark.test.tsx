@@ -14,4 +14,11 @@ describe('DeskSpark', () => {
     expect(container.querySelector('svg')).toBeTruthy();
     expect(container.querySelector('polyline')).toBeTruthy();
   });
+
+  it('maps title to aria-label (SVG has no title prop in React types)', () => {
+    const { container } = render(
+      <DeskSpark values={[1, 2, 3]} title="spot path" />,
+    );
+    expect(container.querySelector('svg')?.getAttribute('aria-label')).toBe('spot path');
+  });
 });
