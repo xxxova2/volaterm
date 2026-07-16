@@ -22,10 +22,7 @@ import { DeskChrome } from '../terminal/DeskChrome';
 import { fmtPct, fmtPrice, fmtSigned } from '../../lib/format';
 import { cn } from '../../lib/utils';
 import { UI_COPY } from '../../config/uiCopy';
-import {
-  analyzeComboBreakEven,
-  breakEvenTable,
-} from '../../lib/options/breakEven';
+import { analyzeComboBreakEven } from '../../lib/options/breakEven';
 import {
   evaluateCombo,
   templateLegs,
@@ -47,6 +44,7 @@ import { consumeDeskJumpOnMount } from '../../lib/market/deskJump';
 import { SimTool } from '../desk/tools/SimTool';
 import { ComboGreeksTool } from '../desk/tools/ComboGreeksTool';
 import { GridTool } from '../desk/tools/GridTool';
+import { BreakEvenTool } from '../desk/tools/BreakEvenTool';
 
 const GreeksView = lazy(() =>
   import('./GreeksView').then((m) => ({ default: m.GreeksView })),
@@ -600,71 +598,6 @@ function BacktestTool() {
             <Line type="monotone" dataKey="p50" stroke="var(--cyan)" strokeWidth={1.5} dot={false} />
           </ComposedChart>
         </ResponsiveContainer>
-      </Panel>
-    </ToolChrome>
-  );
-}
-
-/* ─── Break-even ────────────────────────────────────────────── */
-
-function BreakEvenTool() {
-  const snapshot = useTerminalStore(s => s.snapshot)!;
-  const [expiryIdx, setExpiryIdx] = useState(0);
-  const [type, setType] = useState<'call' | 'put' | 'both'>('call');
-  const rows = useMemo(() => breakEvenTable(snapshot, expiryIdx, type), [snapshot, expiryIdx, type]);
-  const near = rows.filter(r => Math.abs(r.strike - snapshot.spot) / snapshot.spot < 0.12);
-
-  return (
-    <ToolChrome>
-      <div className="flex flex-wrap gap-3 px-2 py-1 border border-border bg-card/50 rounded items-end">
-        <label className="text-type-xs font-mono text-muted-foreground flex flex-col gap-0.5">
-          Expiry
-          <select className="bg-background border border-border rounded px-1 py-0.5 text-xs font-mono" value={expiryIdx} onChange={e => setExpiryIdx(+e.target.value)}>
-            {snapshot.expiries.map((e, i) => (
-              <option key={e.expiry} value={i}>{e.expiry} ({e.dte}d)</option>
-            ))}
-          </select>
-        </label>
-        <label className="text-type-xs font-mono text-muted-foreground flex flex-col gap-0.5">
-          Type
-          <select className="bg-background border border-border rounded px-1 py-0.5 text-xs font-mono" value={type} onChange={e => setType(e.target.value as typeof type)}>
-            <option value="call">Calls</option>
-            <option value="put">Puts</option>
-            <option value="both">Both</option>
-          </select>
-        </label>
-        <Stat label="Spot" value={fmtPrice(snapshot.spot)} />
-        <Stat label="Rows" value={String(near.length)} />
-      </div>
-      <Panel title="Break-evens · N(d2)" subtitle="Near-money contracts" className="flex-1 min-h-0 overflow-auto">
-        <table className="w-full text-type-sm font-mono">
-          <thead className="sticky top-0 bg-card text-muted-foreground border-b border-border">
-            <tr>
-              <th className="text-left px-2 py-1">K</th>
-              <th className="text-left px-2 py-1">Type</th>
-              <th className="text-right px-2 py-1">Mid</th>
-              <th className="text-right px-2 py-1">BE</th>
-              <th className="text-right px-2 py-1">BE dist</th>
-              <th className="text-right px-2 py-1"><Explain term="nd2">N(d2)</Explain></th>
-              <th className="text-right px-2 py-1">Δ</th>
-              <th className="text-right px-2 py-1">IV</th>
-            </tr>
-          </thead>
-          <tbody>
-            {near.map(r => (
-              <tr key={`${r.type}-${r.strike}`} className="border-b border-border/50 hover:bg-muted/30">
-                <td className="px-2 py-0.5">{fmtPrice(r.strike, r.strike > 1000 ? 0 : 2)}</td>
-                <td className="px-2 py-0.5" style={{ color: r.type === 'call' ? 'var(--up)' : 'var(--down)' }}>{r.type}</td>
-                <td className="px-2 py-0.5 text-right">{fmtPrice(r.mid)}</td>
-                <td className="px-2 py-0.5 text-right">{fmtPrice(r.beLong, r.beLong > 1000 ? 0 : 2)}</td>
-                <td className="px-2 py-0.5 text-right" style={{ color: r.beDistPct >= 0 ? 'var(--up)' : 'var(--down)' }}>{fmtPct(r.beDistPct)}</td>
-                <td className="px-2 py-0.5 text-right">{(r.nd2 * 100).toFixed(1)}%</td>
-                <td className="px-2 py-0.5 text-right">{r.delta.toFixed(3)}</td>
-                <td className="px-2 py-0.5 text-right">{fmtPct(r.iv)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
       </Panel>
     </ToolChrome>
   );
