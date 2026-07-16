@@ -33,7 +33,6 @@ import {
 import { simulatePaths } from '../../lib/options/pathSim';
 import { defaultHedgeFromSnapshot, simulateDeltaHedge, type HedgeMode } from '../../lib/options/hedging';
 import { evaluateSubjective, subjectiveSummary } from '../../lib/options/subjective';
-import { buildOptionGrid } from '../../lib/options/optionGrid';
 import {
   comboGreeksPnl,
   historyToSpotBars,
@@ -47,6 +46,7 @@ import { DeskLoading } from '../common/Skeleton';
 import { consumeDeskJumpOnMount } from '../../lib/market/deskJump';
 import { SimTool } from '../desk/tools/SimTool';
 import { ComboGreeksTool } from '../desk/tools/ComboGreeksTool';
+import { GridTool } from '../desk/tools/GridTool';
 
 const GreeksView = lazy(() =>
   import('./GreeksView').then((m) => ({ default: m.GreeksView })),
@@ -733,76 +733,6 @@ function SubjectiveTool() {
             <Line type="monotone" dataKey="edge" stroke="var(--cyan)" strokeWidth={1} strokeDasharray="2 2" dot={false} name="Edge" />
           </ComposedChart>
         </ResponsiveContainer>
-      </Panel>
-    </ToolChrome>
-  );
-}
-
-/* ─── Grid ──────────────────────────────────────────────────── */
-
-function GridTool() {
-  const snapshot = useTerminalStore(s => s.snapshot)!;
-  const [type, setType] = useState<'call' | 'put'>('call');
-  const [metric, setMetric] = useState<'omega' | 'invNd2' | 'nd2'>('omega');
-  const grid = useMemo(() => buildOptionGrid(snapshot, type, 6), [snapshot, type]);
-
-  const values = grid.cells.flatMap(row => row.map(c => c[metric]).filter((v): v is number => v != null && isFinite(v)));
-  const maxAbs = Math.max(...values.map(Math.abs), 1e-9);
-
-  return (
-    <ToolChrome>
-      <div className="flex flex-wrap gap-3 px-2 py-1 border border-border bg-card/50 rounded items-end">
-        <label className="text-type-xs font-mono text-muted-foreground flex flex-col gap-0.5">
-          Type
-          <select className="bg-background border border-border rounded px-1 py-0.5 text-xs font-mono" value={type} onChange={e => setType(e.target.value as typeof type)}>
-            <option value="call">Calls</option>
-            <option value="put">Puts</option>
-          </select>
-        </label>
-        <label className="text-type-xs font-mono text-muted-foreground flex flex-col gap-0.5">
-          Metric
-          <select className="bg-background border border-border rounded px-1 py-0.5 text-xs font-mono" value={metric} onChange={e => setMetric(e.target.value as typeof metric)}>
-            <option value="omega">Ω leverage</option>
-            <option value="nd2">N(d2)</option>
-            <option value="invNd2">1/N(d2)</option>
-          </select>
-        </label>
-        <Stat label="Strikes" value={String(grid.strikes.length)} />
-        <Stat label="Expiries" value={String(grid.expiries.length)} />
-      </div>
-      <Panel title="Option Grid" subtitle={metric === 'omega' ? 'ω = Δ·S/V' : metric} className="flex-1 min-h-0 overflow-auto">
-        <div className="overflow-auto h-full">
-          <table className="text-type-xs font-mono border-collapse">
-            <thead className="sticky top-0 bg-card z-10">
-              <tr>
-                <th className="px-1 py-1 text-left text-muted-foreground sticky left-0 bg-card">K \\ T</th>
-                {grid.dtes.map((d, i) => (
-                  <th key={grid.expiries[i]} className="px-1 py-1 text-muted-foreground font-normal">{d}d</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {grid.strikes.map((K, ki) => (
-                <tr key={K}>
-                  <td className="px-1 py-0.5 text-muted-foreground sticky left-0 bg-card">{fmtPrice(K, K > 1000 ? 0 : 1)}</td>
-                  {grid.cells.map((row, ei) => {
-                    const cell = row[ki];
-                    const v = cell?.[metric] ?? null;
-                    const intensity = v != null ? Math.min(1, Math.abs(v) / maxAbs) : 0;
-                    const bg = v == null
-                      ? 'transparent'
-                      : `color-mix(in oklch, var(--cyan) ${Math.round(intensity * 55)}%, transparent)`;
-                    return (
-                      <td key={ei} className="px-1 py-0.5 text-right tabular-nums" style={{ background: bg }}>
-                        {v == null ? '·' : metric === 'nd2' ? (v * 100).toFixed(0) : v.toFixed(1)}
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
       </Panel>
     </ToolChrome>
   );
