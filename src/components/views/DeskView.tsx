@@ -29,7 +29,6 @@ import {
 } from '../../lib/options/portfolio';
 import { simulatePaths } from '../../lib/options/pathSim';
 import { defaultHedgeFromSnapshot, simulateDeltaHedge, type HedgeMode } from '../../lib/options/hedging';
-import { evaluateSubjective, subjectiveSummary } from '../../lib/options/subjective';
 import {
   comboGreeksPnl,
   historyToSpotBars,
@@ -45,6 +44,7 @@ import { SimTool } from '../desk/tools/SimTool';
 import { ComboGreeksTool } from '../desk/tools/ComboGreeksTool';
 import { GridTool } from '../desk/tools/GridTool';
 import { BreakEvenTool } from '../desk/tools/BreakEvenTool';
+import { SubjectiveTool } from '../desk/tools/SubjectiveTool';
 
 const GreeksView = lazy(() =>
   import('./GreeksView').then((m) => ({ default: m.GreeksView })),
@@ -596,74 +596,6 @@ function BacktestTool() {
             <Area type="monotone" dataKey="p95" stroke="none" fill="var(--up)" fillOpacity={0.08} />
             <Area type="monotone" dataKey="p5" stroke="none" fill="var(--down)" fillOpacity={0.08} />
             <Line type="monotone" dataKey="p50" stroke="var(--cyan)" strokeWidth={1.5} dot={false} />
-          </ComposedChart>
-        </ResponsiveContainer>
-      </Panel>
-    </ToolChrome>
-  );
-}
-
-/* ─── Subjective ────────────────────────────────────────────── */
-
-function SubjectiveTool() {
-  const snapshot = useTerminalStore(s => s.snapshot)!;
-  const [expiryIdx, setExpiryIdx] = useState(0);
-  const [drift, setDrift] = useState(0.05);
-  const [vrp, setVrp] = useState(0.02);
-
-  const rows = useMemo(
-    () => evaluateSubjective(snapshot, expiryIdx, { drift, vrp }, 'both'),
-    [snapshot, expiryIdx, drift, vrp],
-  );
-  const summary = useMemo(() => subjectiveSummary(rows), [rows]);
-  const chart = rows.filter(r => r.type === 'call' && Math.abs(r.strike - snapshot.spot) / snapshot.spot < 0.15)
-    .map(r => ({
-      strike: r.strike,
-      market: r.marketMid,
-      fair: r.subjectivePrice,
-      edge: r.edge,
-    }));
-
-  return (
-    <ToolChrome>
-      <div className="flex flex-wrap gap-3 px-2 py-1 border border-border bg-card/50 rounded items-end">
-        <label className="text-type-xs font-mono text-muted-foreground flex flex-col gap-0.5">
-          Expiry
-          <select className="bg-background border border-border rounded px-1 py-0.5 text-xs font-mono" value={expiryIdx} onChange={e => setExpiryIdx(+e.target.value)}>
-            {snapshot.expiries.map((e, i) => (
-              <option key={e.expiry} value={i}>{e.expiry} ({e.dte}d)</option>
-            ))}
-          </select>
-        </label>
-        <label className="text-type-xs font-mono text-muted-foreground flex flex-col gap-0.5">
-          Drift μ
-          <input type="number" step={0.01} value={drift} onChange={e => setDrift(+e.target.value)} className="w-16 bg-background border border-border rounded px-1 py-0.5 text-xs font-mono" />
-        </label>
-        <label className="text-type-xs font-mono text-muted-foreground flex flex-col gap-0.5">
-          VRP
-          <input type="number" step={0.005} value={vrp} onChange={e => setVrp(+e.target.value)} className="w-16 bg-background border border-border rounded px-1 py-0.5 text-xs font-mono" />
-        </label>
-        <Stat label="Avg edge" value={fmtSigned(summary.avgEdge)} color={summary.avgEdge >= 0 ? 'var(--up)' : 'var(--down)'} />
-        <Stat label="Cheap" value={String(summary.cheapCount)} color="var(--up)" />
-        <Stat label="Rich" value={String(summary.richCount)} color="var(--down)" />
-        {summary.bestLong && (
-          <Stat
-            label="Best long"
-            value={`${summary.bestLong.type[0]!.toUpperCase()} ${fmtPrice(summary.bestLong.strike, 0)} (${fmtSigned(summary.bestLong.edge)})`}
-          />
-        )}
-      </div>
-      <Panel title="Market mid vs subjective fair" subtitle="σ_subj = IV − VRP · r_eff = μ + q" className="flex-1 min-h-0">
-        <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={chart} margin={{ top: 8, right: 12, bottom: 4, left: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--grid)" />
-            <XAxis dataKey="strike" tick={{ fontSize: 9, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }} tickFormatter={(v: number) => fmtPrice(v, 0)} />
-            <YAxis tick={{ fontSize: 9, fill: 'var(--muted-foreground)', fontFamily: 'JetBrains Mono' }} width={44} />
-            <Tooltip contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', fontSize: 11, fontFamily: 'JetBrains Mono' }} />
-            <ReferenceLine x={snapshot.spot} stroke="var(--amber)" strokeDasharray="3 3" />
-            <Line type="monotone" dataKey="market" stroke="var(--muted-foreground)" strokeWidth={1.5} dot={false} name="Market" />
-            <Line type="monotone" dataKey="fair" stroke="var(--primary)" strokeWidth={2} dot={false} name="Fair" />
-            <Line type="monotone" dataKey="edge" stroke="var(--cyan)" strokeWidth={1} strokeDasharray="2 2" dot={false} name="Edge" />
           </ComposedChart>
         </ResponsiveContainer>
       </Panel>
